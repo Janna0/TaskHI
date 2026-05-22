@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus } from 'lucide-react'
+import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus, Search, Copy, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Project, Section, Task, ProjectMember } from '../types'
+import { Project, Profile, Section, Task, ProjectMember } from '../types'
 import { Button } from '../components/ui/Button'
 import { ListView } from '../components/views/ListView'
 import { BoardView } from '../components/views/BoardView'
@@ -176,9 +176,9 @@ function OverviewTab({ project, tasks, onEditDescription }: {
   // Members
   const [members, setMembers] = useState<ProjectMember[]>([])
   const [addingMember, setAddingMember] = useState(false)
-  const [memberEmail, setMemberEmail] = useState('')
-  const [memberError, setMemberError] = useState('')
-  const [memberLoading, setMemberLoading] = useState(false)
+  const [allUsers, setAllUsers] = useState<Profile[]>([])
+  const [search, setSearch] = useState('')
+  const [copied, setCopied] = useState(false)
 
   useEffect(() => { loadMembers() }, [project.id])
 
@@ -190,39 +190,33 @@ function OverviewTab({ project, tasks, onEditDescription }: {
     if (data) setMembers(data)
   }
 
-  async function handleAddMember() {
-    if (!memberEmail.trim()) return
-    setMemberError('')
-    setMemberLoading(true)
-    // Look up user by email in profiles
-    const { data: found } = await supabase
-      .from('profiles')
-      .select('id, name, email')
-      .eq('email', memberEmail.trim().toLowerCase())
-      .single()
-    if (!found) {
-      setMemberError('No user found with that email address.')
-      setMemberLoading(false)
-      return
-    }
-    if (found.id === profile?.id) {
-      setMemberError("That's you — you're already the project owner.")
-      setMemberLoading(false)
-      return
-    }
-    const { error } = await supabase.from('project_members').insert({
-      project_id: project.id,
-      user_id: found.id,
-      role: 'member',
-    })
-    setMemberLoading(false)
-    if (error) {
-      setMemberError(error.code === '23505' ? 'This person is already a member.' : error.message)
-      return
-    }
-    setMemberEmail('')
+  async function openPicker() {
+    setAddingMember(true)
+    setSearch('')
+    const { data } = await supabase.from('profiles').select('id, name, email, avatar_url, created_at')
+    if (data) setAllUsers(data)
+  }
+
+  // Filter out owner and existing members, then apply search
+  const existingIds = new Set([profile?.id, ...members.map(m => m.user_id)])
+  const filtered = allUsers.filter(u => {
+    if (existingIds.has(u.id)) return false
+    const q = search.toLowerCase()
+    return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+  })
+
+  async function addUser(u: Profile) {
+    await supabase.from('project_members').insert({ project_id: project.id, user_id: u.id, role: 'member' })
     setAddingMember(false)
+    setSearch('')
     loadMembers()
+  }
+
+  function copyInviteLink() {
+    const link = `${window.location.origin}${window.location.pathname}#/register`
+    navigator.clipboard.writeText(link)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   async function removeMember(memberId: string) {
@@ -303,34 +297,57 @@ function OverviewTab({ project, tasks, onEditDescription }: {
         <h2 className="text-base font-semibold text-slate-900 mb-4">Project roles</h2>
         <div className="flex flex-wrap gap-6 items-start">
 
-          {/* Add member button */}
-          {!addingMember ? (
-            <button onClick={() => setAddingMember(true)}
-              className="flex items-center gap-2.5 text-sm text-slate-500 hover:text-slate-700 group">
-              <span className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 group-hover:border-slate-400 flex items-center justify-center transition-colors shrink-0">
-                <Plus size={14} />
-              </span>
-              Add member
-            </button>
-          ) : (
-            <div className="flex flex-col gap-1.5 w-64">
-              <input autoFocus type="email" placeholder="Enter email address"
-                value={memberEmail} onChange={e => { setMemberEmail(e.target.value); setMemberError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleAddMember()}
-                className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300" />
-              {memberError && <p className="text-xs text-red-500">{memberError}</p>}
-              <div className="flex gap-2">
-                <button onClick={handleAddMember} disabled={memberLoading}
-                  className="text-sm text-white bg-primary-500 hover:bg-primary-600 px-3 py-1.5 rounded-md font-medium disabled:opacity-50">
-                  {memberLoading ? 'Adding…' : 'Add'}
-                </button>
-                <button onClick={() => { setAddingMember(false); setMemberEmail(''); setMemberError('') }}
-                  className="text-sm text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-100">
-                  Cancel
-                </button>
+          {/* Add member */}
+          <div className="relative">
+            {!addingMember ? (
+              <button onClick={openPicker}
+                className="flex items-center gap-2.5 text-sm text-slate-500 hover:text-slate-700 group">
+                <span className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 group-hover:border-slate-400 flex items-center justify-center transition-colors shrink-0">
+                  <Plus size={14} />
+                </span>
+                Add member
+              </button>
+            ) : (
+              <div className="w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 relative">
+                {/* Search */}
+                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100">
+                  <Search size={14} className="text-slate-400 shrink-0" />
+                  <input autoFocus placeholder="Search by name or email…"
+                    value={search} onChange={e => setSearch(e.target.value)}
+                    className="flex-1 text-sm outline-none text-slate-700 placeholder-slate-400" />
+                  <button onClick={() => { setAddingMember(false); setSearch('') }}
+                    className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+                </div>
+
+                {/* User list */}
+                <div className="max-h-52 overflow-y-auto py-1">
+                  {filtered.length > 0 ? filtered.map(u => (
+                    <button key={u.id} onClick={() => addUser(u)}
+                      className="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
+                      <div className="w-8 h-8 rounded-full bg-primary-400 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                        {getInitials(u.name ?? u.email ?? '?')}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
+                        <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                      </div>
+                    </button>
+                  )) : (
+                    <div className="px-3 py-3 text-center">
+                      <p className="text-sm text-slate-500 mb-2">
+                        {search ? `No user found for "${search}"` : 'No other users yet'}
+                      </p>
+                      <button onClick={copyInviteLink}
+                        className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium border border-primary-200 rounded-lg px-3 py-1.5 hover:bg-primary-50 transition-colors">
+                        {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy invite link</>}
+                      </button>
+                      <p className="text-xs text-slate-400 mt-1.5">Share the link so they can register</p>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Owner */}
           <div className="flex items-center gap-3">
