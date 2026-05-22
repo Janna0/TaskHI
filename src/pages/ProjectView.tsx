@@ -65,8 +65,8 @@ export function ProjectView() {
   }
 
   async function addMember(u: Profile) {
-    await supabase.from('project_members').insert({ project_id: id!, user_id: u.id, role: 'member' })
-    loadMembers()
+    const { error } = await supabase.from('project_members').insert({ project_id: id!, user_id: u.id, role: 'member' })
+    if (!error) loadMembers()
   }
 
   async function removeMember(memberId: string) {
