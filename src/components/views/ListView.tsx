@@ -111,7 +111,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
 function TaskRow({ task, memberMap, onClick }: { task: Task; memberMap: Record<string, { name: string; color: string }>; onClick: () => void }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
-  const assignee = task.assignee_id ? memberMap[task.assignee_id] : null
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
   return (
     <div
       onClick={onClick}
@@ -129,18 +129,24 @@ function TaskRow({ task, memberMap, onClick }: { task: Task; memberMap: Record<s
       <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
         {task.due_date ? formatDate(task.due_date) : '—'}
       </div>
-      <div className="w-8 flex justify-center">
-        {assignee ? (
-          <div
-            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
-            style={{ background: assignee.color }}
-            title={assignee.name}
-          >
-            {getInitials(assignee.name)}
-          </div>
-        ) : (
-          <div className="w-6 h-6 rounded-full border border-dashed border-slate-200" title="Unassigned" />
-        )}
+      <div className="w-10 flex justify-center">
+        <div className="flex -space-x-1.5">
+          {assignees.slice(0, 2).map((a, i) => (
+            <div
+              key={i}
+              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
+              style={{ background: a.color }}
+              title={a.name}
+            >
+              {getInitials(a.name)}
+            </div>
+          ))}
+          {assignees.length > 2 && (
+            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
+              +{assignees.length - 2}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

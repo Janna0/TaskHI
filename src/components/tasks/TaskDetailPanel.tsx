@@ -22,7 +22,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [dueDate, setDueDate] = useState(task.due_date ?? '')
   const [sectionId, setSectionId] = useState(task.section_id ?? '')
   const [notes, setNotes] = useState(task.notes ?? '')
-  const [assigneeId, setAssigneeId] = useState<string | null>(task.assignee_id)
+  const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignee_ids ?? [])
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -36,9 +36,16 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setDueDate(task.due_date ?? '')
     setSectionId(task.section_id ?? '')
     setNotes(task.notes ?? '')
-    setAssigneeId(task.assignee_id)
+    setAssigneeIds(task.assignee_ids ?? [])
     setDirty(false)
   }, [task.id])
+
+  function toggleAssignee(uid: string) {
+    setAssigneeIds(prev =>
+      prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+    )
+    setDirty(true)
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -49,7 +56,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       due_date: dueDate || null,
       section_id: sectionId || null,
       notes: notes || null,
-      assignee_id: assigneeId || null,
+      assignee_ids: assigneeIds,
     }).eq('id', task.id)
     setSaving(false)
     setDirty(false)
@@ -123,43 +130,35 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           </div>
         )}
 
-        {/* Assignee */}
+        {/* Assignees */}
         {memberEntries.length > 0 && (
           <div>
-            <label className="text-xs font-medium text-slate-500 block mb-1.5">Assignee</label>
+            <label className="text-xs font-medium text-slate-500 block mb-1.5">Assignees</label>
             <div className="flex flex-wrap gap-1.5 items-center">
-              {/* Unassigned */}
-              <button
-                onClick={() => { setAssigneeId(null); setDirty(true) }}
-                title="Unassigned"
-                className={cn(
-                  'w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs text-slate-400 transition-all',
-                  !assigneeId
-                    ? 'border-primary-500 ring-2 ring-primary-100 bg-slate-50'
-                    : 'border-dashed border-slate-300 hover:border-slate-400'
-                )}
-              >
-                —
-              </button>
-              {memberEntries.map(([uid, m]) => (
-                <button
-                  key={uid}
-                  onClick={() => { setAssigneeId(uid); setDirty(true) }}
-                  title={m.name}
-                  className={cn(
-                    'w-7 h-7 rounded-full border-2 flex items-center justify-center text-white text-xs font-semibold transition-all',
-                    assigneeId === uid
-                      ? 'border-primary-500 ring-2 ring-primary-100'
-                      : 'border-transparent hover:opacity-75'
-                  )}
-                  style={{ background: m.color }}
-                >
-                  {getInitials(m.name)}
-                </button>
-              ))}
+              {memberEntries.map(([uid, m]) => {
+                const selected = assigneeIds.includes(uid)
+                return (
+                  <button
+                    key={uid}
+                    onClick={() => toggleAssignee(uid)}
+                    title={m.name}
+                    className={cn(
+                      'w-7 h-7 rounded-full border-2 flex items-center justify-center text-white text-xs font-semibold transition-all',
+                      selected
+                        ? 'border-primary-500 ring-2 ring-primary-100 opacity-100'
+                        : 'border-transparent opacity-40 hover:opacity-70'
+                    )}
+                    style={{ background: m.color }}
+                  >
+                    {getInitials(m.name)}
+                  </button>
+                )
+              })}
             </div>
-            {assigneeId && memberMap[assigneeId] && (
-              <p className="text-xs text-slate-400 mt-1">{memberMap[assigneeId].name}</p>
+            {assigneeIds.length > 0 && (
+              <p className="text-xs text-slate-400 mt-1">
+                {assigneeIds.map(id => memberMap[id]?.name).filter(Boolean).join(', ')}
+              </p>
             )}
           </div>
         )}

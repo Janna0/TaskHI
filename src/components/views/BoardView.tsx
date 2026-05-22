@@ -130,7 +130,7 @@ interface CardProps {
 
 function TaskCard({ task, memberMap, isDragging, onClick, onDragStart, onDragEnd }: CardProps) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
-  const assignee = task.assignee_id ? memberMap[task.assignee_id] : null
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
   return (
     <div
       draggable
@@ -158,13 +158,23 @@ function TaskCard({ task, memberMap, isDragging, onClick, onDragStart, onDragEnd
               {formatDate(task.due_date)}
             </span>
           )}
-          {assignee && (
-            <div
-              className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0"
-              style={{ background: assignee.color }}
-              title={assignee.name}
-            >
-              {getInitials(assignee.name)}
+          {assignees.length > 0 && (
+            <div className="flex -space-x-1">
+              {assignees.slice(0, 2).map((a, i) => (
+                <div
+                  key={i}
+                  className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white"
+                  style={{ background: a.color }}
+                  title={a.name}
+                >
+                  {getInitials(a.name)}
+                </div>
+              ))}
+              {assignees.length > 2 && (
+                <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">
+                  +{assignees.length - 2}
+                </div>
+              )}
             </div>
           )}
         </div>

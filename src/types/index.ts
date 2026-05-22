@@ -48,7 +48,7 @@ export interface Task {
   notes: string | null
   due_date: string | null
   created_by: string
-  assignee_id: string | null
+  assignee_ids: string[]
   position: number
   created_at: string
   updated_at: string
