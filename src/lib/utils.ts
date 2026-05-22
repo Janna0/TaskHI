@@ -62,6 +62,7 @@ export const PROJECT_COLORS = [
   '#10b981', '#f59e0b', '#f97316', '#f43f5e',
 ]
 
-export function getInitials(name: string): string {
-  return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
+export function getInitials(name: string | null | undefined): string {
+  if (!name) return '?'
+  return name.split(' ').map(n => n[0]).filter(Boolean).join('').toUpperCase().slice(0, 2) || '?'
 }

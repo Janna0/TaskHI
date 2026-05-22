@@ -1,3 +1,4 @@
+import { Component, ReactNode } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { AppShell } from './components/layout/AppShell'
@@ -8,6 +9,28 @@ import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectView } from './pages/ProjectView'
 import { MyTasksPage } from './pages/MyTasksPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+  state = { error: null }
+  static getDerivedStateFromError(error: Error) { return { error } }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-50 p-8">
+          <div className="bg-white border border-red-200 rounded-xl p-6 max-w-lg w-full shadow-sm">
+            <h2 className="text-base font-semibold text-red-700 mb-2">Something went wrong</h2>
+            <pre className="text-xs text-slate-600 bg-slate-50 rounded p-3 overflow-auto whitespace-pre-wrap">
+              {(this.state.error as Error).message}
+            </pre>
+            <button onClick={() => this.setState({ error: null })}
+              className="mt-4 text-sm text-primary-600 hover:underline">Try again</button>
+          </div>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -40,10 +63,12 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <HashRouter>
-        <AppRoutes />
-      </HashRouter>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <HashRouter>
+          <AppRoutes />
+        </HashRouter>
+      </AuthProvider>
+    </ErrorBoundary>
   )
 }
