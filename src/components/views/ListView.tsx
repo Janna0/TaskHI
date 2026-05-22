@@ -2,18 +2,19 @@ import { useState } from 'react'
 import { Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import { Task, Section } from '../../types'
 import { StatusBadge, PriorityBadge } from '../ui/Badge'
-import { formatDate, isOverdue, cn } from '../../lib/utils'
+import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
 import { CreateTaskModal } from '../tasks/CreateTaskModal'
 
 interface Props {
   sections: Section[]
   tasks: Task[]
   projectId: string
+  memberMap: Record<string, { name: string; color: string }>
   onTaskClick: (task: Task) => void
   onRefresh: () => void
 }
 
-export function ListView({ sections, tasks, projectId, onTaskClick, onRefresh }: Props) {
+export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [createSection, setCreateSection] = useState<string | null>(null)
 
@@ -32,6 +33,7 @@ export function ListView({ sections, tasks, projectId, onTaskClick, onRefresh }:
         <span className="w-28 text-center">Status</span>
         <span className="w-24 text-center">Priority</span>
         <span className="w-24 text-center">Due date</span>
+        <span className="w-8" />
       </div>
 
       {allSections.map(section => {
@@ -58,7 +60,7 @@ export function ListView({ sections, tasks, projectId, onTaskClick, onRefresh }:
             {!isCollapsed && (
               <>
                 {sectionTasks.map(task => (
-                  <TaskRow key={task.id} task={task} onClick={() => onTaskClick(task)} />
+                  <TaskRow key={task.id} task={task} memberMap={memberMap} onClick={() => onTaskClick(task)} />
                 ))}
                 {sectionTasks.length === 0 && (
                   <div className="px-10 py-2 text-xs text-slate-400">No tasks</div>
@@ -78,7 +80,7 @@ export function ListView({ sections, tasks, projectId, onTaskClick, onRefresh }:
             </div>
           )}
           {ungrouped.map(task => (
-            <TaskRow key={task.id} task={task} onClick={() => onTaskClick(task)} />
+            <TaskRow key={task.id} task={task} memberMap={memberMap} onClick={() => onTaskClick(task)} />
           ))}
         </div>
       )}
@@ -107,8 +109,9 @@ export function ListView({ sections, tasks, projectId, onTaskClick, onRefresh }:
   )
 }
 
-function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
+function TaskRow({ task, memberMap, onClick }: { task: Task; memberMap: Record<string, { name: string; color: string }>; onClick: () => void }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const assignee = task.assignee_id ? memberMap[task.assignee_id] : null
   return (
     <div
       onClick={onClick}
@@ -125,6 +128,19 @@ function TaskRow({ task, onClick }: { task: Task; onClick: () => void }) {
       </div>
       <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
         {task.due_date ? formatDate(task.due_date) : '—'}
+      </div>
+      <div className="w-8 flex justify-center">
+        {assignee ? (
+          <div
+            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
+            style={{ background: assignee.color }}
+            title={assignee.name}
+          >
+            {getInitials(assignee.name)}
+          </div>
+        ) : (
+          <div className="w-6 h-6 rounded-full border border-dashed border-slate-200" title="Unassigned" />
+        )}
       </div>
     </div>
   )

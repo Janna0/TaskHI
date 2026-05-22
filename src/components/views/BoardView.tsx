@@ -3,13 +3,14 @@ import { Plus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
-import { formatDate, isOverdue, cn, STATUS_LABELS } from '../../lib/utils'
+import { formatDate, isOverdue, cn, STATUS_LABELS, getInitials } from '../../lib/utils'
 import { CreateTaskModal } from '../tasks/CreateTaskModal'
 
 interface Props {
   sections: Section[]
   tasks: Task[]
   projectId: string
+  memberMap: Record<string, { name: string; color: string }>
   onTaskClick: (task: Task) => void
   onRefresh: () => void
 }
@@ -21,7 +22,7 @@ const COLUMNS: { status: string; headerColor: string; dotColor: string }[] = [
   { status: 'done',        headerColor: 'bg-green-50',   dotColor: 'bg-green-500' },
 ]
 
-export function BoardView({ sections, tasks, projectId, onTaskClick, onRefresh }: Props) {
+export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [createStatus, setCreateStatus] = useState<string | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
@@ -86,6 +87,7 @@ export function BoardView({ sections, tasks, projectId, onTaskClick, onRefresh }
                 <TaskCard
                   key={task.id}
                   task={task}
+                  memberMap={memberMap}
                   isDragging={draggingId === task.id}
                   onClick={() => onTaskClick(task)}
                   onDragStart={() => setDraggingId(task.id)}
@@ -119,14 +121,16 @@ export function BoardView({ sections, tasks, projectId, onTaskClick, onRefresh }
 
 interface CardProps {
   task: Task
+  memberMap: Record<string, { name: string; color: string }>
   isDragging: boolean
   onClick: () => void
   onDragStart: () => void
   onDragEnd: () => void
 }
 
-function TaskCard({ task, isDragging, onClick, onDragStart, onDragEnd }: CardProps) {
+function TaskCard({ task, memberMap, isDragging, onClick, onDragStart, onDragEnd }: CardProps) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const assignee = task.assignee_id ? memberMap[task.assignee_id] : null
   return (
     <div
       draggable
@@ -148,11 +152,22 @@ function TaskCard({ task, isDragging, onClick, onDragStart, onDragEnd }: CardPro
       </p>
       <div className="flex items-center justify-between gap-1 flex-wrap">
         <PriorityBadge priority={task.priority} />
-        {task.due_date && (
-          <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-            {formatDate(task.due_date)}
-          </span>
-        )}
+        <div className="flex items-center gap-1.5">
+          {task.due_date && (
+            <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+              {formatDate(task.due_date)}
+            </span>
+          )}
+          {assignee && (
+            <div
+              className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0"
+              style={{ background: assignee.color }}
+              title={assignee.name}
+            >
+              {getInitials(assignee.name)}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

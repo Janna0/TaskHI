@@ -4,26 +4,30 @@ import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { Button } from '../ui/Button'
 import { StatusBadge, PriorityBadge } from '../ui/Badge'
-import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue } from '../../lib/utils'
+import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
 
 interface Props {
   task: Task
   sections: Section[]
+  memberMap: Record<string, { name: string; color: string }>
   onClose: () => void
   onUpdated: () => void
   onDeleted: () => void
 }
 
-export function TaskDetailPanel({ task, sections, onClose, onUpdated, onDeleted }: Props) {
+export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
   const [title, setTitle] = useState(task.title)
   const [status, setStatus] = useState<string>(task.status)
   const [priority, setPriority] = useState<string>(task.priority)
   const [dueDate, setDueDate] = useState(task.due_date ?? '')
   const [sectionId, setSectionId] = useState(task.section_id ?? '')
   const [notes, setNotes] = useState(task.notes ?? '')
+  const [assigneeId, setAssigneeId] = useState<string | null>(task.assignee_id)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [dirty, setDirty] = useState(false)
+
+  const memberEntries = Object.entries(memberMap)
 
   useEffect(() => {
     setTitle(task.title)
@@ -32,6 +36,7 @@ export function TaskDetailPanel({ task, sections, onClose, onUpdated, onDeleted 
     setDueDate(task.due_date ?? '')
     setSectionId(task.section_id ?? '')
     setNotes(task.notes ?? '')
+    setAssigneeId(task.assignee_id)
     setDirty(false)
   }, [task.id])
 
@@ -44,6 +49,7 @@ export function TaskDetailPanel({ task, sections, onClose, onUpdated, onDeleted 
       due_date: dueDate || null,
       section_id: sectionId || null,
       notes: notes || null,
+      assignee_id: assigneeId || null,
     }).eq('id', task.id)
     setSaving(false)
     setDirty(false)
@@ -114,6 +120,47 @@ export function TaskDetailPanel({ task, sections, onClose, onUpdated, onDeleted 
               <option value="">No section</option>
               {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
+          </div>
+        )}
+
+        {/* Assignee */}
+        {memberEntries.length > 0 && (
+          <div>
+            <label className="text-xs font-medium text-slate-500 block mb-1.5">Assignee</label>
+            <div className="flex flex-wrap gap-1.5 items-center">
+              {/* Unassigned */}
+              <button
+                onClick={() => { setAssigneeId(null); setDirty(true) }}
+                title="Unassigned"
+                className={cn(
+                  'w-7 h-7 rounded-full border-2 flex items-center justify-center text-xs text-slate-400 transition-all',
+                  !assigneeId
+                    ? 'border-primary-500 ring-2 ring-primary-100 bg-slate-50'
+                    : 'border-dashed border-slate-300 hover:border-slate-400'
+                )}
+              >
+                —
+              </button>
+              {memberEntries.map(([uid, m]) => (
+                <button
+                  key={uid}
+                  onClick={() => { setAssigneeId(uid); setDirty(true) }}
+                  title={m.name}
+                  className={cn(
+                    'w-7 h-7 rounded-full border-2 flex items-center justify-center text-white text-xs font-semibold transition-all',
+                    assigneeId === uid
+                      ? 'border-primary-500 ring-2 ring-primary-100'
+                      : 'border-transparent hover:opacity-75'
+                  )}
+                  style={{ background: m.color }}
+                >
+                  {getInitials(m.name)}
+                </button>
+              ))}
+            </div>
+            {assigneeId && memberMap[assigneeId] && (
+              <p className="text-xs text-slate-400 mt-1">{memberMap[assigneeId].name}</p>
+            )}
           </div>
         )}
 

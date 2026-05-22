@@ -97,6 +97,15 @@ export function ProjectView() {
     }
   }
 
+  const memberMap: Record<string, { name: string; color: string }> = {}
+  if (ownerProfile) memberMap[ownerProfile.id] = { name: ownerDisplayName, color: ownerAvatarColor }
+  for (const m of members) {
+    if (m.profile) memberMap[m.user_id] = {
+      name: m.profile.name || m.profile.email?.split('@')[0] || '?',
+      color: m.profile.avatar_color ?? '#94a3b8',
+    }
+  }
+
   if (loading) return <div className="flex items-center justify-center h-full text-slate-400 text-sm">Loading...</div>
   if (!project) return <div className="flex items-center justify-center h-full text-slate-500">Project not found.</div>
 
@@ -183,15 +192,15 @@ export function ProjectView() {
           )}
           {view === 'list' && (
             <ListView sections={sections} tasks={tasks} projectId={project.id}
-              onTaskClick={task => setSelectedTask(task)} onRefresh={loadAll} />
+              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)} onRefresh={loadAll} />
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
-              onTaskClick={task => setSelectedTask(task)} onRefresh={loadAll} />
+              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)} onRefresh={loadAll} />
           )}
         </div>
         {selectedTask && (
-          <TaskDetailPanel task={selectedTask} sections={sections}
+          <TaskDetailPanel task={selectedTask} sections={sections} memberMap={memberMap}
             onClose={() => setSelectedTask(null)}
             onUpdated={handleTaskUpdated}
             onDeleted={() => { setSelectedTask(null); loadAll() }} />
