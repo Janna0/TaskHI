@@ -11,7 +11,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [showCreate, setShowCreate] = useState(false)
 
   useEffect(() => {
-    if (user) loadProjects()
+    if (!user) return
+    loadProjects()
+    // Re-fetch whenever a project is favorited/archived elsewhere
+    const handler = () => loadProjects()
+    window.addEventListener('taskhi:projects-changed', handler)
+    return () => window.removeEventListener('taskhi:projects-changed', handler)
   }, [user])
 
   async function loadProjects() {

@@ -34,6 +34,7 @@ export function ProjectsPage() {
     e.preventDefault()
     await supabase.from('projects').update({ is_favorite: !project.is_favorite }).eq('id', project.id)
     setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: !p.is_favorite } : p))
+    window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 
   return (

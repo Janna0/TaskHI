@@ -46,11 +46,13 @@ export function ProjectView() {
     if (!project) return
     await supabase.from('projects').update({ is_favorite: !project.is_favorite }).eq('id', project.id)
     setProject(p => p ? { ...p, is_favorite: !p.is_favorite } : p)
+    window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 
   async function archiveProject() {
     if (!project || !confirm('Archive this project?')) return
     await supabase.from('projects').update({ status: 'archived' }).eq('id', project.id)
+    window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
     window.location.hash = '/projects'
   }
 
