@@ -39,14 +39,14 @@ export function ProjectView() {
   async function loadAll() {
     setLoading(true)
     try {
-      const [{ data: proj }, { data: sec }, { data: tsk }] = await Promise.all([
-        supabase.from('projects').select('*').eq('id', id!).single(),
-        supabase.from('sections').select('*').eq('project_id', id!).order('position'),
-        supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
+      const [projRes, secRes, tskRes] = await Promise.all([
+        supabase.rpc('get_project_by_id', { p_id: id! }).single(),
+        supabase.rpc('get_project_sections', { p_id: id! }),
+        supabase.rpc('get_project_tasks', { p_id: id! }),
       ])
-      if (proj) setProject(proj)
-      if (sec) setSections(sec)
-      if (tsk) setTasks(tsk)
+      if (projRes.data) setProject(projRes.data as unknown as Project)
+      if (secRes.data) setSections(secRes.data as unknown as Section[])
+      if (tskRes.data) setTasks(tskRes.data as unknown as Task[])
     } finally {
       setLoading(false)
     }
