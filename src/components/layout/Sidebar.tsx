@@ -63,12 +63,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">
             Starred
           </p>
-          {favorites.length === 0 ? (
-            <p className="px-3 py-1 text-xs text-white/25 italic">
-              Star a project from inside it
-            </p>
-          ) : (
-            favorites.map(p => (
+          {favorites.map(p => (
               <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass}>
                 <span
                   className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold shrink-0 text-white"
@@ -79,8 +74,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
                 <span className="truncate">{p.name}</span>
                 <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />
               </NavLink>
-            ))
-          )}
+          ))}
         </div>
 
         {/* All projects */}
