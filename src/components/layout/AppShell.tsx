@@ -20,13 +20,33 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [user])
 
   async function loadProjects() {
-    const { data } = await supabase
+    // Projects the user owns
+    const { data: owned } = await supabase
       .from('projects')
       .select('*')
       .eq('owner_id', user!.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
-    if (data) setProjects(data)
+
+    // Projects the user is a member of (but doesn't own)
+    const { data: memberships } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user!.id)
+
+    const memberIds = (memberships ?? []).map((m: { project_id: string }) => m.project_id)
+    let memberProjects: Project[] = []
+
+    if (memberIds.length > 0) {
+      const { data } = await supabase
+        .from('projects')
+        .select('*')
+        .in('id', memberIds)
+        .eq('status', 'active')
+      memberProjects = (data ?? []).filter((p: Project) => p.owner_id !== user!.id)
+    }
+
+    setProjects([...(owned ?? []), ...memberProjects])
   }
 
   return (
