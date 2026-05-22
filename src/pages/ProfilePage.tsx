@@ -35,37 +35,21 @@ export function ProfilePage() {
 
     const trimmedName = name.trim()
 
-    // Always save name (known-good column)
-    const { error: nameErr } = await supabase
-      .from('profiles')
-      .update({ name: trimmedName })
-      .eq('id', user.id)
+    const { error: rpcErr } = await supabase.rpc('update_my_profile', {
+      p_name: trimmedName,
+      p_color: color,
+    })
 
-    if (nameErr) {
-      setError('Failed to save name: ' + nameErr.message)
+    if (rpcErr) {
+      setError('Failed to save: ' + rpcErr.message)
       setSaving(false)
       return
     }
 
-    // Try saving avatar_color — silently skip if column not migrated yet
-    const { error: colorErr } = await supabase
-      .from('profiles')
-      .update({ avatar_color: color })
-      .eq('id', user.id)
-
-    // Update context directly so sidebar refreshes without a full refetch
-    updateProfile({
-      name: trimmedName,
-      ...(colorErr ? {} : { avatar_color: color }),
-    })
-
+    updateProfile({ name: trimmedName, avatar_color: color })
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
-
-    if (colorErr) {
-      setError('Name saved. Color requires a DB migration — see instructions below.')
-    }
   }
 
   async function sendPasswordReset() {
