@@ -30,10 +30,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function handleToggleFavorite(project: Project) {
     const next = !project.is_favorite
-    // Optimistic update so sidebar reacts instantly
+    // Optimistic update — no re-fetch here to avoid a race with the write
     setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: next } : p))
     await supabase.from('projects').update({ is_favorite: next }).eq('id', project.id)
-    window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 
   return (
