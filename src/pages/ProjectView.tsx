@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus, Search, Copy, Check } from 'lucide-react'
 import { supabase } from '../lib/supabase'
@@ -21,16 +21,18 @@ const TABS: { id: View; label: string }[] = [
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>()
+  const { profile: ownerProfile } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
+  const [members, setMembers] = useState<ProjectMember[]>([])
   const [view, setView] = useState<View>('list')
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
 
-  useEffect(() => { if (id) loadAll() }, [id])
+  useEffect(() => { if (id) { loadAll(); loadMembers() } }, [id])
 
   async function loadAll() {
     setLoading(true)
@@ -43,6 +45,24 @@ export function ProjectView() {
     if (sec) setSections(sec)
     if (tsk) setTasks(tsk)
     setLoading(false)
+  }
+
+  async function loadMembers() {
+    const { data } = await supabase
+      .from('project_members')
+      .select('*, profile:profiles(id, name, email, avatar_url, created_at)')
+      .eq('project_id', id!)
+    if (data) setMembers(data)
+  }
+
+  async function addMember(u: Profile) {
+    await supabase.from('project_members').insert({ project_id: id!, user_id: u.id, role: 'member' })
+    loadMembers()
+  }
+
+  async function removeMember(memberId: string) {
+    await supabase.from('project_members').delete().eq('id', memberId)
+    setMembers(prev => prev.filter(m => m.id !== memberId))
   }
 
   async function toggleFavorite() {
@@ -81,7 +101,17 @@ export function ProjectView() {
           <button onClick={toggleFavorite} className="p-1 rounded hover:bg-slate-100 transition-colors">
             <Star size={16} className={cn(project.is_favorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400 hover:text-slate-600')} />
           </button>
-          <div className="ml-auto flex items-center gap-2">
+
+          <div className="ml-auto flex items-center gap-3">
+            {/* Member avatars + picker */}
+            <MemberPicker
+              projectId={project.id}
+              members={members}
+              ownerProfile={ownerProfile}
+              onAdd={addMember}
+              onRemove={removeMember}
+            />
+
             {view !== 'overview' && (
               <Button size="sm" onClick={() => setShowCreate(true)}>
                 <Plus size={14} className="mr-1" /> Add Task
@@ -128,10 +158,14 @@ export function ProjectView() {
             <OverviewTab
               project={project}
               tasks={tasks}
+              members={members}
+              ownerProfile={ownerProfile}
               onEditDescription={async (desc) => {
                 await supabase.from('projects').update({ description: desc }).eq('id', project.id)
                 setProject(p => p ? { ...p, description: desc } : p)
               }}
+              onAddMember={addMember}
+              onRemoveMember={removeMember}
             />
           )}
           {view === 'list' && (
@@ -160,57 +194,42 @@ export function ProjectView() {
   )
 }
 
-// ─── Overview Tab ─────────────────────────────────────────────────────────────
+// ─── Member Picker (header) ───────────────────────────────────────────────────
 
-interface Resource { id: string; title: string; url: string }
-
-function OverviewTab({ project, tasks, onEditDescription }: {
-  project: Project
-  tasks: Task[]
-  onEditDescription: (desc: string) => Promise<void>
+function MemberPicker({ projectId, members, ownerProfile, onAdd, onRemove }: {
+  projectId: string
+  members: ProjectMember[]
+  ownerProfile: Profile | null
+  onAdd: (u: Profile) => Promise<void>
+  onRemove: (id: string) => Promise<void>
 }) {
-  const { profile } = useAuth()
-  const [editingDesc, setEditingDesc] = useState(false)
-  const [desc, setDesc] = useState(project.description ?? '')
-
-  // Members
-  const [members, setMembers] = useState<ProjectMember[]>([])
-  const [addingMember, setAddingMember] = useState(false)
+  const [open, setOpen] = useState(false)
   const [allUsers, setAllUsers] = useState<Profile[]>([])
   const [search, setSearch] = useState('')
   const [copied, setCopied] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
-  useEffect(() => { loadMembers() }, [project.id])
-
-  async function loadMembers() {
-    const { data } = await supabase
-      .from('project_members')
-      .select('*, profile:profiles(id, name, email, avatar_url, created_at)')
-      .eq('project_id', project.id)
-    if (data) setMembers(data)
-  }
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
 
   async function openPicker() {
-    setAddingMember(true)
+    setOpen(o => !o)
     setSearch('')
     const { data } = await supabase.from('profiles').select('id, name, email, avatar_url, created_at')
     if (data) setAllUsers(data)
   }
 
-  // Filter out owner and existing members, then apply search
-  const existingIds = new Set([profile?.id, ...members.map(m => m.user_id)])
+  const existingIds = new Set([ownerProfile?.id, ...members.map(m => m.user_id)])
   const filtered = allUsers.filter(u => {
     if (existingIds.has(u.id)) return false
     const q = search.toLowerCase()
     return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
   })
-
-  async function addUser(u: Profile) {
-    await supabase.from('project_members').insert({ project_id: project.id, user_id: u.id, role: 'member' })
-    setAddingMember(false)
-    setSearch('')
-    loadMembers()
-  }
 
   function copyInviteLink() {
     const link = `${window.location.origin}${window.location.pathname}#/register`
@@ -219,10 +238,121 @@ function OverviewTab({ project, tasks, onEditDescription }: {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  async function removeMember(memberId: string) {
-    await supabase.from('project_members').delete().eq('id', memberId)
-    setMembers(prev => prev.filter(m => m.id !== memberId))
-  }
+  // All people shown in avatar stack: owner + members
+  const avatarList: { id: string; name: string; isOwner?: boolean }[] = [
+    ...(ownerProfile ? [{ id: ownerProfile.id, name: ownerProfile.name, isOwner: true }] : []),
+    ...members.map(m => ({ id: m.id, name: m.profile?.name ?? '?', memberId: m.id })),
+  ]
+
+  return (
+    <div className="relative flex items-center" ref={ref}>
+      {/* Avatar stack */}
+      <div className="flex items-center -space-x-2 cursor-pointer" onClick={openPicker}>
+        {avatarList.slice(0, 5).map((a, i) => (
+          <div key={a.id}
+            className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-xs font-semibold text-white shrink-0"
+            style={{ background: a.isOwner ? '#6366f1' : '#94a3b8', zIndex: 10 - i }}
+            title={a.name}
+          >
+            {getInitials(a.name)}
+          </div>
+        ))}
+        {avatarList.length > 5 && (
+          <div className="w-8 h-8 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-xs font-medium text-slate-600">
+            +{avatarList.length - 5}
+          </div>
+        )}
+        {/* Add button */}
+        <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 hover:border-primary-400 bg-white flex items-center justify-center text-slate-400 hover:text-primary-500 transition-colors ml-1"
+          title="Manage members">
+          <Plus size={13} />
+        </div>
+      </div>
+
+      {/* Picker dropdown */}
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50">
+          {/* Current members */}
+          {(ownerProfile || members.length > 0) && (
+            <div className="px-3 py-2 border-b border-slate-100">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Members</p>
+              {ownerProfile && (
+                <div className="flex items-center gap-2 py-1">
+                  <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                    {getInitials(ownerProfile.name)}
+                  </div>
+                  <span className="text-sm text-slate-700 flex-1">{ownerProfile.name}</span>
+                  <span className="text-xs text-slate-400">Owner</span>
+                </div>
+              )}
+              {members.map(m => (
+                <div key={m.id} className="flex items-center gap-2 py-1 group">
+                  <div className="w-7 h-7 rounded-full bg-slate-400 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                    {getInitials(m.profile?.name ?? '?')}
+                  </div>
+                  <span className="text-sm text-slate-700 flex-1 truncate">{m.profile?.name ?? m.profile?.email}</span>
+                  <button onClick={() => onRemove(m.id)}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all">
+                    <UserMinus size={13} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Search to add */}
+          <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100">
+            <Search size={13} className="text-slate-400 shrink-0" />
+            <input autoFocus placeholder="Add member by name or email…"
+              value={search} onChange={e => setSearch(e.target.value)}
+              className="flex-1 text-sm outline-none text-slate-700 placeholder-slate-400" />
+          </div>
+
+          <div className="max-h-48 overflow-y-auto py-1">
+            {filtered.length > 0 ? filtered.map(u => (
+              <button key={u.id} onClick={async () => { await onAdd(u); setOpen(false) }}
+                className="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
+                <div className="w-7 h-7 rounded-full bg-primary-400 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                  {getInitials(u.name ?? '?')}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
+                  <p className="text-xs text-slate-400 truncate">{u.email}</p>
+                </div>
+              </button>
+            )) : (
+              <div className="px-3 py-3 text-center">
+                <p className="text-sm text-slate-400 mb-2">
+                  {search ? `No user found for "${search}"` : 'All registered users are already members'}
+                </p>
+                <button onClick={copyInviteLink}
+                  className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium border border-primary-200 rounded-lg px-3 py-1.5 hover:bg-primary-50 transition-colors">
+                  {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy invite link</>}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Overview Tab ─────────────────────────────────────────────────────────────
+
+interface Resource { id: string; title: string; url: string }
+
+function OverviewTab({ project, tasks, members, ownerProfile, onEditDescription, onAddMember, onRemoveMember }: {
+  project: Project
+  tasks: Task[]
+  members: ProjectMember[]
+  ownerProfile: Profile | null
+  onEditDescription: (desc: string) => Promise<void>
+  onAddMember: (u: Profile) => Promise<void>
+  onRemoveMember: (id: string) => Promise<void>
+}) {
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [desc, setDesc] = useState(project.description ?? '')
 
   // Key resources
   const storageKey = `taskhi:resources:${project.id}`
@@ -292,73 +422,25 @@ function OverviewTab({ project, tasks, onEditDescription }: {
 
       <div className="border-t border-slate-100" />
 
-      {/* Project roles / members */}
+      {/* Project roles */}
       <section>
         <h2 className="text-base font-semibold text-slate-900 mb-4">Project roles</h2>
         <div className="flex flex-wrap gap-6 items-start">
-
-          {/* Add member */}
-          <div className="relative">
-            {!addingMember ? (
-              <button onClick={openPicker}
-                className="flex items-center gap-2.5 text-sm text-slate-500 hover:text-slate-700 group">
-                <span className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 group-hover:border-slate-400 flex items-center justify-center transition-colors shrink-0">
-                  <Plus size={14} />
-                </span>
-                Add member
-              </button>
-            ) : (
-              <div className="w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-20 relative">
-                {/* Search */}
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100">
-                  <Search size={14} className="text-slate-400 shrink-0" />
-                  <input autoFocus placeholder="Search by name or email…"
-                    value={search} onChange={e => setSearch(e.target.value)}
-                    className="flex-1 text-sm outline-none text-slate-700 placeholder-slate-400" />
-                  <button onClick={() => { setAddingMember(false); setSearch('') }}
-                    className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
-                </div>
-
-                {/* User list */}
-                <div className="max-h-52 overflow-y-auto py-1">
-                  {filtered.length > 0 ? filtered.map(u => (
-                    <button key={u.id} onClick={() => addUser(u)}
-                      className="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-primary-400 flex items-center justify-center text-white text-xs font-semibold shrink-0">
-                        {getInitials(u.name ?? u.email ?? '?')}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
-                        <p className="text-xs text-slate-400 truncate">{u.email}</p>
-                      </div>
-                    </button>
-                  )) : (
-                    <div className="px-3 py-3 text-center">
-                      <p className="text-sm text-slate-500 mb-2">
-                        {search ? `No user found for "${search}"` : 'No other users yet'}
-                      </p>
-                      <button onClick={copyInviteLink}
-                        className="inline-flex items-center gap-1.5 text-xs text-primary-600 hover:text-primary-700 font-medium border border-primary-200 rounded-lg px-3 py-1.5 hover:bg-primary-50 transition-colors">
-                        {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy invite link</>}
-                      </button>
-                      <p className="text-xs text-slate-400 mt-1.5">Share the link so they can register</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Inline add member */}
+          <InlineAddMember members={members} ownerProfile={ownerProfile} onAdd={onAddMember} />
 
           {/* Owner */}
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold shrink-0">
-              {getInitials(profile?.name ?? 'U')}
+          {ownerProfile && (
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                {getInitials(ownerProfile.name)}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-800">{ownerProfile.name}</p>
+                <p className="text-xs text-slate-400">Project owner</p>
+              </div>
             </div>
-            <div>
-              <p className="text-sm font-medium text-slate-800">{profile?.name}</p>
-              <p className="text-xs text-slate-400">Project owner</p>
-            </div>
-          </div>
+          )}
 
           {/* Members */}
           {members.map(m => (
@@ -370,9 +452,8 @@ function OverviewTab({ project, tasks, onEditDescription }: {
                 <p className="text-sm font-medium text-slate-800">{m.profile?.name ?? m.profile?.email ?? 'Member'}</p>
                 <p className="text-xs text-slate-400 capitalize">{m.role}</p>
               </div>
-              <button onClick={() => removeMember(m.id)}
-                className="opacity-0 group-hover:opacity-100 ml-1 p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all"
-                title="Remove member">
+              <button onClick={() => onRemoveMember(m.id)}
+                className="opacity-0 group-hover:opacity-100 ml-1 p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all">
                 <UserMinus size={13} />
               </button>
             </div>
@@ -423,6 +504,84 @@ function OverviewTab({ project, tasks, onEditDescription }: {
           )}
         </div>
       </section>
+    </div>
+  )
+}
+
+// Inline add member for the Overview tab roles section
+function InlineAddMember({ members, ownerProfile, onAdd }: {
+  members: ProjectMember[]
+  ownerProfile: Profile | null
+  onAdd: (u: Profile) => Promise<void>
+}) {
+  const [open, setOpen] = useState(false)
+  const [allUsers, setAllUsers] = useState<Profile[]>([])
+  const [search, setSearch] = useState('')
+  const [copied, setCopied] = useState(false)
+
+  async function openPicker() {
+    setOpen(true)
+    setSearch('')
+    const { data } = await supabase.from('profiles').select('id, name, email, avatar_url, created_at')
+    if (data) setAllUsers(data)
+  }
+
+  const existingIds = new Set([ownerProfile?.id, ...members.map(m => m.user_id)])
+  const filtered = allUsers.filter(u => {
+    if (existingIds.has(u.id)) return false
+    const q = search.toLowerCase()
+    return !q || u.name?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q)
+  })
+
+  function copyInviteLink() {
+    const link = `${window.location.origin}${window.location.pathname}#/register`
+    navigator.clipboard.writeText(link)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  if (!open) {
+    return (
+      <button onClick={openPicker} className="flex items-center gap-2.5 text-sm text-slate-500 hover:text-slate-700 group">
+        <span className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 group-hover:border-slate-400 flex items-center justify-center transition-colors shrink-0">
+          <Plus size={14} />
+        </span>
+        Add member
+      </button>
+    )
+  }
+
+  return (
+    <div className="w-64 bg-white border border-slate-200 rounded-xl shadow-lg">
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100">
+        <Search size={13} className="text-slate-400 shrink-0" />
+        <input autoFocus placeholder="Search by name or email…"
+          value={search} onChange={e => setSearch(e.target.value)}
+          className="flex-1 text-sm outline-none text-slate-700 placeholder-slate-400" />
+        <button onClick={() => setOpen(false)} className="text-slate-400 hover:text-slate-600"><X size={14} /></button>
+      </div>
+      <div className="max-h-48 overflow-y-auto py-1">
+        {filtered.length > 0 ? filtered.map(u => (
+          <button key={u.id} onClick={async () => { await onAdd(u); setOpen(false) }}
+            className="flex items-center gap-3 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
+            <div className="w-7 h-7 rounded-full bg-primary-400 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+              {getInitials(u.name ?? '?')}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-800 truncate">{u.name}</p>
+              <p className="text-xs text-slate-400 truncate">{u.email}</p>
+            </div>
+          </button>
+        )) : (
+          <div className="px-3 py-3 text-center">
+            <p className="text-sm text-slate-400 mb-2">{search ? `No user found for "${search}"` : 'No other users yet'}</p>
+            <button onClick={copyInviteLink}
+              className="inline-flex items-center gap-1.5 text-xs text-primary-600 font-medium border border-primary-200 rounded-lg px-3 py-1.5 hover:bg-primary-50 transition-colors">
+              {copied ? <><Check size={12} /> Copied!</> : <><Copy size={12} /> Copy invite link</>}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
