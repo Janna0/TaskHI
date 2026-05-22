@@ -25,7 +25,6 @@ export function LoginPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="w-9 h-9 rounded-xl bg-primary-500 flex items-center justify-center">
             <CheckSquare size={18} className="text-white" />
@@ -46,15 +45,22 @@ export function LoginPage() {
               onChange={e => setEmail(e.target.value)}
               required
             />
-            <Input
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              error={error}
-              required
-            />
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-slate-600">Password</label>
+                <Link to="/forgot-password" className="text-xs text-primary-600 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
+              <Input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                error={error}
+                required
+              />
+            </div>
             <Button type="submit" className="w-full" loading={loading}>Sign in</Button>
           </form>
 

@@ -38,10 +38,11 @@ create table if not exists tasks (
   section_id uuid references sections(id) on delete set null,
   title text not null,
   description text default '',
+  notes text default '',
   status text default 'todo',
   priority text default 'medium',
   due_date date,
-  created_by uuid not null references profiles(id),
+  created_by uuid not null default auth.uid() references profiles(id),
   assignee_id uuid references profiles(id),
   position integer default 0,
   created_at timestamptz default now(),
@@ -88,3 +89,9 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure handle_new_user();
+
+-- -----------------------------------------------
+-- MIGRATION: run these if you already ran the schema above
+-- -----------------------------------------------
+alter table tasks add column if not exists notes text default '';
+alter table tasks alter column created_by set default auth.uid();

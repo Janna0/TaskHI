@@ -7,6 +7,7 @@ import { DashboardPage } from './pages/DashboardPage'
 import { ProjectsPage } from './pages/ProjectsPage'
 import { ProjectView } from './pages/ProjectView'
 import { MyTasksPage } from './pages/MyTasksPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -27,6 +28,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<PublicRoute><LoginPage /></PublicRoute>} />
       <Route path="/register" element={<PublicRoute><RegisterPage /></PublicRoute>} />
+      <Route path="/forgot-password" element={<PublicRoute><ForgotPasswordPage /></PublicRoute>} />
       <Route path="/dashboard" element={<PrivateRoute><DashboardPage /></PrivateRoute>} />
       <Route path="/projects" element={<PrivateRoute><ProjectsPage /></PrivateRoute>} />
       <Route path="/projects/:id" element={<PrivateRoute><ProjectView /></PrivateRoute>} />
