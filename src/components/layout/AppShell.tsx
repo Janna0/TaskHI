@@ -31,9 +31,19 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function handleToggleFavorite(project: Project) {
     const next = !project.is_favorite
-    // Optimistic update — no re-fetch here to avoid a race with the write
     setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: next } : p))
-    await supabase.from('projects').update({ is_favorite: next }).eq('id', project.id)
+    const { data, error } = await supabase
+      .from('projects')
+      .update({ is_favorite: next })
+      .eq('id', project.id)
+      .select('id, is_favorite')
+      .single()
+    if (error || !data) {
+      // Revert if the write failed
+      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: !next } : p))
+      console.error('Failed to update favorite:', error)
+      alert(`Could not save: ${error?.message ?? 'unknown error'}`)
+    }
   }
 
   return (
