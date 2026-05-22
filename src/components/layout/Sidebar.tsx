@@ -7,17 +7,18 @@ import { Project } from '../../types'
 interface SidebarProps {
   projects: Project[]
   onNewProject: () => void
+  onToggleFavorite: (project: Project) => void
 }
 
 const navClass = ({ isActive }: { isActive: boolean }) =>
   cn(
-    'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors',
+    'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors w-full group',
     isActive
       ? 'bg-white/15 text-white font-medium'
       : 'text-white/70 hover:bg-white/10 hover:text-white'
   )
 
-export function Sidebar({ projects, onNewProject }: SidebarProps) {
+export function Sidebar({ projects, onNewProject, onToggleFavorite }: SidebarProps) {
   const { profile, signOut } = useAuth()
   const navigate = useNavigate()
   const favorites = projects.filter(p => p.is_favorite)
@@ -27,9 +28,38 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
     navigate('/login')
   }
 
+  function ProjectRow({ p }: { p: Project }) {
+    return (
+      <div className="relative flex items-center group/row">
+        <NavLink to={`/projects/${p.id}`} className={navClass}>
+          <span
+            className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold shrink-0 text-white"
+            style={{ background: p.color }}
+          >
+            {p.name[0]?.toUpperCase()}
+          </span>
+          <span className="truncate flex-1">{p.name}</span>
+        </NavLink>
+        {/* Star button — visible on row hover */}
+        <button
+          onClick={e => { e.stopPropagation(); onToggleFavorite(p) }}
+          className={cn(
+            'absolute right-1 p-1 rounded transition-all',
+            p.is_favorite
+              ? 'opacity-100 text-amber-400 hover:text-amber-300'
+              : 'opacity-0 group-hover/row:opacity-100 text-white/40 hover:text-amber-400'
+          )}
+          title={p.is_favorite ? 'Remove from starred' : 'Add to starred'}
+        >
+          <Star size={12} className={p.is_favorite ? 'fill-amber-400' : ''} />
+        </button>
+      </div>
+    )
+  }
+
   return (
     <aside className="w-64 shrink-0 h-screen bg-[#1e1f21] flex flex-col">
-      {/* Logo + user */}
+      {/* User row */}
       <div className="px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -58,23 +88,13 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           <FolderOpen size={15} /> Projects
         </NavLink>
 
-        {/* Favorites */}
+        {/* Starred */}
         {favorites.length > 0 && (
           <div className="pt-5">
             <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">
               Starred
             </p>
-            {favorites.map(p => (
-              <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass}>
-                <span
-                  className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold shrink-0 text-white"
-                  style={{ background: p.color }}
-                >
-                  {p.name[0]?.toUpperCase()}
-                </span>
-                <span className="truncate">{p.name}</span>
-              </NavLink>
-            ))}
+            {favorites.map(p => <ProjectRow key={p.id} p={p} />)}
           </div>
         )}
 
@@ -90,18 +110,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               <Plus size={14} />
             </button>
           </div>
-          {projects.filter(p => p.status === 'active').map(p => (
-            <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass}>
-              <span
-                className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold shrink-0 text-white"
-                style={{ background: p.color }}
-              >
-                {p.name[0]?.toUpperCase()}
-              </span>
-              <span className="truncate">{p.name}</span>
-              {p.is_favorite && <Star size={11} className="ml-auto text-amber-400 fill-amber-400 shrink-0" />}
-            </NavLink>
-          ))}
+          {projects.filter(p => p.status === 'active').map(p => <ProjectRow key={p.id} p={p} />)}
           {projects.length === 0 && (
             <button
               onClick={onNewProject}
