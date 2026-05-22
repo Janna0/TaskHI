@@ -1,21 +1,25 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { LayoutList, LayoutGrid, Plus, Star, MoreHorizontal, Trash2 } from 'lucide-react'
+import { Plus, Star, MoreHorizontal, Trash2, CheckCircle2, Circle, Clock, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import { Project, Section, Task } from '../types'
 import { Button } from '../components/ui/Button'
 import { ListView } from '../components/views/ListView'
 import { BoardView } from '../components/views/BoardView'
 import { TaskDetailPanel } from '../components/tasks/TaskDetailPanel'
 import { CreateTaskModal } from '../components/tasks/CreateTaskModal'
-import { cn } from '../lib/utils'
+import { cn, isOverdue, formatDate } from '../lib/utils'
 
-type View = 'list' | 'board'
+type View = 'overview' | 'list' | 'board'
+
+const TABS: { id: View; label: string }[] = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'list',     label: 'List' },
+  { id: 'board',    label: 'Board' },
+]
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>()
-  const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -44,8 +48,9 @@ export function ProjectView() {
 
   async function toggleFavorite() {
     if (!project) return
-    await supabase.from('projects').update({ is_favorite: !project.is_favorite }).eq('id', project.id)
-    setProject(p => p ? { ...p, is_favorite: !p.is_favorite } : p)
+    const next = !project.is_favorite
+    setProject(p => p ? { ...p, is_favorite: next } : p)
+    await supabase.from('projects').update({ is_favorite: next }).eq('id', project.id)
     window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 
@@ -59,87 +64,92 @@ export function ProjectView() {
   function handleTaskUpdated() {
     loadAll()
     if (selectedTask) {
-      // refresh selected task data
       supabase.from('tasks').select('*').eq('id', selectedTask.id).single().then(({ data }) => {
         if (data) setSelectedTask(data)
       })
     }
   }
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-full text-slate-400 text-sm">Loading...</div>
-  }
-
-  if (!project) {
-    return <div className="flex items-center justify-center h-full text-slate-500">Project not found.</div>
-  }
+  if (loading) return <div className="flex items-center justify-center h-full text-slate-400 text-sm">Loading...</div>
+  if (!project) return <div className="flex items-center justify-center h-full text-slate-500">Project not found.</div>
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Project header */}
-      <div className="px-6 py-4 bg-white border-b border-slate-100 flex items-center gap-3">
-        <span className="w-4 h-4 rounded-full shrink-0" style={{ background: project.color }} />
-        <h1 className="font-bold text-lg text-slate-800 truncate">{project.name}</h1>
-        {project.description && (
-          <span className="text-sm text-slate-400 truncate hidden md:block">{project.description}</span>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          {/* Favorite */}
-          <button onClick={toggleFavorite} className="p-1.5 rounded-md hover:bg-slate-100" title="Favorite">
-            <Star size={16} className={cn(project.is_favorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400')} />
+    <div className="flex flex-col h-full bg-white">
+      {/* Top: project name row */}
+      <div className="px-6 pt-5 pb-0 bg-white">
+        <div className="flex items-center gap-3 mb-4">
+          <span className="w-6 h-6 rounded-md shrink-0" style={{ background: project.color }} />
+          <h1 className="font-bold text-xl text-slate-900">{project.name}</h1>
+          <button
+            onClick={toggleFavorite}
+            className="p-1 rounded hover:bg-slate-100 transition-colors"
+            title={project.is_favorite ? 'Remove from starred' : 'Add to starred'}
+          >
+            <Star
+              size={16}
+              className={cn(project.is_favorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400 hover:text-slate-600')}
+            />
           </button>
 
-          {/* View switcher */}
-          <div className="flex rounded-lg border border-slate-200 overflow-hidden">
-            <button
-              onClick={() => setView('list')}
-              className={cn('flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors', view === 'list' ? 'bg-primary-500 text-white' : 'text-slate-500 hover:bg-slate-50')}
-            >
-              <LayoutList size={14} /> List
-            </button>
-            <button
-              onClick={() => setView('board')}
-              className={cn('flex items-center gap-1 px-3 py-1.5 text-xs font-medium transition-colors', view === 'board' ? 'bg-primary-500 text-white' : 'text-slate-500 hover:bg-slate-50')}
-            >
-              <LayoutGrid size={14} /> Board
-            </button>
-          </div>
-
-          {/* Add task */}
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus size={14} className="mr-1" /> Add Task
-          </Button>
-
-          {/* More menu */}
-          <div className="relative">
-            <button
-              onClick={() => setShowMenu(s => !s)}
-              className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400"
-            >
-              <MoreHorizontal size={16} />
-            </button>
-            {showMenu && (
-              <>
-                <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-                <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-100 py-1 z-20">
-                  <button
-                    onClick={() => { setShowMenu(false); archiveProject() }}
-                    className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 size={14} /> Archive project
-                  </button>
-                </div>
-              </>
+          <div className="ml-auto flex items-center gap-2">
+            {view !== 'overview' && (
+              <Button size="sm" onClick={() => setShowCreate(true)}>
+                <Plus size={14} className="mr-1" /> Add Task
+              </Button>
             )}
+            <div className="relative">
+              <button
+                onClick={() => setShowMenu(s => !s)}
+                className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400"
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              {showMenu && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
+                  <div className="absolute right-0 top-full mt-1 w-44 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20">
+                    <button
+                      onClick={() => { setShowMenu(false); archiveProject() }}
+                      className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
+                    >
+                      <Trash2 size={14} /> Archive project
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
+        </div>
+
+        {/* Asana-style tab bar */}
+        <div className="flex items-center gap-1 border-b border-slate-200">
+          {TABS.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setView(tab.id)}
+              className={cn(
+                'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                view === tab.id
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Content area */}
-      <div className="flex flex-1 min-h-0">
+      {/* Content */}
+      <div className="flex flex-1 min-h-0 bg-slate-50">
         <div className="flex-1 overflow-y-auto">
-          {view === 'list' ? (
+          {view === 'overview' && (
+            <OverviewTab project={project} tasks={tasks} onEditDescription={async (desc) => {
+              await supabase.from('projects').update({ description: desc }).eq('id', project.id)
+              setProject(p => p ? { ...p, description: desc } : p)
+            }} />
+          )}
+          {view === 'list' && (
             <ListView
               sections={sections}
               tasks={tasks}
@@ -147,7 +157,8 @@ export function ProjectView() {
               onTaskClick={task => setSelectedTask(task)}
               onRefresh={loadAll}
             />
-          ) : (
+          )}
+          {view === 'board' && (
             <BoardView
               sections={sections}
               tasks={tasks}
@@ -158,7 +169,6 @@ export function ProjectView() {
           )}
         </div>
 
-        {/* Detail panel */}
         {selectedTask && (
           <TaskDetailPanel
             task={selectedTask}
@@ -179,6 +189,132 @@ export function ProjectView() {
           sections={sections}
         />
       )}
+    </div>
+  )
+}
+
+// ─── Overview Tab ────────────────────────────────────────────────────────────
+
+function OverviewTab({
+  project,
+  tasks,
+  onEditDescription,
+}: {
+  project: Project
+  tasks: Task[]
+  onEditDescription: (desc: string) => Promise<void>
+}) {
+  const [editingDesc, setEditingDesc] = useState(false)
+  const [desc, setDesc] = useState(project.description ?? '')
+
+  const total = tasks.length
+  const done = tasks.filter(t => t.status === 'done').length
+  const inProgress = tasks.filter(t => t.status === 'in_progress').length
+  const overdue = tasks.filter(t => t.due_date && isOverdue(t.due_date) && t.status !== 'done').length
+  const percent = total > 0 ? Math.round((done / total) * 100) : 0
+
+  async function saveDesc() {
+    await onEditDescription(desc)
+    setEditingDesc(false)
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      {/* Progress */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">Progress</h2>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-primary-500 rounded-full transition-all"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+          <span className="text-sm font-semibold text-slate-700 w-10 text-right">{percent}%</span>
+        </div>
+        <div className="grid grid-cols-4 gap-4">
+          <StatBox icon={<Circle size={16} className="text-slate-400" />} label="Total" value={total} />
+          <StatBox icon={<CheckCircle2 size={16} className="text-green-500" />} label="Done" value={done} color="text-green-600" />
+          <StatBox icon={<Clock size={16} className="text-blue-500" />} label="In progress" value={inProgress} color="text-blue-600" />
+          <StatBox icon={<AlertCircle size={16} className="text-red-500" />} label="Overdue" value={overdue} color="text-red-600" />
+        </div>
+      </div>
+
+      {/* Description */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-semibold text-slate-700">Description</h2>
+          {!editingDesc && (
+            <button
+              onClick={() => setEditingDesc(true)}
+              className="text-xs text-primary-600 hover:underline"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+        {editingDesc ? (
+          <div className="space-y-2">
+            <textarea
+              autoFocus
+              className="w-full text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
+              rows={4}
+              value={desc}
+              onChange={e => setDesc(e.target.value)}
+              placeholder="Add a description..."
+            />
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => { setDesc(project.description ?? ''); setEditingDesc(false) }} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-100">Cancel</button>
+              <button onClick={saveDesc} className="text-xs text-white bg-primary-500 hover:bg-primary-600 px-3 py-1.5 rounded-md">Save</button>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500 whitespace-pre-wrap">
+            {project.description?.trim() || <span className="italic text-slate-400">No description. Click Edit to add one.</span>}
+          </p>
+        )}
+      </div>
+
+      {/* Project details */}
+      <div className="bg-white rounded-xl border border-slate-200 p-6">
+        <h2 className="text-sm font-semibold text-slate-700 mb-4">Details</h2>
+        <div className="space-y-3">
+          <DetailRow label="Created">
+            {formatDate(project.created_at)}
+          </DetailRow>
+          <DetailRow label="Status">
+            <span className="capitalize">{project.status}</span>
+          </DetailRow>
+          <DetailRow label="Color">
+            <span className="flex items-center gap-2">
+              <span className="w-4 h-4 rounded-full inline-block" style={{ background: project.color }} />
+              {project.color}
+            </span>
+          </DetailRow>
+          <DetailRow label="Tasks">
+            {total} total · {done} completed
+          </DetailRow>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatBox({ icon, label, value, color = 'text-slate-700' }: { icon: React.ReactNode; label: string; value: number; color?: string }) {
+  return (
+    <div className="flex flex-col items-center gap-1 p-3 rounded-lg bg-slate-50">
+      {icon}
+      <span className={cn('text-xl font-bold', color)}>{value}</span>
+      <span className="text-xs text-slate-500">{label}</span>
+    </div>
+  )
+}
+
+function DetailRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-center gap-4">
+      <span className="text-xs font-medium text-slate-400 w-20 shrink-0">{label}</span>
+      <span className="text-sm text-slate-700">{children}</span>
     </div>
   )
 }
