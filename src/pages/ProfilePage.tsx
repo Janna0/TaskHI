@@ -1,31 +1,71 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, ArrowLeft } from 'lucide-react'
+import { Check, ArrowLeft, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getInitials, PROJECT_COLORS } from '../lib/utils'
 
 export function ProfilePage() {
-  const { user, profile, refreshProfile } = useAuth()
+  const { user, profile, updateProfile } = useAuth()
   const navigate = useNavigate()
 
   const emailFallback = profile?.email?.split('@')[0] ?? user?.email?.split('@')[0] ?? ''
-  const [name, setName] = useState(profile?.name ?? '')
-  const [color, setColor] = useState(profile?.avatar_color ?? '#6366f1')
+
+  const [name, setName] = useState('')
+  const [color, setColor] = useState('#6366f1')
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [passwordSent, setPasswordSent] = useState(false)
+
+  // Sync from profile whenever it loads or changes
+  useEffect(() => {
+    if (profile) {
+      setName(profile.name ?? '')
+      setColor(profile.avatar_color ?? '#6366f1')
+    }
+  }, [profile?.id]) // only re-sync when switching users, not on every profile update
 
   const displayName = name.trim() || emailFallback || '?'
 
   async function saveProfile() {
     if (!user) return
     setSaving(true)
-    await supabase.from('profiles').update({ name: name.trim(), avatar_color: color }).eq('id', user.id)
-    await refreshProfile()
+    setError(null)
+
+    const trimmedName = name.trim()
+
+    // Always save name (known-good column)
+    const { error: nameErr } = await supabase
+      .from('profiles')
+      .update({ name: trimmedName })
+      .eq('id', user.id)
+
+    if (nameErr) {
+      setError('Failed to save name: ' + nameErr.message)
+      setSaving(false)
+      return
+    }
+
+    // Try saving avatar_color — silently skip if column not migrated yet
+    const { error: colorErr } = await supabase
+      .from('profiles')
+      .update({ avatar_color: color })
+      .eq('id', user.id)
+
+    // Update context directly so sidebar refreshes without a full refetch
+    updateProfile({
+      name: trimmedName,
+      ...(colorErr ? {} : { avatar_color: color }),
+    })
+
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2500)
+
+    if (colorErr) {
+      setError('Name saved. Color requires a DB migration — see instructions below.')
+    }
   }
 
   async function sendPasswordReset() {
@@ -91,6 +131,13 @@ export function ProfilePage() {
         />
         <p className="text-xs text-slate-400 mt-1">Email cannot be changed here</p>
       </div>
+
+      {error && (
+        <div className="flex items-start gap-2 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2.5 mb-4">
+          <AlertCircle size={14} className="shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
 
       <button
         onClick={saveProfile}
