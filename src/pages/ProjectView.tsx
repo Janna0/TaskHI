@@ -36,23 +36,30 @@ export function ProjectView() {
 
   async function loadAll() {
     setLoading(true)
-    const [{ data: proj }, { data: sec }, { data: tsk }] = await Promise.all([
-      supabase.from('projects').select('*').eq('id', id!).single(),
-      supabase.from('sections').select('*').eq('project_id', id!).order('position'),
-      supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
-    ])
-    if (proj) setProject(proj)
-    if (sec) setSections(sec)
-    if (tsk) setTasks(tsk)
-    setLoading(false)
+    try {
+      const [{ data: proj }, { data: sec }, { data: tsk }] = await Promise.all([
+        supabase.from('projects').select('*').eq('id', id!).single(),
+        supabase.from('sections').select('*').eq('project_id', id!).order('position'),
+        supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
+      ])
+      if (proj) setProject(proj)
+      if (sec) setSections(sec)
+      if (tsk) setTasks(tsk)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function loadMembers() {
-    const { data } = await supabase
-      .from('project_members')
-      .select('*, profile:profiles(id, name, email, avatar_url, created_at)')
-      .eq('project_id', id!)
-    if (data) setMembers(data)
+    try {
+      const { data } = await supabase
+        .from('project_members')
+        .select('*, profile:profiles(id, name, email, avatar_url, created_at)')
+        .eq('project_id', id!)
+      if (data) setMembers(data)
+    } catch {
+      // project_members table may not exist yet; members stay empty
+    }
   }
 
   async function addMember(u: Profile) {
