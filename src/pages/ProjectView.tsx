@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { Plus, Star, MoreHorizontal, Trash2, Link, X } from 'lucide-react'
+import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Project, Section, Task } from '../types'
+import { Project, Section, Task, ProjectMember } from '../types'
 import { Button } from '../components/ui/Button'
 import { ListView } from '../components/views/ListView'
 import { BoardView } from '../components/views/BoardView'
@@ -173,7 +173,64 @@ function OverviewTab({ project, tasks, onEditDescription }: {
   const [editingDesc, setEditingDesc] = useState(false)
   const [desc, setDesc] = useState(project.description ?? '')
 
-  // Key resources stored in localStorage per project
+  // Members
+  const [members, setMembers] = useState<ProjectMember[]>([])
+  const [addingMember, setAddingMember] = useState(false)
+  const [memberEmail, setMemberEmail] = useState('')
+  const [memberError, setMemberError] = useState('')
+  const [memberLoading, setMemberLoading] = useState(false)
+
+  useEffect(() => { loadMembers() }, [project.id])
+
+  async function loadMembers() {
+    const { data } = await supabase
+      .from('project_members')
+      .select('*, profile:profiles(id, name, email, avatar_url, created_at)')
+      .eq('project_id', project.id)
+    if (data) setMembers(data)
+  }
+
+  async function handleAddMember() {
+    if (!memberEmail.trim()) return
+    setMemberError('')
+    setMemberLoading(true)
+    // Look up user by email in profiles
+    const { data: found } = await supabase
+      .from('profiles')
+      .select('id, name, email')
+      .eq('email', memberEmail.trim().toLowerCase())
+      .single()
+    if (!found) {
+      setMemberError('No user found with that email address.')
+      setMemberLoading(false)
+      return
+    }
+    if (found.id === profile?.id) {
+      setMemberError("That's you — you're already the project owner.")
+      setMemberLoading(false)
+      return
+    }
+    const { error } = await supabase.from('project_members').insert({
+      project_id: project.id,
+      user_id: found.id,
+      role: 'member',
+    })
+    setMemberLoading(false)
+    if (error) {
+      setMemberError(error.code === '23505' ? 'This person is already a member.' : error.message)
+      return
+    }
+    setMemberEmail('')
+    setAddingMember(false)
+    loadMembers()
+  }
+
+  async function removeMember(memberId: string) {
+    await supabase.from('project_members').delete().eq('id', memberId)
+    setMembers(prev => prev.filter(m => m.id !== memberId))
+  }
+
+  // Key resources
   const storageKey = `taskhi:resources:${project.id}`
   const [resources, setResources] = useState<Resource[]>(() => {
     try { return JSON.parse(localStorage.getItem(storageKey) ?? '[]') } catch { return [] }
@@ -186,16 +243,11 @@ function OverviewTab({ project, tasks, onEditDescription }: {
     setResources(next)
     localStorage.setItem(storageKey, JSON.stringify(next))
   }
-
   function addResource() {
     if (!resTitle.trim() || !resUrl.trim()) return
     const url = resUrl.startsWith('http') ? resUrl : `https://${resUrl}`
     saveResources([...resources, { id: crypto.randomUUID(), title: resTitle.trim(), url }])
     setResTitle(''); setResUrl(''); setAddingResource(false)
-  }
-
-  function removeResource(id: string) {
-    saveResources(resources.filter(r => r.id !== id))
   }
 
   const total = tasks.length
@@ -206,7 +258,7 @@ function OverviewTab({ project, tasks, onEditDescription }: {
   return (
     <div className="max-w-2xl mx-auto px-8 py-8 space-y-10">
 
-      {/* Progress bar */}
+      {/* Progress */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm text-slate-500">
           <span>{done} of {total} tasks complete</span>
@@ -215,45 +267,30 @@ function OverviewTab({ project, tasks, onEditDescription }: {
         <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
           <div className="h-full bg-primary-500 rounded-full transition-all" style={{ width: `${percent}%` }} />
         </div>
-        {overdue > 0 && (
-          <p className="text-xs text-red-500">{overdue} task{overdue > 1 ? 's' : ''} overdue</p>
-        )}
+        {overdue > 0 && <p className="text-xs text-red-500">{overdue} task{overdue > 1 ? 's' : ''} overdue</p>}
       </div>
 
       <div className="border-t border-slate-100" />
 
-      {/* Project description */}
+      {/* Description */}
       <section>
         <h2 className="text-base font-semibold text-slate-900 mb-3">Project description</h2>
         {editingDesc ? (
           <div className="space-y-2">
-            <textarea
-              autoFocus
-              className="w-full text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none"
-              rows={5}
-              value={desc}
-              onChange={e => setDesc(e.target.value)}
+            <textarea autoFocus rows={5} value={desc} onChange={e => setDesc(e.target.value)}
               placeholder="What's this project about?"
-            />
+              className="w-full text-sm text-slate-700 border border-slate-200 rounded-lg px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-primary-300 resize-none" />
             <div className="flex gap-2">
               <button onClick={async () => { await onEditDescription(desc); setEditingDesc(false) }}
-                className="text-sm text-white bg-primary-500 hover:bg-primary-600 px-4 py-1.5 rounded-md font-medium">
-                Save
-              </button>
+                className="text-sm text-white bg-primary-500 hover:bg-primary-600 px-4 py-1.5 rounded-md font-medium">Save</button>
               <button onClick={() => { setDesc(project.description ?? ''); setEditingDesc(false) }}
-                className="text-sm text-slate-500 hover:text-slate-700 px-4 py-1.5 rounded-md hover:bg-slate-100">
-                Cancel
-              </button>
+                className="text-sm text-slate-500 hover:text-slate-700 px-4 py-1.5 rounded-md hover:bg-slate-100">Cancel</button>
             </div>
           </div>
         ) : (
-          <p
-            onClick={() => setEditingDesc(true)}
-            className={cn(
-              'text-sm rounded-lg px-3 py-2.5 cursor-text hover:bg-slate-50 transition-colors',
-              project.description?.trim() ? 'text-slate-700 whitespace-pre-wrap' : 'text-slate-400 italic'
-            )}
-          >
+          <p onClick={() => setEditingDesc(true)}
+            className={cn('text-sm rounded-lg px-3 py-2.5 cursor-text hover:bg-slate-50 transition-colors',
+              project.description?.trim() ? 'text-slate-700 whitespace-pre-wrap' : 'text-slate-400 italic')}>
             {project.description?.trim() || "What's this project about?"}
           </p>
         )}
@@ -261,10 +298,40 @@ function OverviewTab({ project, tasks, onEditDescription }: {
 
       <div className="border-t border-slate-100" />
 
-      {/* Project roles */}
+      {/* Project roles / members */}
       <section>
         <h2 className="text-base font-semibold text-slate-900 mb-4">Project roles</h2>
-        <div className="flex items-center gap-6 flex-wrap">
+        <div className="flex flex-wrap gap-6 items-start">
+
+          {/* Add member button */}
+          {!addingMember ? (
+            <button onClick={() => setAddingMember(true)}
+              className="flex items-center gap-2.5 text-sm text-slate-500 hover:text-slate-700 group">
+              <span className="w-9 h-9 rounded-full border-2 border-dashed border-slate-300 group-hover:border-slate-400 flex items-center justify-center transition-colors shrink-0">
+                <Plus size={14} />
+              </span>
+              Add member
+            </button>
+          ) : (
+            <div className="flex flex-col gap-1.5 w-64">
+              <input autoFocus type="email" placeholder="Enter email address"
+                value={memberEmail} onChange={e => { setMemberEmail(e.target.value); setMemberError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleAddMember()}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300" />
+              {memberError && <p className="text-xs text-red-500">{memberError}</p>}
+              <div className="flex gap-2">
+                <button onClick={handleAddMember} disabled={memberLoading}
+                  className="text-sm text-white bg-primary-500 hover:bg-primary-600 px-3 py-1.5 rounded-md font-medium disabled:opacity-50">
+                  {memberLoading ? 'Adding…' : 'Add'}
+                </button>
+                <button onClick={() => { setAddingMember(false); setMemberEmail(''); setMemberError('') }}
+                  className="text-sm text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-md hover:bg-slate-100">
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Owner */}
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold shrink-0">
@@ -275,6 +342,24 @@ function OverviewTab({ project, tasks, onEditDescription }: {
               <p className="text-xs text-slate-400">Project owner</p>
             </div>
           </div>
+
+          {/* Members */}
+          {members.map(m => (
+            <div key={m.id} className="flex items-center gap-3 group">
+              <div className="w-9 h-9 rounded-full bg-slate-400 flex items-center justify-center text-white text-sm font-semibold shrink-0">
+                {getInitials(m.profile?.name ?? '?')}
+              </div>
+              <div>
+                <p className="text-sm font-medium text-slate-800">{m.profile?.name ?? m.profile?.email ?? 'Member'}</p>
+                <p className="text-xs text-slate-400 capitalize">{m.role}</p>
+              </div>
+              <button onClick={() => removeMember(m.id)}
+                className="opacity-0 group-hover:opacity-100 ml-1 p-1 rounded hover:bg-red-50 text-slate-400 hover:text-red-500 transition-all"
+                title="Remove member">
+                <UserMinus size={13} />
+              </button>
+            </div>
+          ))}
         </div>
       </section>
 
@@ -290,39 +375,30 @@ function OverviewTab({ project, tasks, onEditDescription }: {
                 <Link size={13} className="text-slate-500" />
               </div>
               <a href={r.url} target="_blank" rel="noopener noreferrer"
-                className="text-sm text-primary-600 hover:underline flex-1 truncate">
-                {r.title}
-              </a>
-              <button onClick={() => removeResource(r.id)}
+                className="text-sm text-primary-600 hover:underline flex-1 truncate">{r.title}</a>
+              <button onClick={() => saveResources(resources.filter(x => x.id !== r.id))}
                 className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 text-slate-400">
                 <X size={13} />
               </button>
             </div>
           ))}
-
           {addingResource ? (
             <div className="space-y-2 pt-1">
-              <input autoFocus className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
-                placeholder="Resource name" value={resTitle} onChange={e => setResTitle(e.target.value)} />
-              <input className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300"
-                placeholder="URL (e.g. https://...)" value={resUrl}
-                onChange={e => setResUrl(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && addResource()} />
+              <input autoFocus placeholder="Resource name" value={resTitle} onChange={e => setResTitle(e.target.value)}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300" />
+              <input placeholder="URL (e.g. https://...)" value={resUrl}
+                onChange={e => setResUrl(e.target.value)} onKeyDown={e => e.key === 'Enter' && addResource()}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-300" />
               <div className="flex gap-2">
-                <button onClick={addResource}
-                  className="text-sm text-white bg-primary-500 hover:bg-primary-600 px-4 py-1.5 rounded-md font-medium">
-                  Add
-                </button>
+                <button onClick={addResource} className="text-sm text-white bg-primary-500 hover:bg-primary-600 px-4 py-1.5 rounded-md font-medium">Add</button>
                 <button onClick={() => { setAddingResource(false); setResTitle(''); setResUrl('') }}
-                  className="text-sm text-slate-500 hover:text-slate-700 px-4 py-1.5 rounded-md hover:bg-slate-100">
-                  Cancel
-                </button>
+                  className="text-sm text-slate-500 hover:text-slate-700 px-4 py-1.5 rounded-md hover:bg-slate-100">Cancel</button>
               </div>
             </div>
           ) : (
             <button onClick={() => setAddingResource(true)}
-              className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 mt-1">
-              <span className="w-7 h-7 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center hover:border-slate-400 transition-colors">
+              className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 mt-1 group">
+              <span className="w-7 h-7 rounded-full border-2 border-dashed border-slate-300 group-hover:border-slate-400 flex items-center justify-center transition-colors">
                 <Plus size={13} />
               </span>
               Add resource
