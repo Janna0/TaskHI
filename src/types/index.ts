@@ -3,6 +3,7 @@ export interface Profile {
   name: string
   email?: string
   avatar_url: string | null
+  avatar_color?: string
   created_at: string
 }
 

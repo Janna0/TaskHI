@@ -21,7 +21,9 @@ const TABS: { id: View; label: string }[] = [
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>()
-  const { profile: ownerProfile } = useAuth()
+  const { profile: ownerProfile, user } = useAuth()
+  const ownerDisplayName = ownerProfile?.name || ownerProfile?.email?.split('@')[0] || user?.email?.split('@')[0] || '?'
+  const ownerAvatarColor = ownerProfile?.avatar_color ?? '#6366f1'
   const [project, setProject] = useState<Project | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
@@ -115,6 +117,8 @@ export function ProjectView() {
               projectId={project.id}
               members={members}
               ownerProfile={ownerProfile}
+              ownerDisplayName={ownerDisplayName}
+              ownerAvatarColor={ownerAvatarColor}
               onAdd={addMember}
               onRemove={removeMember}
             />
@@ -167,6 +171,8 @@ export function ProjectView() {
               tasks={tasks}
               members={members}
               ownerProfile={ownerProfile}
+              ownerDisplayName={ownerDisplayName}
+              ownerAvatarColor={ownerAvatarColor}
               onEditDescription={async (desc) => {
                 await supabase.from('projects').update({ description: desc }).eq('id', project.id)
                 setProject(p => p ? { ...p, description: desc } : p)
@@ -203,10 +209,12 @@ export function ProjectView() {
 
 // ─── Member Picker (header) ───────────────────────────────────────────────────
 
-function MemberPicker({ projectId, members, ownerProfile, onAdd, onRemove }: {
+function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
   members: ProjectMember[]
   ownerProfile: Profile | null
+  ownerDisplayName: string
+  ownerAvatarColor: string
   onAdd: (u: Profile) => Promise<void>
   onRemove: (id: string) => Promise<void>
 }) {
@@ -246,9 +254,13 @@ function MemberPicker({ projectId, members, ownerProfile, onAdd, onRemove }: {
   }
 
   // All people shown in avatar stack: owner + members
-  const avatarList: { id: string; name: string; isOwner?: boolean }[] = [
-    ...(ownerProfile ? [{ id: ownerProfile.id, name: ownerProfile.name, isOwner: true }] : []),
-    ...members.map(m => ({ id: m.id, name: m.profile?.name ?? '?', memberId: m.id })),
+  const avatarList: { id: string; name: string; color: string; isOwner?: boolean }[] = [
+    ...(ownerProfile ? [{ id: ownerProfile.id, name: ownerDisplayName, color: ownerAvatarColor, isOwner: true }] : []),
+    ...members.map(m => ({
+      id: m.id,
+      name: m.profile?.name || m.profile?.email?.split('@')[0] || '?',
+      color: m.profile?.avatar_color ?? '#94a3b8',
+    })),
   ]
 
   return (
@@ -258,7 +270,7 @@ function MemberPicker({ projectId, members, ownerProfile, onAdd, onRemove }: {
         {avatarList.slice(0, 5).map((a, i) => (
           <div key={a.id}
             className="w-8 h-8 rounded-full border-2 border-white flex items-center justify-center text-xs font-semibold text-white shrink-0"
-            style={{ background: a.isOwner ? '#6366f1' : '#94a3b8', zIndex: 10 - i }}
+            style={{ background: a.color, zIndex: 10 - i }}
             title={a.name}
           >
             {getInitials(a.name)}
@@ -285,10 +297,11 @@ function MemberPicker({ projectId, members, ownerProfile, onAdd, onRemove }: {
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Members</p>
               {ownerProfile && (
                 <div className="flex items-center gap-2 py-1">
-                  <div className="w-7 h-7 rounded-full bg-primary-500 flex items-center justify-center text-white text-xs font-semibold shrink-0">
-                    {getInitials(ownerProfile.name)}
+                  <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
+                    style={{ background: ownerAvatarColor }}>
+                    {getInitials(ownerDisplayName)}
                   </div>
-                  <span className="text-sm text-slate-700 flex-1">{ownerProfile.name}</span>
+                  <span className="text-sm text-slate-700 flex-1">{ownerDisplayName}</span>
                   <span className="text-xs text-slate-400">Owner</span>
                 </div>
               )}
@@ -349,11 +362,13 @@ function MemberPicker({ projectId, members, ownerProfile, onAdd, onRemove }: {
 
 interface Resource { id: string; title: string; url: string }
 
-function OverviewTab({ project, tasks, members, ownerProfile, onEditDescription, onAddMember, onRemoveMember }: {
+function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onEditDescription, onAddMember, onRemoveMember }: {
   project: Project
   tasks: Task[]
   members: ProjectMember[]
   ownerProfile: Profile | null
+  ownerDisplayName: string
+  ownerAvatarColor: string
   onEditDescription: (desc: string) => Promise<void>
   onAddMember: (u: Profile) => Promise<void>
   onRemoveMember: (id: string) => Promise<void>
@@ -439,24 +454,28 @@ function OverviewTab({ project, tasks, members, ownerProfile, onEditDescription,
           {/* Owner */}
           {ownerProfile && (
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-full bg-primary-500 flex items-center justify-center text-white text-sm font-semibold shrink-0">
-                {getInitials(ownerProfile.name)}
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+                style={{ background: ownerAvatarColor }}>
+                {getInitials(ownerDisplayName)}
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-800">{ownerProfile.name}</p>
+                <p className="text-sm font-medium text-slate-800">{ownerDisplayName}</p>
                 <p className="text-xs text-slate-400">Project owner</p>
               </div>
             </div>
           )}
 
           {/* Members */}
-          {members.map(m => (
+          {members.map(m => {
+            const mName = m.profile?.name || m.profile?.email?.split('@')[0] || 'Member'
+            return (
             <div key={m.id} className="flex items-center gap-3 group">
-              <div className="w-9 h-9 rounded-full bg-slate-400 flex items-center justify-center text-white text-sm font-semibold shrink-0">
-                {getInitials(m.profile?.name ?? '?')}
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
+                style={{ background: m.profile?.avatar_color ?? '#94a3b8' }}>
+                {getInitials(mName)}
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-800">{m.profile?.name ?? m.profile?.email ?? 'Member'}</p>
+                <p className="text-sm font-medium text-slate-800">{mName}</p>
                 <p className="text-xs text-slate-400 capitalize">{m.role}</p>
               </div>
               <button onClick={() => onRemoveMember(m.id)}
@@ -464,7 +483,8 @@ function OverviewTab({ project, tasks, members, ownerProfile, onEditDescription,
                 <UserMinus size={13} />
               </button>
             </div>
-          ))}
+          )})}
+
         </div>
       </section>
 
