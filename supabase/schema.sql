@@ -90,8 +90,18 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure handle_new_user();
 
+-- Grant permissions so authenticated users can read AND write
+grant usage on schema public to anon, authenticated;
+grant all on all tables in schema public to authenticated;
+grant all on all sequences in schema public to authenticated;
+grant select on all tables in schema public to anon;
+
 -- -----------------------------------------------
 -- MIGRATION: run these if you already ran the schema above
 -- -----------------------------------------------
 alter table tasks add column if not exists notes text default '';
 alter table tasks alter column created_by set default auth.uid();
+
+-- Fix missing write permissions (run this if starring / editing doesn't persist)
+grant all on all tables in schema public to authenticated;
+grant all on all sequences in schema public to authenticated;

@@ -13,7 +13,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return
     loadProjects()
-    const handler = () => loadProjects()
+    // Small delay so Supabase write propagates before we re-fetch
+    const handler = () => setTimeout(() => loadProjects(), 400)
     window.addEventListener('taskhi:projects-changed', handler)
     return () => window.removeEventListener('taskhi:projects-changed', handler)
   }, [user])

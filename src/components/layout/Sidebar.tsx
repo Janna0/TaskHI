@@ -88,15 +88,19 @@ export function Sidebar({ projects, onNewProject, onToggleFavorite }: SidebarPro
           <FolderOpen size={15} /> Projects
         </NavLink>
 
-        {/* Starred */}
-        {favorites.length > 0 && (
-          <div className="pt-5">
-            <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">
-              Starred
+        {/* Starred — always visible */}
+        <div className="pt-5">
+          <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">
+            Starred
+          </p>
+          {favorites.length === 0 ? (
+            <p className="px-3 py-1 text-xs text-white/25 italic">
+              Hover a project and click ★
             </p>
-            {favorites.map(p => <ProjectRow key={p.id} p={p} />)}
-          </div>
-        )}
+          ) : (
+            favorites.map(p => <ProjectRow key={p.id} p={p} />)
+          )}
+        </div>
 
         {/* All projects */}
         <div className="pt-5">
