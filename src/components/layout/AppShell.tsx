@@ -29,29 +29,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     if (data) setProjects(data)
   }
 
-  async function handleToggleFavorite(project: Project) {
-    const next = !project.is_favorite
-    setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: next } : p))
-    const { data, error } = await supabase
-      .from('projects')
-      .update({ is_favorite: next })
-      .eq('id', project.id)
-      .select('id, is_favorite')
-      .single()
-    if (error || !data) {
-      // Revert if the write failed
-      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: !next } : p))
-      console.error('Failed to update favorite:', error)
-      alert(`Could not save: ${error?.message ?? 'unknown error'}`)
-    }
-  }
-
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
         projects={projects}
         onNewProject={() => setShowCreate(true)}
-        onToggleFavorite={handleToggleFavorite}
       />
       <main className="flex-1 overflow-y-auto bg-slate-50">
         {children}
