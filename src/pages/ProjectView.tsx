@@ -28,9 +28,8 @@ export function ProjectView() {
   const [sections, setSections] = useState<Section[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [members, setMembers] = useState<ProjectMember[]>([])
-  const defaultViewKey = `taskhi:default-view:${id}`
-  const [view, setView] = useState<View>(() => (localStorage.getItem(defaultViewKey) as View) || 'list')
-  const [defaultView, setDefaultViewState] = useState<View>(() => (localStorage.getItem(defaultViewKey) as View) || 'list')
+  const [view, setView] = useState<View>('list')
+  const [defaultView, setDefaultViewState] = useState<View>('list')
   const [tabMenu, setTabMenu] = useState<View | null>(null)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -38,12 +37,20 @@ export function ProjectView() {
   const [showMenu, setShowMenu] = useState(false)
 
   function setAsDefault(v: View) {
-    localStorage.setItem(defaultViewKey, v)
+    if (!id) return
+    localStorage.setItem(`taskhi:default-view:${id}`, v)
     setDefaultViewState(v)
     setTabMenu(null)
   }
 
-  useEffect(() => { if (id) { loadAll(); loadMembers() } }, [id])
+  useEffect(() => {
+    if (!id) return
+    const saved = (localStorage.getItem(`taskhi:default-view:${id}`) as View) || 'list'
+    setView(saved)
+    setDefaultViewState(saved)
+    loadAll()
+    loadMembers()
+  }, [id])
 
   async function loadAll() {
     setLoading(true)
