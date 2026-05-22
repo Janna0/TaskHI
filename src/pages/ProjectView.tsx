@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus, Search, Copy, Check } from 'lucide-react'
+import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus, Search, Copy, Check, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { Project, Profile, Section, Task, ProjectMember } from '../types'
@@ -28,11 +28,20 @@ export function ProjectView() {
   const [sections, setSections] = useState<Section[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [members, setMembers] = useState<ProjectMember[]>([])
-  const [view, setView] = useState<View>('list')
+  const defaultViewKey = `taskhi:default-view:${id}`
+  const [view, setView] = useState<View>(() => (localStorage.getItem(defaultViewKey) as View) || 'list')
+  const [defaultView, setDefaultViewState] = useState<View>(() => (localStorage.getItem(defaultViewKey) as View) || 'list')
+  const [tabMenu, setTabMenu] = useState<View | null>(null)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
+
+  function setAsDefault(v: View) {
+    localStorage.setItem(defaultViewKey, v)
+    setDefaultViewState(v)
+    setTabMenu(null)
+  }
 
   useEffect(() => { if (id) { loadAll(); loadMembers() } }, [id])
 
@@ -158,16 +167,55 @@ export function ProjectView() {
 
         {/* Tab bar */}
         <div className="flex items-center gap-1 border-b border-slate-200">
-          {TABS.map(tab => (
-            <button key={tab.id} onClick={() => setView(tab.id)}
-              className={cn('px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
-                view === tab.id
-                  ? 'border-primary-600 text-primary-600'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
-              )}>
-              {tab.label}
-            </button>
-          ))}
+          {TABS.map(tab => {
+            const isActive = view === tab.id
+            const isDefault = defaultView === tab.id
+            return (
+            <div key={tab.id} className="relative flex items-end group/tab">
+              <button
+                onClick={() => { setView(tab.id); setTabMenu(null) }}
+                className={cn('flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors',
+                  isActive
+                    ? 'border-primary-600 text-primary-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 hover:border-slate-300'
+                )}
+              >
+                {tab.label}
+                {isDefault && (
+                  <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isActive ? 'bg-primary-500' : 'bg-slate-400')} title="Default view" />
+                )}
+              </button>
+              {/* Dropdown trigger */}
+              <button
+                onClick={e => { e.stopPropagation(); setTabMenu(tabMenu === tab.id ? null : tab.id) }}
+                className={cn(
+                  'mb-px pb-2 pr-1 text-slate-400 hover:text-slate-600 transition-colors',
+                  tabMenu === tab.id ? 'opacity-100' : 'opacity-0 group-hover/tab:opacity-100'
+                )}
+              >
+                <ChevronDown size={11} />
+              </button>
+              {tabMenu === tab.id && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setTabMenu(null)} />
+                  <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-40">
+                    <button
+                      onClick={() => setAsDefault(tab.id)}
+                      className={cn(
+                        'flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50 transition-colors',
+                        isDefault ? 'text-primary-600' : 'text-slate-700'
+                      )}
+                    >
+                      {isDefault
+                        ? <><Check size={13} /> Default view</>
+                        : 'Set as default'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+            )
+          })}
         </div>
       </div>
 
