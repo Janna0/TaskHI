@@ -21,10 +21,9 @@ const TABS: { id: View; label: string }[] = [
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>()
-  const { profile: ownerProfile, user } = useAuth()
-  const ownerDisplayName = ownerProfile?.name || ownerProfile?.email?.split('@')[0] || user?.email?.split('@')[0] || '?'
-  const ownerAvatarColor = ownerProfile?.avatar_color ?? '#6366f1'
+  const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
+  const [projectOwner, setProjectOwner] = useState<Profile | null>(null)
   const [sections, setSections] = useState<Section[]>([])
   const [tasks, setTasks] = useState<Task[]>([])
   const [members, setMembers] = useState<ProjectMember[]>([])
@@ -35,6 +34,9 @@ export function ProjectView() {
   const [showCreate, setShowCreate] = useState(false)
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
+
+  const ownerDisplayName = projectOwner?.name || projectOwner?.email?.split('@')[0] || '?'
+  const ownerAvatarColor = projectOwner?.avatar_color ?? '#6366f1'
 
   function setAsDefault(v: View) {
     if (!id) return
@@ -60,7 +62,17 @@ export function ProjectView() {
         supabase.rpc('get_project_sections', { p_id: id! }),
         supabase.rpc('get_project_tasks', { p_id: id! }),
       ])
-      if (projRes.data) setProject(projRes.data as unknown as Project)
+      if (projRes.data) {
+        const proj = projRes.data as unknown as Project
+        setProject(proj)
+        // Load the actual project owner's profile
+        const { data: ownerData } = await supabase
+          .from('profiles')
+          .select('id, name, email, avatar_url, avatar_color, created_at')
+          .eq('id', proj.owner_id)
+          .single()
+        if (ownerData) setProjectOwner(ownerData as Profile)
+      }
       if (secRes.data) setSections(secRes.data as unknown as Section[])
       if (tskRes.data) setTasks(tskRes.data as unknown as Task[])
     } finally {
@@ -72,7 +84,7 @@ export function ProjectView() {
     try {
       const { data } = await supabase
         .from('project_members')
-        .select('*, profile:profiles(id, name, email, avatar_url, created_at)')
+        .select('*, profile:profiles(id, name, email, avatar_url, avatar_color, created_at)')
         .eq('project_id', id!)
       if (data) setMembers(data)
     } catch {
@@ -114,9 +126,9 @@ export function ProjectView() {
   }
 
   const memberMap: Record<string, { name: string; color: string }> = {}
-  if (ownerProfile) memberMap[ownerProfile.id] = { name: ownerDisplayName, color: ownerAvatarColor }
+  if (projectOwner) memberMap[projectOwner.id] = { name: ownerDisplayName, color: ownerAvatarColor }
   for (const m of members) {
-    if (m.profile) memberMap[m.user_id] = {
+    if (m.profile && m.user_id !== project?.owner_id) memberMap[m.user_id] = {
       name: m.profile.name || m.profile.email?.split('@')[0] || '?',
       color: m.profile.avatar_color ?? '#94a3b8',
     }
@@ -140,8 +152,8 @@ export function ProjectView() {
             {/* Member avatars + picker */}
             <MemberPicker
               projectId={project.id}
-              members={members}
-              ownerProfile={ownerProfile}
+              members={members.filter(m => m.user_id !== project.owner_id)}
+              ownerProfile={projectOwner}
               ownerDisplayName={ownerDisplayName}
               ownerAvatarColor={ownerAvatarColor}
               onAdd={addMember}
@@ -233,8 +245,8 @@ export function ProjectView() {
             <OverviewTab
               project={project}
               tasks={tasks}
-              members={members}
-              ownerProfile={ownerProfile}
+              members={members.filter(m => m.user_id !== project.owner_id)}
+              ownerProfile={projectOwner}
               ownerDisplayName={ownerDisplayName}
               ownerAvatarColor={ownerAvatarColor}
               onEditDescription={async (desc) => {
