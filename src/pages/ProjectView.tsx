@@ -59,13 +59,12 @@ export function ProjectView() {
     try {
       const [projRes, secRes, tskRes] = await Promise.all([
         supabase.rpc('get_project_by_id', { p_id: id! }).single(),
-        supabase.rpc('get_project_sections', { p_id: id! }),
-        supabase.rpc('get_project_tasks', { p_id: id! }),
+        supabase.from('sections').select('*').eq('project_id', id!).order('position'),
+        supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
       ])
       if (projRes.data) {
         const proj = projRes.data as unknown as Project
         setProject(proj)
-        // Load the actual project owner's profile
         const { data: ownerData } = await supabase
           .from('profiles')
           .select('id, name, email, avatar_url, avatar_color, created_at')
@@ -73,8 +72,8 @@ export function ProjectView() {
           .single()
         if (ownerData) setProjectOwner(ownerData as Profile)
       }
-      if (secRes.data) setSections(secRes.data as unknown as Section[])
-      if (tskRes.data) setTasks(tskRes.data as unknown as Task[])
+      if (secRes.data) setSections(secRes.data)
+      if (tskRes.data) setTasks(tskRes.data)
     } finally {
       setLoading(false)
     }
