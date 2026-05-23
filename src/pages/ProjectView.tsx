@@ -117,6 +117,11 @@ export function ProjectView() {
     window.location.hash = '/projects'
   }
 
+  function handleTaskMoved(taskId: string, newStatus: string) {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus as Task['status'] } : t))
+    if (selectedTask?.id === taskId) setSelectedTask(prev => prev ? { ...prev, status: newStatus as Task['status'] } : prev)
+  }
+
   function handleTaskUpdated() {
     loadAll()
     if (selectedTask) {
@@ -263,7 +268,8 @@ export function ProjectView() {
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)} onRefresh={loadAll} />
+              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)}
+              onTaskMoved={handleTaskMoved} onRefresh={loadAll} />
           )}
         </div>
         {selectedTask && (

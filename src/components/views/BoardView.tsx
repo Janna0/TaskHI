@@ -12,6 +12,7 @@ interface Props {
   projectId: string
   memberMap: Record<string, { name: string; color: string }>
   onTaskClick: (task: Task) => void
+  onTaskMoved: (taskId: string, newStatus: string) => void
   onRefresh: () => void
 }
 
@@ -22,19 +23,19 @@ const COLUMNS: { status: string; headerColor: string; dotColor: string }[] = [
   { status: 'done',        headerColor: 'bg-green-50',   dotColor: 'bg-green-500' },
 ]
 
-export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
+export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, onTaskMoved, onRefresh }: Props) {
   const [createStatus, setCreateStatus] = useState<string | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
 
-  async function handleDrop(newStatus: string) {
+  function handleDrop(newStatus: string) {
     if (!draggingId) return
     const task = tasks.find(t => t.id === draggingId)
     setDraggingId(null)
     setDragOverStatus(null)
     if (!task || task.status === newStatus) return
-    await supabase.from('tasks').update({ status: newStatus }).eq('id', draggingId)
-    onRefresh()
+    onTaskMoved(draggingId, newStatus)
+    supabase.from('tasks').update({ status: newStatus }).eq('id', draggingId)
   }
 
   return (
