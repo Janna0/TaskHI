@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { StatusBadge, PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
@@ -17,9 +18,27 @@ interface Props {
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [createSection, setCreateSection] = useState<string | null>(null)
+  const [addingSection, setAddingSection] = useState(false)
+  const [newSectionName, setNewSectionName] = useState('')
+  const [sectionError, setSectionError] = useState('')
+  const inputRef = useRef<HTMLInputElement>(null)
 
   function toggle(id: string) {
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  async function handleCreateSection() {
+    if (!newSectionName.trim()) return
+    const { error } = await supabase.from('sections').insert({
+      project_id: projectId,
+      name: newSectionName.trim(),
+      position: sections.length,
+    })
+    if (error) { setSectionError(error.message); return }
+    setNewSectionName('')
+    setAddingSection(false)
+    setSectionError('')
+    onRefresh()
   }
 
   const ungrouped = tasks.filter(t => !t.section_id)
@@ -93,6 +112,39 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         >
           <Plus size={14} /> Add task
         </button>
+      </div>
+
+      {/* Add section */}
+      <div className="px-4 py-2 border-t border-slate-100 mt-1">
+        {addingSection ? (
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <input
+                ref={inputRef}
+                autoFocus
+                value={newSectionName}
+                onChange={e => { setNewSectionName(e.target.value); setSectionError('') }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter') handleCreateSection()
+                  if (e.key === 'Escape') { setNewSectionName(''); setAddingSection(false); setSectionError('') }
+                }}
+                placeholder="Section name…"
+                className="flex-1 text-sm font-semibold text-slate-700 border-b border-slate-300 focus:border-primary-400 outline-none py-0.5 bg-transparent"
+              />
+              <button onClick={handleCreateSection} className="text-xs text-primary-600 font-medium hover:text-primary-700 shrink-0">Add</button>
+              <button onClick={() => { setNewSectionName(''); setAddingSection(false); setSectionError('') }}
+                className="text-xs text-slate-400 hover:text-slate-600 shrink-0">Cancel</button>
+            </div>
+            {sectionError && <p className="text-xs text-red-500">{sectionError}</p>}
+          </div>
+        ) : (
+          <button
+            onClick={() => setAddingSection(true)}
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-600 transition-colors"
+          >
+            <Plus size={14} /> Add section
+          </button>
+        )}
       </div>
 
       {createSection !== null && (
