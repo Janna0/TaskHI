@@ -19,12 +19,12 @@ All product and architecture documentation lives in [`/docs`](./docs/):
 | 09 | [MVP Roadmap](./docs/09_MVP_ROADMAP.md) | 16-week sprint plan, risk register, post-MVP backlog |
 | 10 | [Design System](./docs/10_DESIGN_SYSTEM.md) | Clarity design system — colors, type, spacing, components |
 
-## Core Stack (Recommended)
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 14 (App Router) + TypeScript + Tailwind CSS |
-| Backend | Fastify + TypeScript + Drizzle ORM |
+| Backend | Node.js 20 + Fastify + TypeScript + Drizzle ORM |
 | Database | PostgreSQL 15 |
 | Cache | Redis (Upstash) |
 | Files | Cloudflare R2 (S3-compatible) |
