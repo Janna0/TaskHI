@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect } from 'react'
-import { Plus, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section, BoardColumnConfig } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
-import { formatDate, isOverdue, cn, STATUS_LABELS, getInitials } from '../../lib/utils'
+import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
 import { CreateTaskModal } from '../tasks/CreateTaskModal'
 
 const ALL_STATUSES: BoardColumnConfig[] = [
@@ -40,8 +40,13 @@ interface Props {
 
 export function BoardView({ sections, tasks, projectId, memberMap, columns, onTaskClick, onTaskMoved, onColumnsChanged, onRefresh }: Props) {
   const [createStatus, setCreateStatus] = useState<string | null>(null)
-  const [draggingId, setDraggingId] = useState<string | null>(null)
+  // Task dragging
+  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
   const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
+  // Column dragging
+  const [draggingColStatus, setDraggingColStatus] = useState<string | null>(null)
+  const [dragOverColStatus, setDragOverColStatus] = useState<string | null>(null)
+
   const [showAddColumn, setShowAddColumn] = useState(false)
   const addRef = useRef<HTMLDivElement>(null)
 
@@ -53,14 +58,29 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  function handleDrop(newStatus: string) {
-    if (!draggingId) return
-    const task = tasks.find(t => t.id === draggingId)
-    setDraggingId(null)
+  // ── Task drop ──
+  function handleTaskDrop(targetStatus: string) {
+    if (!draggingTaskId) return
+    const task = tasks.find(t => t.id === draggingTaskId)
+    setDraggingTaskId(null)
     setDragOverStatus(null)
-    if (!task || task.status === newStatus) return
-    onTaskMoved(draggingId, newStatus)
-    supabase.from('tasks').update({ status: newStatus }).eq('id', draggingId)
+    if (!task || task.status === targetStatus) return
+    onTaskMoved(draggingTaskId, targetStatus)
+    supabase.from('tasks').update({ status: targetStatus }).eq('id', draggingTaskId)
+  }
+
+  // ── Column drop ──
+  function handleColumnDrop(targetStatus: string) {
+    if (!draggingColStatus || draggingColStatus === targetStatus) return
+    const from = columns.findIndex(c => c.status === draggingColStatus)
+    const to   = columns.findIndex(c => c.status === targetStatus)
+    if (from === -1 || to === -1) return
+    const next = [...columns]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    onColumnsChanged(next)
+    setDraggingColStatus(null)
+    setDragOverColStatus(null)
   }
 
   function renameColumn(status: string, newName: string) {
@@ -83,32 +103,53 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
       {columns.map(col => {
         const colTasks = tasks.filter(t => t.status === col.status)
-        const isOver = dragOverStatus === col.status
         const style = colStyle(col.status)
+        const isTaskOver   = !draggingColStatus && dragOverStatus === col.status
+        const isColOver    = draggingColStatus && dragOverColStatus === col.status && draggingColStatus !== col.status
+        const isBeingDragged = draggingColStatus === col.status
 
         return (
           <div
             key={col.status}
-            className="flex flex-col w-64 shrink-0"
-            onDragOver={e => { e.preventDefault(); setDragOverStatus(col.status) }}
-            onDragLeave={e => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOverStatus(null)
+            className={cn(
+              'flex flex-col w-64 shrink-0 transition-opacity',
+              isBeingDragged && 'opacity-40'
+            )}
+            onDragOver={e => {
+              e.preventDefault()
+              if (draggingColStatus) setDragOverColStatus(col.status)
+              else setDragOverStatus(col.status)
             }}
-            onDrop={e => { e.preventDefault(); handleDrop(col.status) }}
+            onDragLeave={e => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                setDragOverStatus(null)
+                setDragOverColStatus(null)
+              }
+            }}
+            onDrop={e => {
+              e.preventDefault()
+              if (draggingColStatus) handleColumnDrop(col.status)
+              else handleTaskDrop(col.status)
+            }}
           >
             <ColumnHeader
               col={col}
               count={colTasks.length}
               style={style}
+              isColOver={!!isColOver}
               onRename={name => renameColumn(col.status, name)}
               onRemove={() => removeColumn(col.status)}
               onAddTask={() => setCreateStatus(col.status)}
+              onColumnDragStart={() => setDraggingColStatus(col.status)}
+              onColumnDragEnd={() => { setDraggingColStatus(null); setDragOverColStatus(null) }}
             />
 
             <div
               className={cn(
                 'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors',
-                isOver ? 'bg-primary-50 outline outline-2 outline-primary-300 outline-offset-[-2px]' : 'bg-slate-100/60'
+                isTaskOver
+                  ? 'bg-primary-50 outline outline-2 outline-primary-300 outline-offset-[-2px]'
+                  : 'bg-slate-100/60'
               )}
               style={{ minHeight: '120px' }}
             >
@@ -117,13 +158,13 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
                   key={task.id}
                   task={task}
                   memberMap={memberMap}
-                  isDragging={draggingId === task.id}
+                  isDragging={draggingTaskId === task.id}
                   onClick={() => onTaskClick(task)}
-                  onDragStart={() => setDraggingId(task.id)}
-                  onDragEnd={() => { setDraggingId(null); setDragOverStatus(null) }}
+                  onDragStart={() => setDraggingTaskId(task.id)}
+                  onDragEnd={() => { setDraggingTaskId(null); setDragOverStatus(null) }}
                 />
               ))}
-              {colTasks.length === 0 && !isOver && (
+              {colTasks.length === 0 && !isTaskOver && (
                 <div className="flex items-center justify-center h-16 text-xs text-slate-400">
                   Drop tasks here
                 </div>
@@ -178,13 +219,16 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
 
 // ─── Column Header ────────────────────────────────────────────────────────────
 
-function ColumnHeader({ col, count, style, onRename, onRemove, onAddTask }: {
+function ColumnHeader({ col, count, style, isColOver, onRename, onRemove, onAddTask, onColumnDragStart, onColumnDragEnd }: {
   col: BoardColumnConfig
   count: number
   style: { header: string; dot: string }
+  isColOver: boolean
   onRename: (name: string) => void
   onRemove: () => void
   onAddTask: () => void
+  onColumnDragStart: () => void
+  onColumnDragEnd: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(col.name)
@@ -200,9 +244,25 @@ function ColumnHeader({ col, count, style, onRename, onRemove, onAddTask }: {
   }
 
   return (
-    <div className={cn('flex items-center justify-between px-3 py-2.5 rounded-t-xl', style.header)}>
-      <div className="flex items-center gap-2 min-w-0">
+    <div className={cn(
+      'flex items-center justify-between px-2 py-2.5 rounded-t-xl transition-all',
+      style.header,
+      isColOver && 'ring-2 ring-primary-400 ring-inset'
+    )}>
+      <div className="flex items-center gap-1.5 min-w-0">
+        {/* Drag handle */}
+        <div
+          draggable
+          onDragStart={e => { e.stopPropagation(); onColumnDragStart() }}
+          onDragEnd={onColumnDragEnd}
+          className="cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0"
+          title="Drag to reorder"
+        >
+          <GripVertical size={14} />
+        </div>
+
         <span className={cn('w-2 h-2 rounded-full shrink-0', style.dot)} />
+
         {editing ? (
           <input
             autoFocus
@@ -213,7 +273,7 @@ function ColumnHeader({ col, count, style, onRename, onRemove, onAddTask }: {
               if (e.key === 'Enter') commit()
               if (e.key === 'Escape') { setName(col.name); setEditing(false) }
             }}
-            className="text-sm font-semibold text-slate-700 bg-transparent border-b border-slate-500 outline-none w-32"
+            className="text-sm font-semibold text-slate-700 bg-transparent border-b border-slate-500 outline-none w-28"
           />
         ) : (
           <span
@@ -223,6 +283,7 @@ function ColumnHeader({ col, count, style, onRename, onRemove, onAddTask }: {
             {col.name}
           </span>
         )}
+
         <span className="text-xs font-medium text-slate-400 bg-white/70 rounded-full px-1.5 shrink-0">
           {count}
         </span>
