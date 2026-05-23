@@ -59,7 +59,7 @@ export function ProjectView() {
     try {
       const [projRes, secRes, tskRes] = await Promise.all([
         supabase.rpc('get_project_by_id', { p_id: id! }).single(),
-        supabase.from('sections').select('*').eq('project_id', id!).order('position'),
+        supabase.rpc('get_project_sections', { p_id: id! }),
         supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
       ])
       if (projRes.data) {
