@@ -29,10 +29,10 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
   async function handleCreateSection() {
     if (!newSectionName.trim()) return
-    const { error } = await supabase.rpc('create_section', {
-      p_project_id: projectId,
-      p_name: newSectionName.trim(),
-      p_position: sections.length,
+    const { error } = await supabase.from('sections').insert({
+      project_id: projectId,
+      name: newSectionName.trim(),
+      position: sections.length,
     })
     if (error) { setSectionError(error.message); return }
     setNewSectionName('')

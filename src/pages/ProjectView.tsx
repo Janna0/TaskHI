@@ -59,7 +59,7 @@ export function ProjectView() {
     try {
       const [projRes, secRes, tskRes] = await Promise.all([
         supabase.rpc('get_project_by_id', { p_id: id! }).single(),
-        supabase.rpc('get_project_sections', { p_id: id! }),
+        supabase.from('sections').select('*').eq('project_id', id!).order('position'),
         supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
       ])
       if (projRes.data) {
@@ -72,7 +72,7 @@ export function ProjectView() {
           .single()
         if (ownerData) setProjectOwner(ownerData as Profile)
       }
-      if (secRes.data) setSections(secRes.data)
+      setSections(secRes.data ?? [])
       if (tskRes.data) setTasks(tskRes.data)
     } finally {
       setLoading(false)
