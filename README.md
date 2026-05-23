@@ -2,6 +2,15 @@
 
 A modern, cloud-based project and task management platform for teams — designed with the clarity of Linear, the flexibility of ClickUp, and the polish of a premium SaaS product.
 
+## Getting Started
+
+```bash
+npm install
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) to see the app.
+
 ## Documentation
 
 All product and architecture documentation lives in [`/docs`](./docs/):
@@ -19,11 +28,12 @@ All product and architecture documentation lives in [`/docs`](./docs/):
 | 09 | [MVP Roadmap](./docs/09_MVP_ROADMAP.md) | 16-week sprint plan, risk register, post-MVP backlog |
 | 10 | [Design System](./docs/10_DESIGN_SYSTEM.md) | Clarity design system — colors, type, spacing, components |
 
-## Core Stack (Recommended)
+## Core Stack
 
 | Layer | Technology |
 |---|---|
 | Frontend | Next.js 14 (App Router) + TypeScript + Tailwind CSS |
+| State | Zustand + TanStack React Query |
 | Backend | Fastify + TypeScript + Drizzle ORM |
 | Database | PostgreSQL 15 |
 | Cache | Redis (Upstash) |
@@ -34,7 +44,7 @@ All product and architecture documentation lives in [`/docs`](./docs/):
 ## Product Pillars
 
 - **Speed** — Actions complete in < 100ms perceived time via optimistic UI
-- **Clarity** — One focus at a time; no competing calls to action  
+- **Clarity** — One focus at a time; no competing calls to action
 - **Flexibility** — Power users discover depth; beginners aren't overwhelmed
 - **Delight** — Micro-animations and polish that make the tool feel alive
 
