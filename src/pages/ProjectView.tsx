@@ -72,6 +72,8 @@ export function ProjectView() {
           .single()
         if (ownerData) setProjectOwner(ownerData as Profile)
       }
+      console.log('[loadAll] secRes', secRes.data, secRes.error)
+      console.log('[loadAll] tskRes', tskRes.data, tskRes.error)
       setSections(secRes.data ?? [])
       if (tskRes.data) setTasks(tskRes.data)
     } finally {
