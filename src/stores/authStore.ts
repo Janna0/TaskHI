@@ -1,25 +1,13 @@
 'use client';
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { User } from '@/types/user';
+import type { Profile } from '@/lib/supabase/types';
 
 interface AuthStore {
-  user: User | null;
-  token: string | null;
-  isAuthenticated: boolean;
-  setAuth: (user: User, token: string) => void;
-  logout: () => void;
+  profile: Profile | null;
+  setProfile: (profile: Profile | null) => void;
 }
 
-export const useAuthStore = create<AuthStore>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      setAuth: (user, token) => set({ user, token, isAuthenticated: true }),
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
-    }),
-    { name: 'taskhi-auth' }
-  )
-);
+export const useAuthStore = create<AuthStore>((set) => ({
+  profile: null,
+  setProfile: (profile) => set({ profile }),
+}));

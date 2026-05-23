@@ -4,11 +4,10 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuthStore } from '@/stores/authStore';
+import { createClient } from '@/lib/supabase/client';
 
 export default function RegisterPage() {
   const router = useRouter();
-  const setAuth = useAuthStore((s) => s.setAuth);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -21,12 +20,23 @@ export default function RegisterPage() {
     if (!name || !email || !password) { setError('Please fill in all fields.'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    setAuth(
-      { id: '1', email, name, createdAt: new Date().toISOString() },
-      'mock-token'
-    );
+    const supabase = createClient();
+    const { data, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: name } },
+    });
+    if (authError) { setError(authError.message); setLoading(false); return; }
+    if (data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        email,
+        full_name: name,
+        name,
+      });
+    }
     router.push('/dashboard');
+    router.refresh();
   }
 
   return (
@@ -49,21 +59,19 @@ export default function RegisterPage() {
           </div>
           <div>
             <label className="block text-xs font-medium text-[#475569] mb-1.5">Password</label>
-            <Input type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" error={!!error} />
+            <Input type="password" placeholder="Min. 8 characters" value={password}
+              onChange={e => setPassword(e.target.value)} autoComplete="new-password" error={!!error} />
           </div>
 
           {error && <p className="text-xs text-[#dc2626]">{error}</p>}
 
-          <Button type="submit" loading={loading} className="w-full" size="lg">
-            Create account
-          </Button>
+          <Button type="submit" loading={loading} className="w-full" size="lg">Create account</Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-[#64748b]">
           Already have an account?{' '}
           <Link href="/login" className="text-[#6366f1] font-medium hover:underline">Sign in</Link>
         </p>
-
         <p className="mt-3 text-center text-xs text-[#94a3b8]">
           By signing up, you agree to our Terms of Service and Privacy Policy.
         </p>

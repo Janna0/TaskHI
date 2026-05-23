@@ -5,37 +5,37 @@ import {
   LayoutDashboard, FolderOpen, CheckSquare, Bell,
   Settings2, ChevronLeft, ChevronRight, Plus, Star,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, hashColor } from '@/lib/utils';
 import { useUIStore } from '@/stores/uiStore';
 import { Avatar } from '@/components/ui/avatar';
 import { useAuthStore } from '@/stores/authStore';
 
 const NAV_ITEMS = [
-  { href: '/dashboard',  label: 'Dashboard',  icon: LayoutDashboard },
-  { href: '/projects',   label: 'Projects',   icon: FolderOpen },
-  { href: '/my-tasks',   label: 'My Tasks',   icon: CheckSquare },
-  { href: '/notifications', label: 'Notifications', icon: Bell },
-  { href: '/settings/profile', label: 'Settings', icon: Settings2 },
+  { href: '/dashboard',         label: 'Dashboard',     icon: LayoutDashboard },
+  { href: '/projects',          label: 'Projects',      icon: FolderOpen },
+  { href: '/my-tasks',          label: 'My Tasks',      icon: CheckSquare },
+  { href: '/notifications',     label: 'Notifications', icon: Bell },
+  { href: '/settings/profile',  label: 'Settings',      icon: Settings2 },
 ];
 
 const MOCK_FAVORITES = [
-  { id: '1', name: 'Website Redesign', color: '#6366f1' },
-  { id: '2', name: 'Q3 Marketing', color: '#f97316' },
+  { id: '1', name: 'Website Redesign',   color: '#6366f1' },
+  { id: '2', name: 'Q3 Marketing',       color: '#f97316' },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggle = useUIStore((s) => s.toggleSidebar);
-  const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+
+  const displayName = profile?.full_name ?? profile?.name ?? profile?.email ?? 'User';
 
   return (
-    <aside
-      className={cn(
-        'flex flex-col h-full bg-[#f1f5f9] border-r border-[#e2e8f0] transition-all duration-300 flex-shrink-0',
-        collapsed ? 'w-14' : 'w-60'
-      )}
-    >
+    <aside className={cn(
+      'flex flex-col h-full bg-[#f1f5f9] border-r border-[#e2e8f0] transition-all duration-300 flex-shrink-0',
+      collapsed ? 'w-14' : 'w-60'
+    )}>
       {/* Logo + collapse */}
       <div className="flex items-center justify-between px-3 h-12 border-b border-[#e2e8f0]">
         {!collapsed && (
@@ -56,7 +56,6 @@ export function Sidebar() {
         )}
       </div>
 
-      {/* Collapsed expand button */}
       {collapsed && (
         <button onClick={toggle} className="mx-auto mt-2 p-1 rounded hover:bg-[#e2e8f0] text-[#64748b] transition-colors">
           <ChevronRight className="h-4 w-4" />
@@ -68,14 +67,10 @@ export function Sidebar() {
         {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           return (
-            <Link
-              key={href}
-              href={href}
+            <Link key={href} href={href}
               className={cn(
                 'flex items-center gap-3 px-2 py-1.5 rounded-md text-sm font-medium transition-colors',
-                active
-                  ? 'bg-[#6366f1]/10 text-[#6366f1]'
-                  : 'text-[#475569] hover:bg-[#e2e8f0] hover:text-[#334155]',
+                active ? 'bg-[#6366f1]/10 text-[#6366f1]' : 'text-[#475569] hover:bg-[#e2e8f0] hover:text-[#334155]',
                 collapsed && 'justify-center px-0'
               )}
               title={collapsed ? label : undefined}
@@ -96,9 +91,7 @@ export function Sidebar() {
               </Link>
             </div>
             {MOCK_FAVORITES.map((p) => (
-              <Link
-                key={p.id}
-                href={`/projects/${p.id}/list`}
+              <Link key={p.id} href={`/projects/${p.id}/list`}
                 className={cn(
                   'flex items-center gap-2.5 px-2 py-1.5 rounded-md text-sm text-[#475569] hover:bg-[#e2e8f0] transition-colors',
                   pathname.includes(p.id) && 'bg-[#e2e8f0] text-[#334155]'
@@ -115,23 +108,15 @@ export function Sidebar() {
 
       {/* User */}
       <div className={cn('border-t border-[#e2e8f0] p-3', collapsed && 'flex justify-center')}>
-        {user && (
-          <div className={cn('flex items-center gap-2', collapsed && 'justify-center')}>
-            <Avatar name={user.name} avatarUrl={user.avatarUrl} size="sm" />
-            {!collapsed && (
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-[#334155] truncate">{user.name}</p>
-                <p className="text-xs text-[#94a3b8] truncate">{user.email}</p>
-              </div>
-            )}
-          </div>
-        )}
-        {!user && !collapsed && (
-          <div className="flex items-center gap-2">
-            <span className="h-6 w-6 rounded-full bg-[#e2e8f0]" />
-            <span className="text-xs text-[#94a3b8]">Not signed in</span>
-          </div>
-        )}
+        <div className={cn('flex items-center gap-2', collapsed && 'justify-center')}>
+          <Avatar name={displayName} avatarUrl={profile?.avatar_url ?? undefined} size="sm" />
+          {!collapsed && (
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium text-[#334155] truncate">{displayName}</p>
+              <p className="text-xs text-[#94a3b8] truncate">{profile?.email ?? ''}</p>
+            </div>
+          )}
+        </div>
       </div>
     </aside>
   );

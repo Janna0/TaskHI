@@ -4,17 +4,23 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { CheckCircle2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState('');
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1000));
+    const supabase = createClient();
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${location.origin}/auth/reset-password`,
+    });
+    if (err) { setError(err.message); setLoading(false); return; }
     setSent(true);
   }
 
@@ -25,7 +31,7 @@ export default function ForgotPasswordPage() {
           <CheckCircle2 className="h-12 w-12 text-[#22c55e] mx-auto mb-4" />
           <h1 className="text-xl font-semibold text-[#1e293b] mb-2">Check your email</h1>
           <p className="text-sm text-[#64748b]">
-            We sent a password reset link to <strong>{email}</strong>. Check your inbox.
+            We sent a password reset link to <strong>{email}</strong>.
           </p>
           <Link href="/login">
             <Button variant="secondary" className="mt-6 w-full">Back to sign in</Button>
@@ -47,11 +53,11 @@ export default function ForgotPasswordPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-[#475569] mb-1.5">Email</label>
-            <Input type="email" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} autoComplete="email" />
+            <Input type="email" placeholder="you@example.com" value={email}
+              onChange={e => setEmail(e.target.value)} autoComplete="email" />
           </div>
-          <Button type="submit" loading={loading} className="w-full" size="lg">
-            Send reset link
-          </Button>
+          {error && <p className="text-xs text-[#dc2626]">{error}</p>}
+          <Button type="submit" loading={loading} className="w-full" size="lg">Send reset link</Button>
         </form>
 
         <p className="mt-6 text-center text-xs text-[#64748b]">

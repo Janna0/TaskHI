@@ -1,14 +1,15 @@
 'use client';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, Suspense } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuthStore } from '@/stores/authStore';
+import { createClient } from '@/lib/supabase/client';
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const setAuth = useAuthStore((s) => s.setAuth);
+  const searchParams = useSearchParams();
+  const next = searchParams.get('next') ?? '/dashboard';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -19,13 +20,19 @@ export default function LoginPage() {
     setError('');
     if (!email || !password) { setError('Please fill in all fields.'); return; }
     setLoading(true);
-    await new Promise(r => setTimeout(r, 800));
-    // Mock auth — replace with real API call
-    setAuth(
-      { id: '1', email, name: email.split('@')[0].replace('.', ' ').replace(/\b\w/g, c => c.toUpperCase()), createdAt: new Date().toISOString() },
-      'mock-token'
-    );
-    router.push('/dashboard');
+    const supabase = createClient();
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
+    if (authError) { setError(authError.message); setLoading(false); return; }
+    router.push(next);
+    router.refresh();
+  }
+
+  async function handleGoogle() {
+    const supabase = createClient();
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${location.origin}/auth/callback?next=${next}` },
+    });
   }
 
   return (
@@ -40,48 +47,31 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-[#475569] mb-1.5">Email</label>
-            <Input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              autoComplete="email"
-            />
+            <Input type="email" placeholder="you@example.com" value={email}
+              onChange={e => setEmail(e.target.value)} autoComplete="email" />
           </div>
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-medium text-[#475569]">Password</label>
-              <Link href="/forgot-password" className="text-xs text-[#6366f1] hover:underline">
-                Forgot password?
-              </Link>
+              <Link href="/forgot-password" className="text-xs text-[#6366f1] hover:underline">Forgot password?</Link>
             </div>
-            <Input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              autoComplete="current-password"
-              error={!!error}
-            />
+            <Input type="password" placeholder="••••••••" value={password}
+              onChange={e => setPassword(e.target.value)} autoComplete="current-password" error={!!error} />
           </div>
 
           {error && <p className="text-xs text-[#dc2626]">{error}</p>}
 
-          <Button type="submit" loading={loading} className="w-full" size="lg">
-            Sign in
-          </Button>
+          <Button type="submit" loading={loading} className="w-full" size="lg">Sign in</Button>
         </form>
 
         <div className="mt-4 relative">
-          <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-[#e2e8f0]" />
-          </div>
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-[#e2e8f0]" /></div>
           <div className="relative flex justify-center">
             <span className="bg-white px-3 text-xs text-[#94a3b8]">or continue with</span>
           </div>
         </div>
 
-        <button className="mt-4 w-full flex items-center justify-center gap-3 h-9 border border-[#e2e8f0] rounded-md text-sm font-medium text-[#334155] hover:bg-[#f8fafc] transition-colors">
+        <button onClick={handleGoogle} className="mt-4 w-full flex items-center justify-center gap-3 h-9 border border-[#e2e8f0] rounded-md text-sm font-medium text-[#334155] hover:bg-[#f8fafc] transition-colors">
           <svg className="h-4 w-4" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
@@ -98,4 +88,8 @@ export default function LoginPage() {
       </div>
     </div>
   );
+}
+
+export default function LoginPage() {
+  return <Suspense><LoginForm /></Suspense>;
 }
