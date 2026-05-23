@@ -16,6 +16,11 @@ export interface ProjectMember {
   profile?: Profile
 }
 
+export interface BoardColumnConfig {
+  status: string
+  name: string
+}
+
 export interface Project {
   id: string
   name: string
@@ -24,6 +29,7 @@ export interface Project {
   owner_id: string
   is_favorite: boolean
   status: 'active' | 'archived'
+  board_columns?: BoardColumnConfig[] | null
   created_at: string
   updated_at: string
   task_count?: number
