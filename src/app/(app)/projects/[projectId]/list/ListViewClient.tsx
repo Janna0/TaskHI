@@ -2,7 +2,13 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2, Trash2 } from 'lucide-react';
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor,
+  useSensor, useSensors, useDroppable, useDraggable,
+  type DragEndEvent, type DragStartEvent,
+} from '@dnd-kit/core';
+import { CSS } from '@dnd-kit/utilities';
+import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2, Trash2, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, PriorityBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
@@ -15,16 +21,40 @@ interface Props {
   tasks: Task[];
 }
 
-function TaskRow({ task }: { task: Task }) {
+// ─── Task row ────────────────────────────────────────────────────────────────
+
+function TaskRow({ task, dragging }: { task: Task; dragging?: boolean }) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
   const isDone = task.status === 'done';
+  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: task.id });
+
+  const style = transform
+    ? { transform: CSS.Translate.toString(transform) }
+    : undefined;
 
   return (
-    <div className={`flex items-center gap-3 px-4 py-2 hover:bg-[#f8fafc] transition-colors border-b border-[#f1f5f9] group ${isDone ? 'opacity-60' : ''}`}>
-      <div className="w-5 flex-shrink-0" />
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center gap-3 px-4 py-2 hover:bg-[#f8fafc] transition-colors border-b border-[#f1f5f9] group
+        ${isDone ? 'opacity-60' : ''}
+        ${dragging ? 'opacity-30' : ''}`}
+    >
+      {/* Drag handle */}
+      <button
+        {...listeners}
+        {...attributes}
+        className="flex-shrink-0 cursor-grab active:cursor-grabbing text-[#cbd5e1] hover:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+      >
+        <GripVertical className="h-3.5 w-3.5" />
+      </button>
+
       <div className="flex-1 min-w-0">
-        <span className={`text-sm ${isDone ? 'line-through text-[#94a3b8]' : 'text-[#334155]'}`}>{task.title}</span>
+        <span className={`text-sm ${isDone ? 'line-through text-[#94a3b8]' : 'text-[#334155]'}`}>
+          {task.title}
+        </span>
       </div>
+
       <div className="flex items-center gap-3 flex-shrink-0">
         <StatusBadge status={task.status} />
         <PriorityBadge priority={task.priority} className="hidden md:flex" />
@@ -38,6 +68,19 @@ function TaskRow({ task }: { task: Task }) {
     </div>
   );
 }
+
+// Ghost shown in DragOverlay while dragging
+function TaskGhost({ task }: { task: Task }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 bg-white border border-[#6366f1]/30 rounded-lg shadow-lg">
+      <GripVertical className="h-3.5 w-3.5 text-[#94a3b8] flex-shrink-0" />
+      <span className="flex-1 text-sm text-[#334155] truncate">{task.title}</span>
+      <StatusBadge status={task.status} />
+    </div>
+  );
+}
+
+// ─── Add task inline input ───────────────────────────────────────────────────
 
 function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
   projectId: string;
@@ -68,18 +111,14 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
       depth: 0,
     });
     setSaving(false);
-    if (err) {
-      calledRef.current = false;
-      setError(`Failed to save: ${err.message}`);
-      return;
-    }
+    if (err) { calledRef.current = false; setError(`Failed: ${err.message}`); return; }
     onSaved();
   }
 
   return (
     <div className="border-b border-[#f1f5f9]">
       <div className="flex items-center gap-3 px-4 py-2 bg-[#eff6ff]">
-        <div className="w-5" />
+        <div className="w-3.5 flex-shrink-0" />
         <input
           autoFocus
           value={title}
@@ -94,15 +133,18 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
         />
         {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6366f1]" />}
       </div>
-      {error && <p className="text-xs text-[#dc2626] font-medium px-12 pb-2">{error}</p>}
+      {error && <p className="text-xs text-[#dc2626] px-12 pb-2">{error}</p>}
     </div>
   );
 }
 
-function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
+// ─── Section block ───────────────────────────────────────────────────────────
+
+function SectionBlock({ section, tasks, projectId, activeId, onTaskAdded, onDeleted }: {
   section: Section;
   tasks: Task[];
   projectId: string;
+  activeId: string | null;
   onTaskAdded: () => void;
   onDeleted: () => void;
 }) {
@@ -110,11 +152,12 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const { setNodeRef, isOver } = useDroppable({ id: section.id });
+
   async function deleteSection() {
     if (!confirm(`Delete section "${section.name}"? Tasks inside will become unsectioned.`)) return;
     setDeleting(true);
     const supabase = createClient();
-    // Move tasks to unsectioned so the delete doesn't fail on FK constraints
     await supabase.from('tasks').update({ section_id: null }).eq('section_id', section.id);
     await supabase.from('sections').delete().eq('id', section.id);
     onDeleted();
@@ -122,6 +165,7 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 bg-[#f8fafc] border-b border-[#e2e8f0] group">
         <button onClick={() => setCollapsed(c => !c)} className="text-[#94a3b8] hover:text-[#334155]">
           {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -143,9 +187,15 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
         </div>
       </div>
 
+      {/* Drop zone */}
       {!collapsed && (
-        <>
-          {tasks.map(task => <TaskRow key={task.id} task={task} />)}
+        <div
+          ref={setNodeRef}
+          className={`min-h-[4px] transition-colors ${isOver ? 'bg-[#eff6ff]' : ''}`}
+        >
+          {tasks.map(task => (
+            <TaskRow key={task.id} task={task} dragging={task.id === activeId} />
+          ))}
           {adding && (
             <AddTaskRow
               projectId={projectId}
@@ -154,18 +204,21 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
               onSaved={() => { setAdding(false); onTaskAdded(); }}
             />
           )}
+          {/* Always-visible add task footer */}
           <div className="flex items-center gap-2 px-4 py-2 border-b border-[#f1f5f9]">
-            <div className="w-5" />
+            <div className="w-3.5" />
             <button onClick={() => setAdding(true)}
               className="flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-[#6366f1] transition-colors">
               <Plus className="h-3.5 w-3.5" /> Add task
             </button>
           </div>
-        </>
+        </div>
       )}
     </div>
   );
 }
+
+// ─── Add section inline input ────────────────────────────────────────────────
 
 function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
   projectId: string;
@@ -192,11 +245,7 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
       position: sectionCount,
     });
     setSaving(false);
-    if (err) {
-      calledRef.current = false;
-      setError(`Failed to save: ${err.message}`);
-      return;
-    }
+    if (err) { calledRef.current = false; setError(`Failed: ${err.message}`); return; }
     setName('');
     onSaved();
   }
@@ -218,97 +267,134 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
         />
         {saving && <Loader2 className="h-4 w-4 animate-spin text-[#6366f1]" />}
       </div>
-      {error && <p className="text-xs text-[#dc2626] font-medium mt-1.5">{error}</p>}
-      <p className="text-xs text-[#94a3b8] mt-1">Press Enter to save · Esc to cancel</p>
+      {error && <p className="text-xs text-[#dc2626] mt-1.5">{error}</p>}
+      <p className="text-xs text-[#94a3b8] mt-1">Enter to save · Esc to cancel</p>
     </div>
   );
 }
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function ListViewClient({ project, sections: initialSections, tasks: initialTasks }: Props) {
   const color = getProjectColor(project.color);
   const router = useRouter();
   const [addingSection, setAddingSection] = useState(false);
+  const [activeId, setActiveId] = useState<string | null>(null);
 
-  function refresh() {
-    router.refresh();
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+  );
+
+  const activeTask = activeId ? initialTasks.find(t => t.id === activeId) ?? null : null;
+
+  function refresh() { router.refresh(); }
+
+  function handleDragStart(event: DragStartEvent) {
+    setActiveId(event.active.id as string);
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+
+    const taskId = active.id as string;
+    const newSectionId = over.id as string;
+    const task = initialTasks.find(t => t.id === taskId);
+    if (!task || task.section_id === newSectionId) return;
+
+    const supabase = createClient();
+    await supabase.from('tasks').update({ section_id: newSectionId }).eq('id', taskId);
+    refresh();
   }
 
   const unsectioned = initialTasks.filter(t => !t.section_id);
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Project topbar */}
-      <div className="border-b border-[#e2e8f0] bg-white px-4 py-2 flex items-center gap-2 flex-shrink-0">
-        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-        <span className="font-semibold text-sm text-[#1e293b]">{project.name}</span>
-        <div className="flex items-center gap-1 ml-4">
-          {(['Overview', 'List', 'Board'] as const).map(label => (
-            <Link key={label}
-              href={`/projects/${project.id}/${label.toLowerCase()}`}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                label === 'List' ? 'bg-[#6366f1]/10 text-[#6366f1]' : 'text-[#64748b] hover:bg-[#f1f5f9]'
-              }`}>{label}</Link>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-2">
-          <button className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#334155] px-2 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
-            <Filter className="h-3.5 w-3.5" /> Filter
-          </button>
-          <button className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#334155] px-2 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
-            <SortDesc className="h-3.5 w-3.5" /> Sort
-          </button>
-            <Button size="xs" className="gap-1" onClick={() => setAddingSection(true)}>
-            <Plus className="h-3 w-3" /> Add section
-          </Button>
-        </div>
-      </div>
-
-      {/* Column headers */}
-      <div className="flex items-center gap-3 px-4 py-2 bg-[#f8fafc] border-b border-[#e2e8f0] text-xs font-medium text-[#94a3b8] flex-shrink-0">
-        <div className="w-5" />
-        <span className="flex-1">Task</span>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          <span className="w-20">Status</span>
-          <span className="w-16 hidden md:block">Priority</span>
-          <span className="w-16 text-right hidden sm:block">Due</span>
-          <span className="w-5" />
-        </div>
-      </div>
-
-      {/* Sections + tasks */}
-      <div className="flex-1 overflow-y-auto bg-white">
-        {unsectioned.length > 0 && unsectioned.map(task => <TaskRow key={task.id} task={task} />)}
-
-        {initialSections.map(section => (
-          <SectionBlock
-            key={section.id}
-            section={section}
-            tasks={initialTasks.filter(t => t.section_id === section.id)}
-            projectId={project.id}
-            onTaskAdded={refresh}
-            onDeleted={refresh}
-          />
-        ))}
-
-        {/* Add section */}
-        {addingSection ? (
-          <AddSectionRow
-            projectId={project.id}
-            sectionCount={initialSections.length}
-            onSaved={() => { setAddingSection(false); refresh(); }}
-            onCancel={() => setAddingSection(false)}
-          />
-        ) : (
-          <div className="px-4 py-3 border-t border-[#f1f5f9]">
-            <button
-              onClick={() => setAddingSection(true)}
-              className="flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] transition-colors"
-            >
-              <Plus className="h-4 w-4" /> Add section
-            </button>
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      <div className="flex flex-col h-full">
+        {/* Topbar */}
+        <div className="border-b border-[#e2e8f0] bg-white px-4 py-2 flex items-center gap-2 flex-shrink-0">
+          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+          <span className="font-semibold text-sm text-[#1e293b]">{project.name}</span>
+          <div className="flex items-center gap-1 ml-4">
+            {(['Overview', 'List', 'Board'] as const).map(label => (
+              <Link key={label}
+                href={`/projects/${project.id}/${label.toLowerCase()}`}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  label === 'List' ? 'bg-[#6366f1]/10 text-[#6366f1]' : 'text-[#64748b] hover:bg-[#f1f5f9]'
+                }`}>{label}</Link>
+            ))}
           </div>
-        )}
+          <div className="ml-auto flex items-center gap-2">
+            <button className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#334155] px-2 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
+              <Filter className="h-3.5 w-3.5" /> Filter
+            </button>
+            <button className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#334155] px-2 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
+              <SortDesc className="h-3.5 w-3.5" /> Sort
+            </button>
+            <Button size="xs" className="gap-1" onClick={() => setAddingSection(true)}>
+              <Plus className="h-3 w-3" /> Add section
+            </Button>
+          </div>
+        </div>
+
+        {/* Column headers */}
+        <div className="flex items-center gap-3 px-4 py-2 bg-[#f8fafc] border-b border-[#e2e8f0] text-xs font-medium text-[#94a3b8] flex-shrink-0">
+          <div className="w-3.5" />
+          <span className="flex-1">Task</span>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <span className="w-20">Status</span>
+            <span className="w-16 hidden md:block">Priority</span>
+            <span className="w-16 text-right hidden sm:block">Due</span>
+            <span className="w-5" />
+          </div>
+        </div>
+
+        {/* Sections + tasks */}
+        <div className="flex-1 overflow-y-auto bg-white">
+          {unsectioned.length > 0 && unsectioned.map(task => (
+            <TaskRow key={task.id} task={task} dragging={task.id === activeId} />
+          ))}
+
+          {initialSections.map(section => (
+            <SectionBlock
+              key={section.id}
+              section={section}
+              tasks={initialTasks.filter(t => t.section_id === section.id)}
+              projectId={project.id}
+              activeId={activeId}
+              onTaskAdded={refresh}
+              onDeleted={refresh}
+            />
+          ))}
+
+          {/* Add section */}
+          {addingSection ? (
+            <AddSectionRow
+              projectId={project.id}
+              sectionCount={initialSections.length}
+              onSaved={() => { setAddingSection(false); refresh(); }}
+              onCancel={() => setAddingSection(false)}
+            />
+          ) : (
+            <div className="px-4 py-3 border-t border-[#f1f5f9]">
+              <button
+                onClick={() => setAddingSection(true)}
+                className="flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] transition-colors"
+              >
+                <Plus className="h-4 w-4" /> Add section
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Floating ghost while dragging */}
+      <DragOverlay dropAnimation={null}>
+        {activeTask && <TaskGhost task={activeTask} />}
+      </DragOverlay>
+    </DndContext>
   );
 }
