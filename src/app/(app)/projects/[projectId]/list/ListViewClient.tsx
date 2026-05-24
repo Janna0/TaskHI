@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef, useTransition } from 'react';
+import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2 } from 'lucide-react';
@@ -48,10 +48,13 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
   const [title, setTitle] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const calledRef = useRef(false);
 
   async function save() {
+    if (calledRef.current) return;
     const trimmed = title.trim();
     if (!trimmed) { onSaved(); return; }
+    calledRef.current = true;
     setSaving(true);
     setError('');
     const supabase = createClient();
@@ -65,7 +68,11 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
       depth: 0,
     });
     setSaving(false);
-    if (err) { setError(err.message); return; }
+    if (err) {
+      calledRef.current = false;
+      setError(`Failed to save: ${err.message}`);
+      return;
+    }
     onSaved();
   }
 
@@ -80,14 +87,14 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
           placeholder="Task title…"
           className="flex-1 text-sm bg-transparent outline-none text-[#334155] placeholder:text-[#94a3b8]"
           onKeyDown={e => {
-            if (e.key === 'Enter') save();
+            if (e.key === 'Enter') { e.preventDefault(); save(); }
             if (e.key === 'Escape') { setTitle(''); onSaved(); }
           }}
           onBlur={save}
         />
         {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6366f1]" />}
       </div>
-      {error && <p className="text-xs text-[#dc2626] px-12 pb-1">{error}</p>}
+      {error && <p className="text-xs text-[#dc2626] font-medium px-12 pb-2">{error}</p>}
     </div>
   );
 }
@@ -148,10 +155,13 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
   const [name, setName] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const calledRef = useRef(false);
 
   async function save() {
+    if (calledRef.current) return;
     const trimmed = name.trim();
     if (!trimmed) { onCancel(); return; }
+    calledRef.current = true;
     setSaving(true);
     setError('');
     const supabase = createClient();
@@ -162,7 +172,8 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
     });
     setSaving(false);
     if (err) {
-      setError(err.message);
+      calledRef.current = false;
+      setError(`Failed to save: ${err.message}`);
       return;
     }
     setName('');
@@ -179,14 +190,14 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
           placeholder="Section name…"
           className="flex-1 text-sm font-semibold bg-white border border-[#e2e8f0] rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#6366f1]/20 focus:border-[#6366f1] text-[#334155] placeholder:text-[#94a3b8]"
           onKeyDown={e => {
-            if (e.key === 'Enter') save();
+            if (e.key === 'Enter') { e.preventDefault(); save(); }
             if (e.key === 'Escape') { setName(''); onCancel(); }
           }}
           onBlur={save}
         />
         {saving && <Loader2 className="h-4 w-4 animate-spin text-[#6366f1]" />}
       </div>
-      {error && <p className="text-xs text-[#dc2626] mt-1">{error}</p>}
+      {error && <p className="text-xs text-[#dc2626] font-medium mt-1.5">{error}</p>}
       <p className="text-xs text-[#94a3b8] mt-1">Press Enter to save · Esc to cancel</p>
     </div>
   );
