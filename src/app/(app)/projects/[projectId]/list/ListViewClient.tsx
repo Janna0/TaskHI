@@ -236,8 +236,8 @@ export default function ListViewClient({ project, sections: initialSections, tas
           <button className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#334155] px-2 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
             <SortDesc className="h-3.5 w-3.5" /> Sort
           </button>
-          <Button size="xs" className="gap-1" onClick={() => setAddingSection(true)}>
-            <Plus className="h-3 w-3" /> Add task
+            <Button size="xs" className="gap-1" onClick={() => setAddingSection(true)}>
+            <Plus className="h-3 w-3" /> Add section
           </Button>
         </div>
       </div>
@@ -268,15 +268,6 @@ export default function ListViewClient({ project, sections: initialSections, tas
           />
         ))}
 
-        {initialTasks.length === 0 && initialSections.length === 0 && !addingSection && (
-          <div className="flex flex-col items-center justify-center py-20 text-[#94a3b8]">
-            <p className="text-sm mb-3">No tasks yet.</p>
-            <Button size="sm" className="gap-1.5" onClick={() => setAddingSection(true)}>
-              <Plus className="h-3.5 w-3.5" />Add first section
-            </Button>
-          </div>
-        )}
-
         {/* Add section */}
         {addingSection ? (
           <AddSectionRow
@@ -286,7 +277,7 @@ export default function ListViewClient({ project, sections: initialSections, tas
             onCancel={() => setAddingSection(false)}
           />
         ) : (
-          <div className="px-4 py-4">
+          <div className="px-4 py-3 border-t border-[#f1f5f9]">
             <button
               onClick={() => setAddingSection(true)}
               className="flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] transition-colors"
