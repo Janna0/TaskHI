@@ -7,7 +7,6 @@ import {
   useSensor, useSensors, useDroppable, useDraggable,
   type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
 import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2, Trash2, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, PriorityBadge } from '@/components/ui/badge';
@@ -23,31 +22,26 @@ interface Props {
 
 // ─── Task row ────────────────────────────────────────────────────────────────
 
-function TaskRow({ task, dragging }: { task: Task; dragging?: boolean }) {
+function TaskRow({ task }: { task: Task }) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
   const isDone = task.status === 'done';
-  const { attributes, listeners, setNodeRef, transform } = useDraggable({ id: task.id });
-
-  const style = transform
-    ? { transform: CSS.Translate.toString(transform) }
-    : undefined;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
 
   return (
     <div
       ref={setNodeRef}
-      style={style}
       className={`flex items-center gap-3 px-4 py-2 hover:bg-[#f8fafc] transition-colors border-b border-[#f1f5f9] group
         ${isDone ? 'opacity-60' : ''}
-        ${dragging ? 'opacity-30' : ''}`}
+        ${isDragging ? 'opacity-30' : ''}`}
     >
-      {/* Drag handle */}
-      <button
+      {/* Drag handle — div not button so pointer events aren't swallowed */}
+      <div
         {...listeners}
         {...attributes}
-        className="flex-shrink-0 cursor-grab active:cursor-grabbing text-[#cbd5e1] hover:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity touch-none"
+        className="flex-shrink-0 cursor-grab active:cursor-grabbing text-[#cbd5e1] hover:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity touch-none select-none"
       >
         <GripVertical className="h-3.5 w-3.5" />
-      </button>
+      </div>
 
       <div className="flex-1 min-w-0">
         <span className={`text-sm ${isDone ? 'line-through text-[#94a3b8]' : 'text-[#334155]'}`}>
@@ -140,11 +134,10 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
 
 // ─── Section block ───────────────────────────────────────────────────────────
 
-function SectionBlock({ section, tasks, projectId, activeId, onTaskAdded, onDeleted }: {
+function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
   section: Section;
   tasks: Task[];
   projectId: string;
-  activeId: string | null;
   onTaskAdded: () => void;
   onDeleted: () => void;
 }) {
@@ -194,7 +187,7 @@ function SectionBlock({ section, tasks, projectId, activeId, onTaskAdded, onDele
           className={`min-h-[4px] transition-colors ${isOver ? 'bg-[#eff6ff]' : ''}`}
         >
           {tasks.map(task => (
-            <TaskRow key={task.id} task={task} dragging={task.id === activeId} />
+            <TaskRow key={task.id} task={task} />
           ))}
           {adding && (
             <AddTaskRow
@@ -279,23 +272,22 @@ export default function ListViewClient({ project, sections: initialSections, tas
   const color = getProjectColor(project.color);
   const router = useRouter();
   const [addingSection, setAddingSection] = useState(false);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
   );
 
-  const activeTask = activeId ? initialTasks.find(t => t.id === activeId) ?? null : null;
-
   function refresh() { router.refresh(); }
 
   function handleDragStart(event: DragStartEvent) {
-    setActiveId(event.active.id as string);
+    const task = initialTasks.find(t => t.id === event.active.id);
+    setActiveTask(task ?? null);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
-    setActiveId(null);
+    setActiveTask(null);
     const { active, over } = event;
     if (!over) return;
 
@@ -303,6 +295,7 @@ export default function ListViewClient({ project, sections: initialSections, tas
     const newSectionId = over.id as string;
     const task = initialTasks.find(t => t.id === taskId);
     if (!task || task.section_id === newSectionId) return;
+
 
     const supabase = createClient();
     await supabase.from('tasks').update({ section_id: newSectionId }).eq('id', taskId);
@@ -355,7 +348,7 @@ export default function ListViewClient({ project, sections: initialSections, tas
         {/* Sections + tasks */}
         <div className="flex-1 overflow-y-auto bg-white">
           {unsectioned.length > 0 && unsectioned.map(task => (
-            <TaskRow key={task.id} task={task} dragging={task.id === activeId} />
+            <TaskRow key={task.id} task={task} />
           ))}
 
           {initialSections.map(section => (
@@ -364,7 +357,6 @@ export default function ListViewClient({ project, sections: initialSections, tas
               section={section}
               tasks={initialTasks.filter(t => t.section_id === section.id)}
               projectId={project.id}
-              activeId={activeId}
               onTaskAdded={refresh}
               onDeleted={refresh}
             />
