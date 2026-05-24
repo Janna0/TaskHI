@@ -1,8 +1,11 @@
 'use client';
+import { useState, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, MessageSquare } from 'lucide-react';
+import { Plus, Loader2 } from 'lucide-react';
 import { PriorityBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 import type { Task } from '@/lib/supabase/types';
 
 const COLUMNS: { id: Task['status']; label: string; color: string }[] = [
@@ -38,8 +41,71 @@ function TaskCard({ task }: { task: Task }) {
   );
 }
 
+function AddTaskCard({ projectId, status, taskCount, onSaved }: {
+  projectId: string;
+  status: Task['status'];
+  taskCount: number;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const calledRef = useRef(false);
+
+  async function save() {
+    if (calledRef.current) return;
+    const trimmed = title.trim();
+    if (!trimmed) { onSaved(); return; }
+    calledRef.current = true;
+    setSaving(true);
+    setError('');
+    const supabase = createClient();
+    const { error: err } = await supabase.from('tasks').insert({
+      project_id: projectId,
+      title: trimmed,
+      status,
+      priority: 'medium',
+      position: taskCount,
+      depth: 0,
+    });
+    setSaving(false);
+    if (err) {
+      calledRef.current = false;
+      setError(`Failed: ${err.message}`);
+      return;
+    }
+    onSaved();
+  }
+
+  return (
+    <div className="bg-white border border-[#6366f1]/40 rounded-lg p-3 shadow-sm">
+      <textarea
+        autoFocus
+        rows={2}
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        placeholder="Task title…"
+        className="w-full text-sm bg-transparent outline-none text-[#334155] placeholder:text-[#94a3b8] resize-none"
+        onKeyDown={e => {
+          if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save(); }
+          if (e.key === 'Escape') { setTitle(''); onSaved(); }
+        }}
+        onBlur={save}
+      />
+      {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6366f1] mt-1" />}
+      {error && <p className="text-xs text-[#dc2626] mt-1">{error}</p>}
+    </div>
+  );
+}
+
 export default function BoardViewClient({ project, tasks }: { project: { id: string; name: string; color: string }; tasks: Task[] }) {
   const color = getProjectColor(project.color);
+  const router = useRouter();
+  const [addingTo, setAddingTo] = useState<Task['status'] | null>(null);
+
+  function refresh() {
+    router.refresh();
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -60,6 +126,7 @@ export default function BoardViewClient({ project, tasks }: { project: { id: str
         <div className="flex gap-3 h-full" style={{ minWidth: `${COLUMNS.length * 272 + (COLUMNS.length - 1) * 12}px` }}>
           {COLUMNS.map(col => {
             const colCards = tasks.filter(t => t.status === col.id);
+            const isAdding = addingTo === col.id;
             return (
               <div key={col.id} className="flex flex-col w-64 flex-shrink-0">
                 <div className="flex items-center justify-between mb-2 px-1">
@@ -68,21 +135,35 @@ export default function BoardViewClient({ project, tasks }: { project: { id: str
                     <span className="text-xs font-semibold text-[#334155]">{col.label}</span>
                     <span className="text-xs text-[#94a3b8] bg-[#f1f5f9] rounded px-1.5 py-0.5">{colCards.length}</span>
                   </div>
-                  <button className="text-[#94a3b8] hover:text-[#334155] p-0.5 rounded hover:bg-[#f1f5f9]">
+                  <button
+                    onClick={() => setAddingTo(col.id)}
+                    className="text-[#94a3b8] hover:text-[#334155] p-0.5 rounded hover:bg-[#f1f5f9]"
+                  >
                     <Plus className="h-3.5 w-3.5" />
                   </button>
                 </div>
 
                 <div className="flex-1 flex flex-col gap-2 overflow-y-auto pb-2">
                   {colCards.map(task => <TaskCard key={task.id} task={task} />)}
-                  {colCards.length === 0 && (
+                  {isAdding && (
+                    <AddTaskCard
+                      projectId={project.id}
+                      status={col.id}
+                      taskCount={colCards.length}
+                      onSaved={() => { setAddingTo(null); refresh(); }}
+                    />
+                  )}
+                  {colCards.length === 0 && !isAdding && (
                     <div className="flex-1 flex items-center justify-center border-2 border-dashed border-[#e2e8f0] rounded-xl text-xs text-[#94a3b8] min-h-20">
                       No tasks
                     </div>
                   )}
                 </div>
 
-                <button className="mt-2 flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-[#6366f1] px-1 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
+                <button
+                  onClick={() => setAddingTo(col.id)}
+                  className="mt-2 flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-[#6366f1] px-1 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors"
+                >
                   <Plus className="h-3.5 w-3.5" /> Add task
                 </button>
               </div>
