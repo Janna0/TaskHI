@@ -2,7 +2,7 @@
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, PriorityBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
@@ -99,14 +99,26 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
   );
 }
 
-function SectionBlock({ section, tasks, projectId, onTaskAdded }: {
+function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
   section: Section;
   tasks: Task[];
   projectId: string;
   onTaskAdded: () => void;
+  onDeleted: () => void;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  async function deleteSection() {
+    if (!confirm(`Delete section "${section.name}"? Tasks inside will become unsectioned.`)) return;
+    setDeleting(true);
+    const supabase = createClient();
+    // Move tasks to unsectioned so the delete doesn't fail on FK constraints
+    await supabase.from('tasks').update({ section_id: null }).eq('section_id', section.id);
+    await supabase.from('sections').delete().eq('id', section.id);
+    onDeleted();
+  }
 
   return (
     <div>
@@ -116,10 +128,19 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded }: {
         </button>
         <span className="font-semibold text-sm text-[#334155]">{section.name}</span>
         <span className="text-xs text-[#94a3b8]">{tasks.length}</span>
-        <button onClick={() => setAdding(true)}
-          className="ml-auto opacity-0 group-hover:opacity-100 flex items-center gap-1 text-xs text-[#6366f1] hover:underline transition-all">
-          <Plus className="h-3 w-3" /> Add task
-        </button>
+        <div className="ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+          <button onClick={() => setAdding(true)}
+            className="flex items-center gap-1 text-xs text-[#6366f1] hover:underline">
+            <Plus className="h-3 w-3" /> Add task
+          </button>
+          <button
+            onClick={deleteSection}
+            disabled={deleting}
+            className="p-0.5 rounded hover:bg-[#fee2e2] text-[#94a3b8] hover:text-[#dc2626] transition-colors disabled:opacity-40"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       </div>
 
       {!collapsed && (
@@ -265,6 +286,7 @@ export default function ListViewClient({ project, sections: initialSections, tas
             tasks={initialTasks.filter(t => t.section_id === section.id)}
             projectId={project.id}
             onTaskAdded={refresh}
+            onDeleted={refresh}
           />
         ))}
 
