@@ -3,11 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { asProject, asSections, asTasks } from '@/lib/supabase/query';
 import ListViewClient from './ListViewClient';
 
-const DEFAULT_SECTIONS = [
-  { name: 'To Do',       position: 0 },
-  { name: 'In Progress', position: 1 },
-  { name: 'Done',        position: 2 },
-];
+const DEFAULT_SECTIONS = ['To Do', 'In Progress', 'Done'];
 
 export default async function ListViewPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
@@ -27,10 +23,16 @@ export default async function ListViewPage({ params }: { params: Promise<{ proje
 
   let sections = asSections(sectRes.data);
 
-  // Seed default sections for brand-new projects
-  if (sections.length === 0) {
+  // Add any of the three default sections that don't exist yet by name
+  const existingNames = new Set(sections.map(s => s.name));
+  const missing = DEFAULT_SECTIONS.filter(name => !existingNames.has(name));
+
+  if (missing.length > 0) {
+    const basePos = sections.length > 0
+      ? Math.max(...sections.map(s => s.position)) + 1
+      : 0;
     await supabase.from('sections').insert(
-      DEFAULT_SECTIONS.map(s => ({ project_id: projectId, ...s }))
+      missing.map((name, i) => ({ project_id: projectId, name, position: basePos + i }))
     );
     const { data: seeded } = await supabase
       .from('sections').select('*').eq('project_id', projectId).order('position');
@@ -45,3 +47,4 @@ export default async function ListViewPage({ params }: { params: Promise<{ proje
     />
   );
 }
+
