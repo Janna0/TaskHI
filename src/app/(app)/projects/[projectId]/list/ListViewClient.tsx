@@ -1,10 +1,12 @@
 'use client';
-import { useState } from 'react';
+import { useState, useRef, useTransition } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal } from 'lucide-react';
+import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, PriorityBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
+import { createClient } from '@/lib/supabase/client';
 import type { Section, Task } from '@/lib/supabase/types';
 
 interface Props {
@@ -37,7 +39,65 @@ function TaskRow({ task }: { task: Task }) {
   );
 }
 
-function SectionBlock({ section, tasks }: { section: Section; tasks: Task[] }) {
+function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
+  projectId: string;
+  sectionId: string | null;
+  taskCount: number;
+  onSaved: () => void;
+}) {
+  const [title, setTitle] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save() {
+    const trimmed = title.trim();
+    if (!trimmed) { onSaved(); return; }
+    setSaving(true);
+    setError('');
+    const supabase = createClient();
+    const { error: err } = await supabase.from('tasks').insert({
+      project_id: projectId,
+      section_id: sectionId,
+      title: trimmed,
+      status: 'todo',
+      priority: 'medium',
+      position: taskCount,
+      depth: 0,
+    });
+    setSaving(false);
+    if (err) { setError(err.message); return; }
+    onSaved();
+  }
+
+  return (
+    <div className="border-b border-[#f1f5f9]">
+      <div className="flex items-center gap-3 px-4 py-2 bg-[#eff6ff]">
+        <div className="w-5" />
+        <input
+          autoFocus
+          value={title}
+          onChange={e => setTitle(e.target.value)}
+          placeholder="Task title…"
+          className="flex-1 text-sm bg-transparent outline-none text-[#334155] placeholder:text-[#94a3b8]"
+          onKeyDown={e => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') { setTitle(''); onSaved(); }
+          }}
+          onBlur={save}
+        />
+        {saving && <Loader2 className="h-3.5 w-3.5 animate-spin text-[#6366f1]" />}
+      </div>
+      {error && <p className="text-xs text-[#dc2626] px-12 pb-1">{error}</p>}
+    </div>
+  );
+}
+
+function SectionBlock({ section, tasks, projectId, onTaskAdded }: {
+  section: Section;
+  tasks: Task[];
+  projectId: string;
+  onTaskAdded: () => void;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [adding, setAdding] = useState(false);
 
@@ -59,13 +119,12 @@ function SectionBlock({ section, tasks }: { section: Section; tasks: Task[] }) {
         <>
           {tasks.map(task => <TaskRow key={task.id} task={task} />)}
           {adding && (
-            <div className="flex items-center gap-3 px-4 py-2 border-b border-[#f1f5f9] bg-[#eff6ff]">
-              <div className="w-5" />
-              <input autoFocus placeholder="Task title…"
-                className="flex-1 text-sm bg-transparent outline-none text-[#334155] placeholder:text-[#94a3b8]"
-                onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter') setAdding(false); }}
-                onBlur={() => setAdding(false)} />
-            </div>
+            <AddTaskRow
+              projectId={projectId}
+              sectionId={section.id}
+              taskCount={tasks.length}
+              onSaved={() => { setAdding(false); onTaskAdded(); }}
+            />
           )}
           <div className="flex items-center gap-2 px-4 py-2 border-b border-[#f1f5f9]">
             <div className="w-5" />
@@ -80,29 +139,69 @@ function SectionBlock({ section, tasks }: { section: Section; tasks: Task[] }) {
   );
 }
 
-function UnsectionedTasks({ tasks, projectId }: { tasks: Task[]; projectId: string }) {
-  const [adding, setAdding] = useState(false);
-  if (tasks.length === 0 && !adding) return null;
+function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
+  projectId: string;
+  sectionCount: number;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function save() {
+    const trimmed = name.trim();
+    if (!trimmed) { onCancel(); return; }
+    setSaving(true);
+    setError('');
+    const supabase = createClient();
+    const { error: err } = await supabase.from('sections').insert({
+      project_id: projectId,
+      name: trimmed,
+      position: sectionCount,
+    });
+    setSaving(false);
+    if (err) {
+      setError(err.message);
+      return;
+    }
+    setName('');
+    onSaved();
+  }
 
   return (
-    <div>
-      {tasks.map(task => <TaskRow key={task.id} task={task} />)}
-      {adding && (
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-[#f1f5f9] bg-[#eff6ff]">
-          <div className="w-5" />
-          <input autoFocus placeholder="Task title…"
-            className="flex-1 text-sm bg-transparent outline-none text-[#334155] placeholder:text-[#94a3b8]"
-            onKeyDown={e => { if (e.key === 'Escape' || e.key === 'Enter') setAdding(false); }}
-            onBlur={() => setAdding(false)} />
-        </div>
-      )}
+    <div className="px-4 py-3 border-t border-[#e2e8f0] bg-[#f8fafc]">
+      <div className="flex items-center gap-2">
+        <input
+          autoFocus
+          value={name}
+          onChange={e => setName(e.target.value)}
+          placeholder="Section name…"
+          className="flex-1 text-sm font-semibold bg-white border border-[#e2e8f0] rounded-md px-3 py-1.5 outline-none focus:ring-2 focus:ring-[#6366f1]/20 focus:border-[#6366f1] text-[#334155] placeholder:text-[#94a3b8]"
+          onKeyDown={e => {
+            if (e.key === 'Enter') save();
+            if (e.key === 'Escape') { setName(''); onCancel(); }
+          }}
+          onBlur={save}
+        />
+        {saving && <Loader2 className="h-4 w-4 animate-spin text-[#6366f1]" />}
+      </div>
+      {error && <p className="text-xs text-[#dc2626] mt-1">{error}</p>}
+      <p className="text-xs text-[#94a3b8] mt-1">Press Enter to save · Esc to cancel</p>
     </div>
   );
 }
 
-export default function ListViewClient({ project, sections, tasks }: Props) {
+export default function ListViewClient({ project, sections: initialSections, tasks: initialTasks }: Props) {
   const color = getProjectColor(project.color);
-  const unsectioned = tasks.filter(t => !t.section_id);
+  const router = useRouter();
+  const [addingSection, setAddingSection] = useState(false);
+
+  function refresh() {
+    router.refresh();
+  }
+
+  const unsectioned = initialTasks.filter(t => !t.section_id);
 
   return (
     <div className="flex flex-col h-full">
@@ -126,7 +225,9 @@ export default function ListViewClient({ project, sections, tasks }: Props) {
           <button className="flex items-center gap-1.5 text-xs text-[#64748b] hover:text-[#334155] px-2 py-1.5 rounded hover:bg-[#f1f5f9] transition-colors">
             <SortDesc className="h-3.5 w-3.5" /> Sort
           </button>
-          <Button size="xs" className="gap-1"><Plus className="h-3 w-3" /> Add task</Button>
+          <Button size="xs" className="gap-1" onClick={() => setAddingSection(true)}>
+            <Plus className="h-3 w-3" /> Add task
+          </Button>
         </div>
       </div>
 
@@ -144,24 +245,45 @@ export default function ListViewClient({ project, sections, tasks }: Props) {
 
       {/* Sections + tasks */}
       <div className="flex-1 overflow-y-auto bg-white">
-        <UnsectionedTasks tasks={unsectioned} projectId={project.id} />
-        {sections.map(section => (
-          <SectionBlock key={section.id} section={section}
-            tasks={tasks.filter(t => t.section_id === section.id)} />
+        {unsectioned.length > 0 && unsectioned.map(task => <TaskRow key={task.id} task={task} />)}
+
+        {initialSections.map(section => (
+          <SectionBlock
+            key={section.id}
+            section={section}
+            tasks={initialTasks.filter(t => t.section_id === section.id)}
+            projectId={project.id}
+            onTaskAdded={refresh}
+          />
         ))}
 
-        {tasks.length === 0 && sections.length === 0 && (
+        {initialTasks.length === 0 && initialSections.length === 0 && !addingSection && (
           <div className="flex flex-col items-center justify-center py-20 text-[#94a3b8]">
             <p className="text-sm mb-3">No tasks yet.</p>
-            <Button size="sm" className="gap-1.5"><Plus className="h-3.5 w-3.5" />Add first task</Button>
+            <Button size="sm" className="gap-1.5" onClick={() => setAddingSection(true)}>
+              <Plus className="h-3.5 w-3.5" />Add first section
+            </Button>
           </div>
         )}
 
-        <div className="px-4 py-4">
-          <button className="flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] transition-colors">
-            <Plus className="h-4 w-4" /> Add section
-          </button>
-        </div>
+        {/* Add section */}
+        {addingSection ? (
+          <AddSectionRow
+            projectId={project.id}
+            sectionCount={initialSections.length}
+            onSaved={() => { setAddingSection(false); refresh(); }}
+            onCancel={() => setAddingSection(false)}
+          />
+        ) : (
+          <div className="px-4 py-4">
+            <button
+              onClick={() => setAddingSection(true)}
+              className="flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] transition-colors"
+            >
+              <Plus className="h-4 w-4" /> Add section
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
