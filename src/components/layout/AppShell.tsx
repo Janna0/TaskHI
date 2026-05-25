@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function loadProjects() {
     const { data } = await supabase.rpc('get_my_projects')
-    if (data) setProjects(withFavorites(data, user!.id))
+    if (data) setProjects(await withFavorites(data, user!.id))
   }
 
   return (

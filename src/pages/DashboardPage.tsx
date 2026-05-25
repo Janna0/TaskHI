@@ -37,7 +37,7 @@ export function DashboardPage() {
         .limit(6),
     ])
     if (t) setTasks(t)
-    if (p) setProjects(withFavorites(p, user!.id))
+    if (p) setProjects(await withFavorites(p, user!.id))
     setLoading(false)
   }
 

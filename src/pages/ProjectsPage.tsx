@@ -27,15 +27,15 @@ export function ProjectsPage() {
       .eq('owner_id', user!.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
-    if (data) setProjects(withFavorites(data, user!.id))
+    if (data) setProjects(await withFavorites(data, user!.id))
     setLoading(false)
   }
 
-  function toggleFavorite(e: React.MouseEvent, project: Project) {
+  async function toggleFavorite(e: React.MouseEvent, project: Project) {
     e.preventDefault()
     const next = !project.is_favorite
-    setFavorite(user!.id, project.id, next)
     setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: next } : p))
+    await setFavorite(user!.id, project.id, next)
     window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 

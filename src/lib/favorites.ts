@@ -1,25 +1,31 @@
-const key = (userId: string) => `taskhi:favorites:${userId}`
+import { supabase } from './supabase'
 
-export function loadFavoriteIds(userId: string): Set<string> {
-  try {
-    const raw = localStorage.getItem(key(userId))
-    return new Set(raw ? JSON.parse(raw) : [])
-  } catch {
-    return new Set()
+export async function loadFavoriteIds(userId: string): Promise<Set<string>> {
+  const { data } = await supabase
+    .from('user_project_favorites')
+    .select('project_id')
+    .eq('user_id', userId)
+  return new Set(data?.map((r: { project_id: string }) => r.project_id) ?? [])
+}
+
+export async function setFavorite(userId: string, projectId: string, value: boolean): Promise<void> {
+  if (value) {
+    await supabase
+      .from('user_project_favorites')
+      .upsert({ user_id: userId, project_id: projectId })
+  } else {
+    await supabase
+      .from('user_project_favorites')
+      .delete()
+      .eq('user_id', userId)
+      .eq('project_id', projectId)
   }
 }
 
-export function setFavorite(userId: string, projectId: string, value: boolean): void {
-  const ids = loadFavoriteIds(userId)
-  if (value) ids.add(projectId)
-  else ids.delete(projectId)
-  localStorage.setItem(key(userId), JSON.stringify([...ids]))
-}
-
-export function withFavorites<T extends { id: string }>(
+export async function withFavorites<T extends { id: string }>(
   projects: T[],
   userId: string
-): (T & { is_favorite: boolean })[] {
-  const ids = loadFavoriteIds(userId)
+): Promise<(T & { is_favorite: boolean })[]> {
+  const ids = await loadFavoriteIds(userId)
   return projects.map(p => ({ ...p, is_favorite: ids.has(p.id) }))
 }

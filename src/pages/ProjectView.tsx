@@ -75,7 +75,8 @@ export function ProjectView() {
       ])
       if (projRes.data) {
         const proj = projRes.data as unknown as Project
-        setProject({ ...proj, is_favorite: loadFavoriteIds(user!.id).has(proj.id) })
+        const favIds = await loadFavoriteIds(user!.id)
+        setProject({ ...proj, is_favorite: favIds.has(proj.id) })
         const { data: ownerData } = await supabase
           .from('profiles')
           .select('id, name, email, avatar_url, avatar_color, created_at')
@@ -112,11 +113,11 @@ export function ProjectView() {
     setMembers(prev => prev.filter(m => m.id !== memberId))
   }
 
-  function toggleFavorite() {
+  async function toggleFavorite() {
     if (!project) return
     const next = !project.is_favorite
     setProject(p => p ? { ...p, is_favorite: next } : p)
-    setFavorite(user!.id, project.id, next)
+    await setFavorite(user!.id, project.id, next)
     window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 
@@ -312,7 +313,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ─────────────────────────────────────────────────────────
+// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -457,7 +458,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ──────────────────────────────────────────────────────────────
+// ── Overview Tab ────────────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 
