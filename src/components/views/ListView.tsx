@@ -6,11 +6,18 @@ import {
   TouchSensor,
   useSensor,
   useSensors,
-  useDroppable,
-  useDraggable,
+  closestCenter,
   type DragEndEvent,
   type DragStartEvent,
+  type DragOverEvent,
 } from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
@@ -27,21 +34,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Droppable section wrapper ───────────────────────────────────────────────────
-
-function DroppableSection({ id, children }: { id: string; children: React.ReactNode }) {
-  const { setNodeRef, isOver } = useDroppable({ id })
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn('min-h-[4px] transition-colors', isOver && 'bg-primary-50')}
-    >
-      {children}
-    </div>
-  )
-}
-
-// ── Inline add-task row ─────────────────────────────────────────────────────────
+// ── Inline add-task row ──────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -125,7 +118,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Draggable task row ───────────────────────────────────────────────────────────
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -138,11 +131,12 @@ function TaskRow({
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
 
   return (
     <div
       ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       onClick={onClick}
       className={cn(
         'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 group',
@@ -193,7 +187,7 @@ function TaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -205,7 +199,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Section action menu ────────────────────────────────────────────────────────────
+// ── Section action menu ────────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose }: {
   onRename: () => void
@@ -263,13 +257,17 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [newSectionName, setNewSectionName] = useState('')
   const [sectionError, setSectionError] = useState('')
   const [activeTask, setActiveTask] = useState<Task | null>(null)
-  const [sectionOverrides, setSectionOverrides] = useState<Record<string, string>>({})
   const [hoveredSection, setHoveredSection] = useState<string | null>(null)
   const [openMenuSection, setOpenMenuSection] = useState<string | null>(null)
   const [renamingSection, setRenamingSection] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const renameInputRef = useRef<HTMLInputElement>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
+
+  // localOrder: sectionId → taskId[]; '' key for ungrouped tasks
+  const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
+  const localOrderRef = useRef<Record<string, string[]>>({})
+  const isDraggingRef = useRef(false)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -280,9 +278,28 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     if (renamingSection) requestAnimationFrame(() => renameInputRef.current?.focus())
   }, [renamingSection])
 
-  const effectiveTasks = tasks.map(t =>
-    t.id in sectionOverrides ? { ...t, section_id: sectionOverrides[t.id] } : t
-  )
+  // Sync tasks prop → localOrder whenever tasks/sections change (skip during active drag)
+  useEffect(() => {
+    if (isDraggingRef.current) return
+    const order: Record<string, string[]> = { '': [] }
+    for (const s of sections) {
+      order[s.id] = tasks
+        .filter(t => t.section_id === s.id)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map(t => t.id)
+    }
+    order[''] = tasks.filter(t => !t.section_id).map(t => t.id)
+    setLocalOrder(order)
+    localOrderRef.current = order
+  }, [tasks, sections])
+
+  // Find which section (by key in localOrder) contains the given task ID
+  function findSection(taskId: string): string {
+    for (const [sid, ids] of Object.entries(localOrderRef.current)) {
+      if (ids.includes(taskId)) return sid
+    }
+    return ''
+  }
 
   function toggle(id: string) {
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
@@ -326,30 +343,89 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const task = effectiveTasks.find(t => t.id === event.active.id)
+    isDraggingRef.current = true
+    const task = tasks.find(t => t.id === event.active.id)
     setActiveTask(task ?? null)
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    setActiveTask(null)
+  function handleDragOver(event: DragOverEvent) {
     const { active, over } = event
-    if (!over) return
-    const taskId = active.id as string
-    const newSectionId = over.id as string
-    const task = effectiveTasks.find(t => t.id === taskId)
-    if (!task || task.section_id === newSectionId) return
-    const prevSectionId = task.section_id
-    setSectionOverrides(prev => ({ ...prev, [taskId]: newSectionId }))
-    const { error } = await supabase.from('tasks').update({ section_id: newSectionId }).eq('id', taskId)
-    if (error) {
-      setSectionOverrides(prev => ({ ...prev, [taskId]: prevSectionId ?? '' }))
+    if (!over || active.id === over.id) return
+
+    const activeId = active.id as string
+    const overId = over.id as string
+    const activeSid = findSection(activeId)
+
+    // Determine target section: overId is either a task ID or a section key
+    let targetSid: string
+    if (overId in localOrderRef.current) {
+      // It's a section key directly
+      targetSid = overId
+    } else {
+      targetSid = findSection(overId)
+    }
+
+    const cur = localOrderRef.current
+
+    if (activeSid === targetSid) {
+      // Within-section reorder
+      const ids = cur[activeSid] ?? []
+      const from = ids.indexOf(activeId)
+      const to = ids.indexOf(overId)
+      if (from !== -1 && to !== -1 && from !== to) {
+        const newIds = arrayMove(ids, from, to)
+        const newOrder = { ...cur, [activeSid]: newIds }
+        localOrderRef.current = newOrder
+        setLocalOrder(newOrder)
+      }
+    } else {
+      // Cross-section move
+      const newOrder = { ...cur }
+      newOrder[activeSid] = (newOrder[activeSid] ?? []).filter(id => id !== activeId)
+      const targetIds = [...(newOrder[targetSid] ?? [])]
+      const overIdx = targetIds.indexOf(overId)
+      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
+      newOrder[targetSid] = targetIds
+      localOrderRef.current = newOrder
+      setLocalOrder(newOrder)
     }
   }
 
-  const ungrouped = effectiveTasks.filter(t => !t.section_id)
+  async function handleDragEnd(event: DragEndEvent) {
+    isDraggingRef.current = false
+    setActiveTask(null)
+
+    const { active } = event
+    const taskId = active.id as string
+    const originalTask = tasks.find(t => t.id === taskId)
+    if (!originalTask) return
+
+    const finalSid = findSection(taskId)
+    const finalSectionIds = localOrderRef.current[finalSid] ?? []
+    const newSectionId = finalSid || null
+
+    // Persist updated positions (and section if changed) for all tasks in the final section
+    await Promise.all(
+      finalSectionIds.map((id, idx) => {
+        const update: Record<string, unknown> = { position: idx }
+        if (id === taskId && newSectionId !== originalTask.section_id) {
+          update.section_id = newSectionId
+        }
+        return supabase.from('tasks').update(update).eq('id', id)
+      })
+    )
+  }
+
+  const ungroupedIds = localOrder[''] ?? []
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
       <div className="space-y-1">
         {/* Column headers */}
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
@@ -362,11 +438,15 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         </div>
 
         {sections.map(section => {
-          const sectionTasks = effectiveTasks.filter(t => t.section_id === section.id)
+          const sectionTaskIds = localOrder[section.id] ?? []
+          const sectionTasks = sectionTaskIds
+            .map(id => tasks.find(t => t.id === id))
+            .filter((t): t is Task => !!t)
           const isCollapsed = collapsed[section.id]
           const isHovered = hoveredSection === section.id
           const menuOpen = openMenuSection === section.id
           const isRenaming = renamingSection === section.id
+
           return (
             <div key={section.id}>
               <div
@@ -423,35 +503,55 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
               </div>
 
               {!isCollapsed && (
-                <DroppableSection id={section.id}>
-                  {sectionTasks.map(task => (
-                    <TaskRow key={task.id} task={task} memberMap={memberMap} onClick={() => onTaskClick(task)} />
-                  ))}
+                <>
+                  <SortableContext items={sectionTaskIds} strategy={verticalListSortingStrategy}>
+                    <div className="min-h-[4px]">
+                      {sectionTasks.map(task => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          memberMap={memberMap}
+                          onClick={() => onTaskClick(task)}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
                   <AddTaskInlineRow
                     projectId={projectId}
                     sectionId={section.id}
-                    position={sectionTasks.length}
+                    position={sectionTaskIds.length}
                     isActive={inlineAdding === section.id}
                     onActivate={() => setInlineAdding(section.id)}
                     onDone={() => handleAddDone(section.id)}
                   />
-                </DroppableSection>
+                </>
               )}
             </div>
           )
         })}
 
         {/* Ungrouped tasks */}
-        {ungrouped.length > 0 && (
+        {ungroupedIds.length > 0 && (
           <div>
             {sections.length > 0 && (
               <div className="flex items-center gap-2 px-4 py-2">
                 <span className="text-sm font-semibold text-slate-500">No section</span>
               </div>
             )}
-            {ungrouped.map(task => (
-              <TaskRow key={task.id} task={task} memberMap={memberMap} onClick={() => onTaskClick(task)} />
-            ))}
+            <SortableContext items={ungroupedIds} strategy={verticalListSortingStrategy}>
+              {ungroupedIds.map(id => {
+                const task = tasks.find(t => t.id === id)
+                if (!task) return null
+                return (
+                  <TaskRow
+                    key={task.id}
+                    task={task}
+                    memberMap={memberMap}
+                    onClick={() => onTaskClick(task)}
+                  />
+                )
+              })}
+            </SortableContext>
           </div>
         )}
 
