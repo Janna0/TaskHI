@@ -33,17 +33,13 @@ function TaskCard({ task }: { task: Task }) {
   return (
     <div
       ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 }}
-      className="bg-white border border-[#e2e8f0] rounded-lg p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+      className="bg-white border border-[#e2e8f0] rounded-lg p-3 shadow-sm hover:shadow-md transition-all cursor-grab active:cursor-grabbing select-none touch-none group"
     >
       <div className="flex items-start gap-2 mb-2">
-        <div
-          {...listeners}
-          {...attributes}
-          className="flex-shrink-0 mt-0.5 cursor-grab active:cursor-grabbing text-[#cbd5e1] hover:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity touch-none select-none"
-        >
-          <GripVertical className="h-3.5 w-3.5" />
-        </div>
+        <GripVertical className="h-3.5 w-3.5 flex-shrink-0 mt-0.5 text-[#cbd5e1] opacity-0 group-hover:opacity-100 transition-opacity" />
         <p className="text-sm text-[#334155] leading-snug flex-1">{task.title}</p>
       </div>
       <div className="flex items-center gap-2 flex-wrap">
