@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Plus, ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { StatusBadge, PriorityBadge } from '../ui/Badge'
@@ -205,6 +205,54 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
+// ── Section action menu ────────────────────────────────────────────────────────────
+
+function SectionMenu({ onRename, onDelete, onClose }: {
+  onRename: () => void
+  onDelete: () => void
+  onClose: () => void
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handle(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('mousedown', handle)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handle)
+      document.removeEventListener('keydown', handleKey)
+    }
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-44 z-50"
+    >
+      <button
+        onMouseDown={e => { e.stopPropagation(); onRename() }}
+        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+      >
+        <Pencil size={13} className="text-slate-400 shrink-0" />
+        Rename section
+      </button>
+      <div className="border-t border-slate-100 my-1" />
+      <button
+        onMouseDown={e => { e.stopPropagation(); onDelete() }}
+        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+      >
+        <Trash2 size={13} className="shrink-0" />
+        Delete section
+      </button>
+    </div>
+  )
+}
+
 // ── Main component ──────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
@@ -217,12 +265,20 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [sectionOverrides, setSectionOverrides] = useState<Record<string, string>>({})
   const [hoveredSection, setHoveredSection] = useState<string | null>(null)
+  const [openMenuSection, setOpenMenuSection] = useState<string | null>(null)
+  const [renamingSection, setRenamingSection] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const renameInputRef = useRef<HTMLInputElement>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   )
+
+  useEffect(() => {
+    if (renamingSection) requestAnimationFrame(() => renameInputRef.current?.focus())
+  }, [renamingSection])
 
   const effectiveTasks = tasks.map(t =>
     t.id in sectionOverrides ? { ...t, section_id: sectionOverrides[t.id] } : t
@@ -238,12 +294,20 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   }
 
   async function handleDeleteSection(sectionId: string, taskCount: number) {
+    setOpenMenuSection(null)
     const msg = taskCount > 0
       ? `Delete this section? The ${taskCount} task${taskCount > 1 ? 's' : ''} inside will be moved to "No section".`
       : 'Delete this section?'
     if (!confirm(msg)) return
     await supabase.from('tasks').update({ section_id: null }).eq('section_id', sectionId)
     await supabase.from('sections').delete().eq('id', sectionId)
+    onRefresh()
+  }
+
+  async function handleRenameSection() {
+    if (!renamingSection || !renameValue.trim()) { setRenamingSection(null); return }
+    await supabase.from('sections').update({ name: renameValue.trim() }).eq('id', renamingSection)
+    setRenamingSection(null)
     onRefresh()
   }
 
@@ -301,27 +365,61 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           const sectionTasks = effectiveTasks.filter(t => t.section_id === section.id)
           const isCollapsed = collapsed[section.id]
           const isHovered = hoveredSection === section.id
+          const menuOpen = openMenuSection === section.id
+          const isRenaming = renamingSection === section.id
           return (
             <div key={section.id}>
               <div
                 className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50"
-                onClick={() => toggle(section.id)}
+                onClick={() => !isRenaming && toggle(section.id)}
                 onMouseEnter={() => setHoveredSection(section.id)}
                 onMouseLeave={() => setHoveredSection(null)}
               >
                 {isCollapsed
-                  ? <ChevronRight size={14} className="text-slate-400" />
-                  : <ChevronDown size={14} className="text-slate-400" />}
-                <span className="text-sm font-semibold text-slate-600">{section.name}</span>
-                <span className="text-xs text-slate-400">({sectionTasks.length})</span>
-                {isHovered && (
-                  <button
-                    onClick={e => { e.stopPropagation(); handleDeleteSection(section.id, sectionTasks.length) }}
-                    className="ml-auto p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-400 transition-colors"
-                    title="Delete section"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  ? <ChevronRight size={14} className="text-slate-400 shrink-0" />
+                  : <ChevronDown size={14} className="text-slate-400 shrink-0" />}
+
+                {isRenaming ? (
+                  <input
+                    ref={renameInputRef}
+                    value={renameValue}
+                    onChange={e => setRenameValue(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { e.preventDefault(); handleRenameSection() }
+                      if (e.key === 'Escape') setRenamingSection(null)
+                    }}
+                    onBlur={handleRenameSection}
+                    onClick={e => e.stopPropagation()}
+                    className="flex-1 text-sm font-semibold text-slate-700 bg-transparent border-b border-primary-400 outline-none py-0 min-w-0"
+                  />
+                ) : (
+                  <>
+                    <span className="text-sm font-semibold text-slate-600">{section.name}</span>
+                    <span className="text-xs text-slate-400">({sectionTasks.length})</span>
+                  </>
+                )}
+
+                {(isHovered || menuOpen) && !isRenaming && (
+                  <div className="ml-auto relative" onClick={e => e.stopPropagation()}>
+                    <button
+                      onClick={() => setOpenMenuSection(menuOpen ? null : section.id)}
+                      className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                      title="More section actions"
+                    >
+                      <MoreHorizontal size={14} />
+                    </button>
+                    {menuOpen && (
+                      <SectionMenu
+                        onRename={() => {
+                          setOpenMenuSection(null)
+                          setRenameValue(section.name)
+                          setRenamingSection(section.id)
+                        }}
+                        onDelete={() => handleDeleteSection(section.id, sectionTasks.length)}
+                        onClose={() => setOpenMenuSection(null)}
+                      />
+                    )}
+                  </div>
                 )}
               </div>
 
