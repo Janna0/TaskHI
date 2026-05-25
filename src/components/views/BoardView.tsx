@@ -1,4 +1,24 @@
 import { useState, useRef, useEffect } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragEndEvent,
+  type DragStartEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  horizontalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section, BoardColumnConfig } from '../../types'
@@ -22,7 +42,7 @@ const COLUMN_STYLES: Record<string, { header: string; dot: string }> = {
   done:        { header: 'bg-green-50',  dot: 'bg-green-500' },
 }
 
-function colStyle(status: string) {
+function getColStyle(status: string) {
   return COLUMN_STYLES[status] ?? { header: 'bg-purple-50', dot: 'bg-purple-500' }
 }
 
@@ -38,197 +58,152 @@ interface Props {
   onRefresh: () => void
 }
 
-export function BoardView({ sections, tasks, projectId, memberMap, columns, onTaskClick, onTaskMoved, onColumnsChanged, onRefresh }: Props) {
-  const [createStatus, setCreateStatus] = useState<string | null>(null)
-  // Task dragging
-  const [draggingTaskId, setDraggingTaskId] = useState<string | null>(null)
-  const [dragOverStatus, setDragOverStatus] = useState<string | null>(null)
-  // Column dragging
-  const [draggingColStatus, setDraggingColStatus] = useState<string | null>(null)
-  const [dragOverColStatus, setDragOverColStatus] = useState<string | null>(null)
+// ── Sortable task card ───────────────────────────────────────────────────────────────────
 
-  const [showAddColumn, setShowAddColumn] = useState(false)
-  const addRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (addRef.current && !addRef.current.contains(e.target as Node)) setShowAddColumn(false)
-    }
-    document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
-  }, [])
-
-  // ── Task drop ──
-  function handleTaskDrop(targetStatus: string) {
-    if (!draggingTaskId) return
-    const task = tasks.find(t => t.id === draggingTaskId)
-    setDraggingTaskId(null)
-    setDragOverStatus(null)
-    if (!task || task.status === targetStatus) return
-    onTaskMoved(draggingTaskId, targetStatus)
-    supabase.from('tasks').update({ status: targetStatus }).eq('id', draggingTaskId)
-  }
-
-  // ── Column drop ──
-  function handleColumnDrop(targetStatus: string) {
-    if (!draggingColStatus || draggingColStatus === targetStatus) return
-    const from = columns.findIndex(c => c.status === draggingColStatus)
-    const to   = columns.findIndex(c => c.status === targetStatus)
-    if (from === -1 || to === -1) return
-    const next = [...columns]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    onColumnsChanged(next)
-    setDraggingColStatus(null)
-    setDragOverColStatus(null)
-  }
-
-  function renameColumn(status: string, newName: string) {
-    onColumnsChanged(columns.map(c => c.status === status ? { ...c, name: newName } : c))
-  }
-
-  function removeColumn(status: string) {
-    onColumnsChanged(columns.filter(c => c.status !== status))
-  }
-
-  function addColumn(col: BoardColumnConfig) {
-    onColumnsChanged([...columns, col])
-    setShowAddColumn(false)
-  }
-
-  const usedStatuses = new Set(columns.map(c => c.status))
-  const availableToAdd = ALL_STATUSES.filter(s => !usedStatuses.has(s.status))
+function SortableTaskCard({ task, memberMap, onClick }: {
+  task: Task
+  memberMap: Record<string, { name: string; color: string }>
+  onClick: () => void
+}) {
+  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { type: 'task' },
+  })
 
   return (
-    <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
-      {columns.map(col => {
-        const colTasks = tasks.filter(t => t.status === col.status)
-        const style = colStyle(col.status)
-        const isTaskOver   = !draggingColStatus && dragOverStatus === col.status
-        const isColOver    = draggingColStatus && dragOverColStatus === col.status && draggingColStatus !== col.status
-        const isBeingDragged = draggingColStatus === col.status
-
-        return (
-          <div
-            key={col.status}
-            className={cn(
-              'flex flex-col w-64 shrink-0 transition-opacity',
-              isBeingDragged && 'opacity-40'
-            )}
-            onDragOver={e => {
-              e.preventDefault()
-              if (draggingColStatus) setDragOverColStatus(col.status)
-              else setDragOverStatus(col.status)
-            }}
-            onDragLeave={e => {
-              if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                setDragOverStatus(null)
-                setDragOverColStatus(null)
-              }
-            }}
-            onDrop={e => {
-              e.preventDefault()
-              if (draggingColStatus) handleColumnDrop(col.status)
-              else handleTaskDrop(col.status)
-            }}
-          >
-            <ColumnHeader
-              col={col}
-              count={colTasks.length}
-              style={style}
-              isColOver={!!isColOver}
-              onRename={name => renameColumn(col.status, name)}
-              onRemove={() => removeColumn(col.status)}
-              onAddTask={() => setCreateStatus(col.status)}
-              onColumnDragStart={() => setDraggingColStatus(col.status)}
-              onColumnDragEnd={() => { setDraggingColStatus(null); setDragOverColStatus(null) }}
-            />
-
-            <div
-              className={cn(
-                'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors',
-                isTaskOver
-                  ? 'bg-primary-50 outline outline-2 outline-primary-300 outline-offset-[-2px]'
-                  : 'bg-slate-100/60'
-              )}
-              style={{ minHeight: '120px' }}
-            >
-              {colTasks.map(task => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  memberMap={memberMap}
-                  isDragging={draggingTaskId === task.id}
-                  onClick={() => onTaskClick(task)}
-                  onDragStart={() => setDraggingTaskId(task.id)}
-                  onDragEnd={() => { setDraggingTaskId(null); setDragOverStatus(null) }}
-                />
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      {...listeners}
+      {...attributes}
+      onClick={onClick}
+      className={cn(
+        'bg-white rounded-lg p-3 border border-slate-100 cursor-grab active:cursor-grabbing transition-all select-none',
+        isDragging ? 'opacity-40 shadow-none scale-95' : 'shadow-sm hover:shadow-md hover:border-primary-200'
+      )}
+    >
+      <p className={cn(
+        'text-sm font-medium mb-2.5 leading-snug',
+        task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'
+      )}>
+        {task.title}
+      </p>
+      <div className="flex items-center justify-between gap-1 flex-wrap">
+        <PriorityBadge priority={task.priority} />
+        <div className="flex items-center gap-1.5">
+          {task.due_date && (
+            <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+              {formatDate(task.due_date)}
+            </span>
+          )}
+          {assignees.length > 0 && (
+            <div className="flex -space-x-1">
+              {assignees.slice(0, 2).map((a, i) => (
+                <div key={i} className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white"
+                  style={{ background: a.color }} title={a.name}>
+                  {getInitials(a.name)}
+                </div>
               ))}
-              {colTasks.length === 0 && !isTaskOver && (
-                <div className="flex items-center justify-center h-16 text-xs text-slate-400">
-                  Drop tasks here
+              {assignees.length > 2 && (
+                <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">
+                  +{assignees.length - 2}
                 </div>
               )}
             </div>
-          </div>
-        )
-      })}
-
-      {/* Add column */}
-      <div ref={addRef} className="shrink-0 w-56">
-        {showAddColumn && availableToAdd.length > 0 ? (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
-            <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Add column</p>
-            {availableToAdd.map(s => {
-              const style = colStyle(s.status)
-              return (
-                <button
-                  key={s.status}
-                  onClick={() => addColumn(s)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                >
-                  <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', style.dot)} />
-                  {s.name}
-                </button>
-              )
-            })}
-          </div>
-        ) : availableToAdd.length > 0 ? (
-          <button
-            onClick={() => setShowAddColumn(true)}
-            className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"
-          >
-            <Plus size={15} /> Add column
-          </button>
-        ) : null}
+          )}
+        </div>
       </div>
-
-      {createStatus !== null && (
-        <CreateTaskModal
-          open={true}
-          onClose={() => setCreateStatus(null)}
-          onCreated={() => { setCreateStatus(null); onRefresh() }}
-          projectId={projectId}
-          sections={sections}
-          defaultSectionId={sections[0]?.id ?? null}
-        />
-      )}
     </div>
   )
 }
 
-// ─── Column Header ────────────────────────────────────────────────────────────
+// ── Task ghost for DragOverlay ──────────────────────────────────────────────────────────────
 
-function ColumnHeader({ col, count, style, isColOver, onRename, onRemove, onAddTask, onColumnDragStart, onColumnDragEnd }: {
+function TaskCardGhost({ task }: { task: Task }) {
+  return (
+    <div className="bg-white rounded-lg p-3 border border-primary-200 shadow-xl opacity-95 w-64">
+      <p className="text-sm font-medium text-slate-700 leading-snug">{task.title}</p>
+    </div>
+  )
+}
+
+// ── Sortable column ───────────────────────────────────────────────────────────────────────
+
+function SortableColumn({ col, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive }: {
   col: BoardColumnConfig
-  count: number
-  style: { header: string; dot: string }
-  isColOver: boolean
+  taskIds: string[]
+  tasks: Task[]
+  memberMap: Record<string, { name: string; color: string }>
+  onTaskClick: (task: Task) => void
   onRename: (name: string) => void
   onRemove: () => void
   onAddTask: () => void
-  onColumnDragStart: () => void
-  onColumnDragEnd: () => void
+  isTaskDragActive: boolean
+}) {
+  const appearance = getColStyle(col.status)
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: col.status,
+    data: { type: 'column' },
+  })
+  const colTasks = taskIds.map(id => tasks.find(t => t.id === id)).filter((t): t is Task => !!t)
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}
+    >
+      <ColumnHeader
+        col={col}
+        count={colTasks.length}
+        appearance={appearance}
+        onRename={onRename}
+        onRemove={onRemove}
+        onAddTask={onAddTask}
+        dragListeners={listeners}
+        dragAttributes={attributes}
+      />
+
+      <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+        <div
+          className={cn(
+            'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors',
+            isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60'
+          )}
+          style={{ minHeight: '120px' }}
+        >
+          {colTasks.map(task => (
+            <SortableTaskCard
+              key={task.id}
+              task={task}
+              memberMap={memberMap}
+              onClick={() => onTaskClick(task)}
+            />
+          ))}
+          {colTasks.length === 0 && (
+            <div className="flex items-center justify-center h-16 text-xs text-slate-400">
+              Drop tasks here
+            </div>
+          )}
+        </div>
+      </SortableContext>
+    </div>
+  )
+}
+
+// ── Column header ───────────────────────────────────────────────────────────────────────
+
+function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes }: {
+  col: BoardColumnConfig
+  count: number
+  appearance: { header: string; dot: string }
+  onRename: (name: string) => void
+  onRemove: () => void
+  onAddTask: () => void
+  dragListeners: Record<string, unknown> | undefined
+  dragAttributes: Record<string, unknown> | undefined
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(col.name)
@@ -244,24 +219,18 @@ function ColumnHeader({ col, count, style, isColOver, onRename, onRemove, onAddT
   }
 
   return (
-    <div className={cn(
-      'flex items-center justify-between px-2 py-2.5 rounded-t-xl transition-all',
-      style.header,
-      isColOver && 'ring-2 ring-primary-400 ring-inset'
-    )}>
+    <div className={cn('flex items-center justify-between px-2 py-2.5 rounded-t-xl', appearance.header)}>
       <div className="flex items-center gap-1.5 min-w-0">
-        {/* Drag handle */}
         <div
-          draggable
-          onDragStart={e => { e.stopPropagation(); onColumnDragStart() }}
-          onDragEnd={onColumnDragEnd}
-          className="cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0"
-          title="Drag to reorder"
+          {...dragListeners}
+          {...dragAttributes}
+          className="cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0 touch-none"
+          title="Drag to reorder column"
         >
           <GripVertical size={14} />
         </div>
 
-        <span className={cn('w-2 h-2 rounded-full shrink-0', style.dot)} />
+        <span className={cn('w-2 h-2 rounded-full shrink-0', appearance.dot)} />
 
         {editing ? (
           <input
@@ -322,62 +291,268 @@ function ColumnHeader({ col, count, style, isColOver, onRename, onRemove, onAddT
   )
 }
 
-// ─── Task Card ────────────────────────────────────────────────────────────────
+// ── Main BoardView ───────────────────────────────────────────────────────────────────
 
-interface CardProps {
-  task: Task
-  memberMap: Record<string, { name: string; color: string }>
-  isDragging: boolean
-  onClick: () => void
-  onDragStart: () => void
-  onDragEnd: () => void
-}
+export function BoardView({ sections, tasks, projectId, memberMap, columns, onTaskClick, onTaskMoved, onColumnsChanged, onRefresh }: Props) {
+  const [createStatus, setCreateStatus] = useState<string | null>(null)
+  const [showAddColumn, setShowAddColumn] = useState(false)
+  const addRef = useRef<HTMLDivElement>(null)
 
-function TaskCard({ task, memberMap, isDragging, onClick, onDragStart, onDragEnd }: CardProps) {
-  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
-  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  // Local column order (optimistic during column drag)
+  const [localColumns, setLocalColumns] = useState<BoardColumnConfig[]>(columns)
+  const localColumnsRef = useRef<BoardColumnConfig[]>(columns)
+
+  // Local task order per status
+  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({})
+  const taskOrderRef = useRef<Record<string, string[]>>({})
+  const isDraggingRef = useRef(false)
+
+  // Active drag info
+  const [activeDragType, setActiveDragType] = useState<'task' | 'column' | null>(null)
+  const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
+  const [activeColStatus, setActiveColStatus] = useState<string | null>(null)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+  )
+
+  // Sync columns prop → local (skip during drag)
+  useEffect(() => {
+    if (isDraggingRef.current) return
+    setLocalColumns(columns)
+    localColumnsRef.current = columns
+  }, [columns])
+
+  // Sync tasks prop → taskOrder (skip during drag)
+  useEffect(() => {
+    if (isDraggingRef.current) return
+    const order: Record<string, string[]> = {}
+    for (const col of columns) {
+      order[col.status] = tasks
+        .filter(t => t.status === col.status)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map(t => t.id)
+    }
+    setTaskOrder(order)
+    taskOrderRef.current = order
+  }, [tasks, columns])
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (addRef.current && !addRef.current.contains(e.target as Node)) setShowAddColumn(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  function findStatusForTask(taskId: string): string {
+    for (const [status, ids] of Object.entries(taskOrderRef.current)) {
+      if (ids.includes(taskId)) return status
+    }
+    return ''
+  }
+
+  function handleDragStart(event: DragStartEvent) {
+    isDraggingRef.current = true
+    const type = event.active.data.current?.type as 'task' | 'column'
+    setActiveDragType(type)
+    if (type === 'task') setActiveTaskId(event.active.id as string)
+    if (type === 'column') setActiveColStatus(event.active.id as string)
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    const type = active.data.current?.type
+
+    if (type === 'task') {
+      const activeId = active.id as string
+      const overId = over.id as string
+      const activeStatus = findStatusForTask(activeId)
+      const overType = over.data.current?.type
+
+      // overId is either a task ID or a column status
+      const targetStatus = overType === 'column' ? overId : findStatusForTask(overId)
+      if (!targetStatus) return
+
+      const cur = taskOrderRef.current
+
+      if (activeStatus === targetStatus) {
+        // Within-column reorder
+        const ids = cur[activeStatus] ?? []
+        const from = ids.indexOf(activeId)
+        const to = ids.indexOf(overId)
+        if (from !== -1 && to !== -1 && from !== to) {
+          const newIds = arrayMove(ids, from, to)
+          const newOrder = { ...cur, [activeStatus]: newIds }
+          taskOrderRef.current = newOrder
+          setTaskOrder(newOrder)
+        }
+      } else {
+        // Cross-column move
+        const newOrder = { ...cur }
+        newOrder[activeStatus] = (newOrder[activeStatus] ?? []).filter(id => id !== activeId)
+        const targetIds = [...(newOrder[targetStatus] ?? [])]
+        const overIdx = targetIds.indexOf(overId)
+        targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
+        newOrder[targetStatus] = targetIds
+        taskOrderRef.current = newOrder
+        setTaskOrder(newOrder)
+      }
+    } else if (type === 'column') {
+      // Only reorder when over another column (not a task card)
+      if (over.data.current?.type !== 'column') return
+      const cols = localColumnsRef.current
+      const from = cols.findIndex(c => c.status === active.id)
+      const to = cols.findIndex(c => c.status === over.id)
+      if (from !== -1 && to !== -1 && from !== to) {
+        const newCols = arrayMove(cols, from, to)
+        localColumnsRef.current = newCols
+        setLocalColumns(newCols)
+      }
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    isDraggingRef.current = false
+    const type = event.active.data.current?.type
+    setActiveDragType(null)
+    setActiveTaskId(null)
+    setActiveColStatus(null)
+
+    if (type === 'task') {
+      const taskId = event.active.id as string
+      const originalTask = tasks.find(t => t.id === taskId)
+      if (!originalTask) return
+
+      const finalStatus = findStatusForTask(taskId)
+      const finalIds = taskOrderRef.current[finalStatus] ?? []
+
+      if (finalStatus !== originalTask.status) {
+        onTaskMoved(taskId, finalStatus)
+      }
+
+      await Promise.all(
+        finalIds.map((id, idx) => {
+          const upd: Record<string, unknown> = { position: idx }
+          if (id === taskId && finalStatus !== originalTask.status) upd.status = finalStatus
+          return supabase.from('tasks').update(upd).eq('id', id)
+        })
+      )
+    } else if (type === 'column') {
+      onColumnsChanged(localColumnsRef.current)
+    }
+  }
+
+  function renameColumn(status: string, newName: string) {
+    const next = localColumnsRef.current.map(c => c.status === status ? { ...c, name: newName } : c)
+    localColumnsRef.current = next
+    setLocalColumns(next)
+    onColumnsChanged(next)
+  }
+
+  function removeColumn(status: string) {
+    const next = localColumnsRef.current.filter(c => c.status !== status)
+    localColumnsRef.current = next
+    setLocalColumns(next)
+    onColumnsChanged(next)
+  }
+
+  function addColumn(col: BoardColumnConfig) {
+    const next = [...localColumnsRef.current, col]
+    localColumnsRef.current = next
+    setLocalColumns(next)
+    onColumnsChanged(next)
+    setShowAddColumn(false)
+  }
+
+  const columnIds = localColumns.map(c => c.status)
+  const usedStatuses = new Set(localColumns.map(c => c.status))
+  const availableToAdd = ALL_STATUSES.filter(s => !usedStatuses.has(s.status))
+  const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) ?? null : null
+
   return (
-    <div
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
-      onClick={onClick}
-      className={cn(
-        'bg-white rounded-lg p-3 border border-slate-100 cursor-grab active:cursor-grabbing transition-all select-none',
-        isDragging ? 'opacity-40 shadow-none scale-95' : 'shadow-sm hover:shadow-md hover:border-primary-200'
-      )}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
     >
-      <p className={cn(
-        'text-sm font-medium mb-2.5 leading-snug',
-        task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'
-      )}>
-        {task.title}
-      </p>
-      <div className="flex items-center justify-between gap-1 flex-wrap">
-        <PriorityBadge priority={task.priority} />
-        <div className="flex items-center gap-1.5">
-          {task.due_date && (
-            <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-              {formatDate(task.due_date)}
-            </span>
-          )}
-          {assignees.length > 0 && (
-            <div className="flex -space-x-1">
-              {assignees.slice(0, 2).map((a, i) => (
-                <div key={i} className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white"
-                  style={{ background: a.color }} title={a.name}>
-                  {getInitials(a.name)}
-                </div>
-              ))}
-              {assignees.length > 2 && (
-                <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">
-                  +{assignees.length - 2}
-                </div>
-              )}
-            </div>
-          )}
+      <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
+        <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
+          {localColumns.map(col => (
+            <SortableColumn
+              key={col.status}
+              col={col}
+              taskIds={taskOrder[col.status] ?? []}
+              tasks={tasks}
+              memberMap={memberMap}
+              onTaskClick={onTaskClick}
+              onRename={name => renameColumn(col.status, name)}
+              onRemove={() => removeColumn(col.status)}
+              onAddTask={() => setCreateStatus(col.status)}
+              isTaskDragActive={activeDragType === 'task'}
+            />
+          ))}
+
+          {/* Add column */}
+          <div ref={addRef} className="shrink-0 w-56">
+            {showAddColumn && availableToAdd.length > 0 ? (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
+                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Add column</p>
+                {availableToAdd.map(s => {
+                  const sStyle = getColStyle(s.status)
+                  return (
+                    <button
+                      key={s.status}
+                      onClick={() => addColumn(s)}
+                      className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', sStyle.dot)} />
+                      {s.name}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : availableToAdd.length > 0 ? (
+              <button
+                onClick={() => setShowAddColumn(true)}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"
+              >
+                <Plus size={15} /> Add column
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
-    </div>
+      </SortableContext>
+
+      <DragOverlay dropAnimation={null}>
+        {activeDragType === 'task' && activeTask && (
+          <TaskCardGhost task={activeTask} />
+        )}
+        {activeDragType === 'column' && activeColStatus && (
+          <div className="w-64 bg-white/90 rounded-xl shadow-2xl border border-slate-200 p-3 flex items-center gap-2">
+            <GripVertical size={14} className="text-slate-300" />
+            <span className="text-sm font-semibold text-slate-600">
+              {localColumns.find(c => c.status === activeColStatus)?.name ?? 'Column'}
+            </span>
+          </div>
+        )}
+      </DragOverlay>
+
+      {createStatus !== null && (
+        <CreateTaskModal
+          open={true}
+          onClose={() => setCreateStatus(null)}
+          onCreated={() => { setCreateStatus(null); onRefresh() }}
+          projectId={projectId}
+          sections={sections}
+          defaultSectionId={sections[0]?.id ?? null}
+        />
+      )}
+    </DndContext>
   )
 }
