@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Project } from '../../types'
 import { CreateProjectModal } from '../projects/CreateProjectModal'
+import { withFavorites } from '../../lib/favorites'
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user } = useAuth()
@@ -13,7 +14,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!user) return
     loadProjects()
-    // Small delay so Supabase write propagates before we re-fetch
     const handler = () => setTimeout(() => loadProjects(), 400)
     window.addEventListener('taskhi:projects-changed', handler)
     return () => window.removeEventListener('taskhi:projects-changed', handler)
@@ -21,7 +21,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   async function loadProjects() {
     const { data } = await supabase.rpc('get_my_projects')
-    if (data) setProjects(data)
+    if (data) setProjects(withFavorites(data, user!.id))
   }
 
   return (

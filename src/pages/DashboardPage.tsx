@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { Task, Project } from '../types'
 import { StatusBadge, PriorityBadge } from '../components/ui/Badge'
 import { formatDate, isOverdue, cn } from '../lib/utils'
+import { withFavorites } from '../lib/favorites'
 
 export function DashboardPage() {
   const { user, profile } = useAuth()
@@ -36,7 +37,7 @@ export function DashboardPage() {
         .limit(6),
     ])
     if (t) setTasks(t)
-    if (p) setProjects(p)
+    if (p) setProjects(withFavorites(p, user!.id))
     setLoading(false)
   }
 

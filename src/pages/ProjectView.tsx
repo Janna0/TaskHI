@@ -10,6 +10,7 @@ import { BoardView } from '../components/views/BoardView'
 import { TaskDetailPanel } from '../components/tasks/TaskDetailPanel'
 import { CreateTaskModal } from '../components/tasks/CreateTaskModal'
 import { cn, isOverdue, getInitials } from '../lib/utils'
+import { loadFavoriteIds, setFavorite } from '../lib/favorites'
 
 type View = 'overview' | 'list' | 'board'
 
@@ -54,7 +55,6 @@ export function ProjectView() {
     loadMembers()
   }, [id])
 
-  // showLoader=true only on first load; pass false for background refreshes
   async function loadAll(showLoader = false) {
     if (showLoader) setLoading(true)
     try {
@@ -65,7 +65,8 @@ export function ProjectView() {
       ])
       if (projRes.data) {
         const proj = projRes.data as unknown as Project
-        setProject(proj)
+        // Apply per-user favorite from localStorage
+        setProject({ ...proj, is_favorite: loadFavoriteIds(user!.id).has(proj.id) })
         const { data: ownerData } = await supabase
           .from('profiles')
           .select('id, name, email, avatar_url, avatar_color, created_at')
@@ -102,11 +103,11 @@ export function ProjectView() {
     setMembers(prev => prev.filter(m => m.id !== memberId))
   }
 
-  async function toggleFavorite() {
+  function toggleFavorite() {
     if (!project) return
     const next = !project.is_favorite
     setProject(p => p ? { ...p, is_favorite: next } : p)
-    await supabase.from('projects').update({ is_favorite: next }).eq('id', project.id)
+    setFavorite(user!.id, project.id, next)
     window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 

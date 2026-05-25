@@ -7,6 +7,7 @@ import { Project } from '../types'
 import { Button } from '../components/ui/Button'
 import { CreateProjectModal } from '../components/projects/CreateProjectModal'
 import { cn } from '../lib/utils'
+import { withFavorites, setFavorite } from '../lib/favorites'
 
 export function ProjectsPage() {
   const { user } = useAuth()
@@ -26,14 +27,15 @@ export function ProjectsPage() {
       .eq('owner_id', user!.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
-    if (data) setProjects(data)
+    if (data) setProjects(withFavorites(data, user!.id))
     setLoading(false)
   }
 
-  async function toggleFavorite(e: React.MouseEvent, project: Project) {
+  function toggleFavorite(e: React.MouseEvent, project: Project) {
     e.preventDefault()
-    await supabase.from('projects').update({ is_favorite: !project.is_favorite }).eq('id', project.id)
-    setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: !p.is_favorite } : p))
+    const next = !project.is_favorite
+    setFavorite(user!.id, project.id, next)
+    setProjects(prev => prev.map(p => p.id === project.id ? { ...p, is_favorite: next } : p))
     window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
   }
 
