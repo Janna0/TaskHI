@@ -57,16 +57,26 @@ function CommentsSection({ taskId, projectId, memberMap }: {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null)
   const [mentionStart, setMentionStart] = useState(0)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  // Tracks the taskId this component is currently showing — used to discard
+  // results from in-flight async calls that belong to a previous task.
+  const activeTaskId = useRef(taskId)
 
-  useEffect(() => { loadComments() }, [taskId])
+  useEffect(() => {
+    activeTaskId.current = taskId
+    setComments([])  // clear immediately so old comments don't flash
+    loadComments(taskId)
+  }, [taskId])
 
-  async function loadComments() {
+  async function loadComments(id: string) {
     const { data } = await supabase
       .from('task_comments')
       .select('*, author:profiles(id, name, avatar_color)')
-      .eq('task_id', taskId)
+      .eq('task_id', id)
       .order('created_at', { ascending: true })
-    if (data) setComments(data as Comment[])
+    // Discard results if the user has already switched to a different task
+    if (data && activeTaskId.current === id) {
+      setComments(data as Comment[])
+    }
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
@@ -96,15 +106,21 @@ function CommentsSection({ taskId, projectId, memberMap }: {
     const trimmed = input.trim()
     if (!trimmed || !user || submitting) return
     setSubmitting(true)
+    const submittedTaskId = taskId  // capture before any await
 
     const { data: commentData } = await supabase
       .from('task_comments')
-      .insert({ task_id: taskId, author_id: user.id, content: trimmed })
-      .select()
+      .insert({ task_id: submittedTaskId, author_id: user.id, content: trimmed })
+      .select('*, author:profiles(id, name, avatar_color)')
       .single()
 
-    // Notify mentioned members
     if (commentData) {
+      // Only update the comment list if we're still showing the same task
+      if (activeTaskId.current === submittedTaskId) {
+        setComments(prev => [...prev, commentData as Comment])
+      }
+
+      // Notify mentioned members
       const mentions = [...trimmed.matchAll(/@(\w+)/g)].map(m => m[1].toLowerCase())
       const toNotify = [...new Set(
         Object.entries(memberMap)
@@ -117,7 +133,7 @@ function CommentsSection({ taskId, projectId, memberMap }: {
             user_id: uid,
             actor_id: user.id,
             type: 'mention',
-            task_id: taskId,
+            task_id: submittedTaskId,
             project_id: projectId,
             comment_id: commentData.id,
           }))
@@ -127,7 +143,6 @@ function CommentsSection({ taskId, projectId, memberMap }: {
 
     setInput('')
     setSubmitting(false)
-    loadComments()
   }
 
   const mentionMatches = mentionQuery !== null
@@ -161,7 +176,7 @@ function CommentsSection({ taskId, projectId, memberMap }: {
                         <button
                           onClick={async () => {
                             await supabase.from('task_comments').delete().eq('id', c.id)
-                            loadComments()
+                            loadComments(taskId)
                           }}
                           className="opacity-0 group-hover:opacity-100 ml-auto text-slate-300 hover:text-red-400 transition-all"
                         >
