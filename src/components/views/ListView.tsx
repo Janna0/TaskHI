@@ -11,7 +11,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core'
-import { Plus, ChevronDown, ChevronRight, GripVertical } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, GripVertical, Trash2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { StatusBadge, PriorityBadge } from '../ui/Badge'
@@ -133,8 +133,7 @@ function TaskRow({
   onClick,
 }: {
   task: Task
-  memberMap: Record<string, { name: string; color: string }>
-  onClick: () => void
+  memberMap: Record<string, { name: string; color: string }>  onClick: () => void
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
@@ -236,6 +235,17 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     onRefresh()
   }
 
+  async function handleDeleteSection(sectionId: string, taskCount: number) {
+    const msg = taskCount > 0
+      ? `Delete this section? The ${taskCount} task${taskCount > 1 ? 's' : ''} inside will be moved to "No section".`
+      : 'Delete this section?'
+    if (!confirm(msg)) return
+    // Unassign tasks first, then delete the section
+    await supabase.from('tasks').update({ section_id: null }).eq('section_id', sectionId)
+    await supabase.from('sections').delete().eq('id', sectionId)
+    onRefresh()
+  }
+
   async function handleCreateSection() {
     if (!newSectionName.trim()) return
     const { error } = await supabase.from('sections').insert({
@@ -292,7 +302,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           return (
             <div key={section.id}>
               <div
-                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50"
+                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50 group"
                 onClick={() => toggle(section.id)}
               >
                 {isCollapsed
@@ -300,6 +310,13 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   : <ChevronDown size={14} className="text-slate-400" />}
                 <span className="text-sm font-semibold text-slate-600">{section.name}</span>
                 <span className="text-xs text-slate-400">({sectionTasks.length})</span>
+                <button
+                  onClick={e => { e.stopPropagation(); handleDeleteSection(section.id, sectionTasks.length) }}
+                  className="ml-auto opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-400 transition-all"
+                  title="Delete section"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
 
               {!isCollapsed && (
