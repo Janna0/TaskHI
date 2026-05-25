@@ -396,30 +396,29 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <>
                     <span className="text-sm font-semibold text-slate-600">{section.name}</span>
                     <span className="text-xs text-slate-400">({sectionTasks.length})</span>
-                  </>
-                )}
-
-                {(isHovered || menuOpen) && !isRenaming && (
-                  <div className="ml-auto relative" onClick={e => e.stopPropagation()}>
-                    <button
-                      onClick={() => setOpenMenuSection(menuOpen ? null : section.id)}
-                      className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
-                      title="More section actions"
-                    >
-                      <MoreHorizontal size={14} />
-                    </button>
-                    {menuOpen && (
-                      <SectionMenu
-                        onRename={() => {
-                          setOpenMenuSection(null)
-                          setRenameValue(section.name)
-                          setRenamingSection(section.id)
-                        }}
-                        onDelete={() => handleDeleteSection(section.id, sectionTasks.length)}
-                        onClose={() => setOpenMenuSection(null)}
-                      />
+                    {(isHovered || menuOpen) && (
+                      <div className="relative" onClick={e => e.stopPropagation()}>
+                        <button
+                          onClick={() => setOpenMenuSection(menuOpen ? null : section.id)}
+                          className="p-1 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                          title="More section actions"
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                        {menuOpen && (
+                          <SectionMenu
+                            onRename={() => {
+                              setOpenMenuSection(null)
+                              setRenameValue(section.name)
+                              setRenamingSection(section.id)
+                            }}
+                            onDelete={() => handleDeleteSection(section.id, sectionTasks.length)}
+                            onClose={() => setOpenMenuSection(null)}
+                          />
+                        )}
+                      </div>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
 
