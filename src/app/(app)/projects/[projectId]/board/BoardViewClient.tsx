@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, closestCenter,
-  type DragEndEvent, type DragStartEvent, type DragOverEvent,
+  useSensor, useSensors, useDroppable, pointerWithin,
+  type DragEndEvent, type DragStartEvent, type DragOverEvent, type DragCancelEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
@@ -59,7 +59,7 @@ function TaskCard({ task }: { task: Task }) {
 
 function TaskCardGhost({ task }: { task: Task }) {
   return (
-    <div className="bg-white border border-[#6366f1]/30 rounded-lg p-3 shadow-lg">
+    <div className="bg-white border border-[#6366f1]/30 rounded-lg p-3 shadow-lg opacity-90">
       <p className="text-sm text-[#334155] leading-snug">{task.title}</p>
     </div>
   );
@@ -175,7 +175,7 @@ function AddColumnInput({ projectId, sectionCount, onSaved, onCancel }: {
   );
 }
 
-// ─── Column droppable wrapper ─────────────────────────────────────────────────
+// ─── Column ───────────────────────────────────────────────────────────────────
 
 function Column({ section, orderedTasks, dot, addingHere, projectId, onAddTask, onTaskAdded }: {
   section: Section;
@@ -191,15 +191,11 @@ function Column({ section, orderedTasks, dot, addingHere, projectId, onAddTask, 
 
   return (
     <div className="flex-shrink-0 w-64 flex flex-col bg-[#f8fafc] border border-[#e2e8f0] rounded-xl overflow-hidden">
-      {/* Column header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e2e8f0]">
         <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
         <span className="text-xs font-semibold text-[#334155] flex-1 truncate">{section.name}</span>
         <span className="text-xs text-[#94a3b8] bg-white border border-[#e2e8f0] rounded px-1.5 py-0.5">{orderedTasks.length}</span>
-        <button
-          onClick={onAddTask}
-          className="text-[#94a3b8] hover:text-[#6366f1] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors"
-        >
+        <button onClick={onAddTask} className="text-[#94a3b8] hover:text-[#6366f1] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors">
           <Plus className="h-3.5 w-3.5" />
         </button>
         <button className="text-[#94a3b8] hover:text-[#334155] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors">
@@ -207,10 +203,9 @@ function Column({ section, orderedTasks, dot, addingHere, projectId, onAddTask, 
         </button>
       </div>
 
-      {/* Cards */}
       <div
         ref={setNodeRef}
-        className={`flex flex-col gap-2 p-2 flex-1 min-h-[80px] transition-colors ${isOver ? 'bg-[#eff6ff]' : ''}`}
+        className={`flex flex-col gap-2 p-2 flex-1 min-h-[80px] transition-colors ${isOver && orderedTasks.length === 0 ? 'bg-[#eff6ff]' : ''}`}
       >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {orderedTasks.map(task => <TaskCard key={task.id} task={task} />)}
@@ -223,14 +218,13 @@ function Column({ section, orderedTasks, dot, addingHere, projectId, onAddTask, 
             onSaved={onTaskAdded}
           />
         )}
-        {orderedTasks.length === 0 && !addingHere && !isOver && (
-          <div className="flex items-center justify-center border-2 border-dashed border-[#e2e8f0] rounded-lg text-xs text-[#94a3b8] min-h-[60px]">
+        {orderedTasks.length === 0 && !addingHere && (
+          <div className={`flex items-center justify-center border-2 border-dashed rounded-lg text-xs text-[#94a3b8] min-h-[60px] ${isOver ? 'border-[#6366f1]/40' : 'border-[#e2e8f0]'}`}>
             Drop tasks here
           </div>
         )}
       </div>
 
-      {/* Add task footer */}
       <button
         onClick={onAddTask}
         className="flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-[#6366f1] px-3 py-2.5 border-t border-[#e2e8f0] hover:bg-[#f1f5f9] transition-colors"
@@ -239,6 +233,19 @@ function Column({ section, orderedTasks, dot, addingHere, projectId, onAddTask, 
       </button>
     </div>
   );
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function buildTaskOrder(tasks: Task[], sections: Section[]): Record<string, string[]> {
+  const order: Record<string, string[]> = {};
+  for (const s of sections) {
+    order[s.id] = tasks
+      .filter(t => t.section_id === s.id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map(t => t.id);
+  }
+  return order;
 }
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -256,31 +263,27 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
   const [addingColumn, setAddingColumn] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
-  // taskOrder maps sectionId → ordered task IDs
-  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({});
-  const taskOrderRef = useRef<Record<string, string[]>>({});
+  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>(() =>
+    buildTaskOrder(initialTasks, sections)
+  );
+  const taskOrderRef = useRef(taskOrder);
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
     if (isDraggingRef.current) return;
-    const order: Record<string, string[]> = {};
-    for (const s of sections) {
-      order[s.id] = initialTasks
-        .filter(t => t.section_id === s.id)
-        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map(t => t.id);
-    }
-    setTaskOrder(order);
-    taskOrderRef.current = order;
+    const next = buildTaskOrder(initialTasks, sections);
+    taskOrderRef.current = next;
+    setTaskOrder(next);
   }, [initialTasks, sections]);
 
   const taskById = Object.fromEntries(initialTasks.map(t => [t.id, t]));
 
-  function findColumn(taskId: string): string {
+  function findColumn(id: string): string | null {
+    if (id in taskOrderRef.current) return id;
     for (const [sid, ids] of Object.entries(taskOrderRef.current)) {
-      if (ids.includes(taskId)) return sid;
+      if (ids.includes(id)) return sid;
     }
-    return '';
+    return null;
   }
 
   const sensors = useSensors(
@@ -292,56 +295,62 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
 
   function handleDragStart(event: DragStartEvent) {
     isDraggingRef.current = true;
-    const task = initialTasks.find(t => t.id === event.active.id);
-    setActiveTask(task ?? null);
+    setActiveTask(initialTasks.find(t => t.id === event.active.id) ?? null);
   }
 
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
+
     const activeId = active.id as string;
     const overId = over.id as string;
-
     const activeSid = findColumn(activeId);
-    if (!activeSid) return;
+    const targetSid = findColumn(overId);
 
-    const isContainer = overId in taskOrderRef.current;
-    const targetSid = isContainer ? overId : findColumn(overId);
-    if (!targetSid) return;
+    if (!activeSid || !targetSid || activeSid === targetSid) return;
 
+    // Cross-column move
     const cur = taskOrderRef.current;
-    if (activeSid === targetSid) {
-      const ids = cur[activeSid] ?? [];
-      const from = ids.indexOf(activeId);
-      const to = ids.indexOf(overId);
-      if (from !== -1 && to !== -1 && from !== to) {
-        const next = { ...cur, [activeSid]: arrayMove(ids, from, to) };
-        taskOrderRef.current = next;
-        setTaskOrder(next);
-      }
-    } else {
-      const next = { ...cur };
-      next[activeSid] = (next[activeSid] ?? []).filter(id => id !== activeId);
-      const targetIds = [...(next[targetSid] ?? [])];
-      const overIdx = isContainer ? targetIds.length : targetIds.indexOf(overId);
-      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId);
-      next[targetSid] = targetIds;
-      taskOrderRef.current = next;
-      setTaskOrder(next);
-    }
+    const sourceIds = cur[activeSid].filter(id => id !== activeId);
+    const destIds = [...(cur[targetSid] ?? [])];
+    const overIsTask = !(overId in cur);
+    const insertAt = overIsTask ? destIds.indexOf(overId) : destIds.length;
+    destIds.splice(insertAt === -1 ? destIds.length : insertAt, 0, activeId);
+
+    const next = { ...cur, [activeSid]: sourceIds, [targetSid]: destIds };
+    taskOrderRef.current = next;
+    setTaskOrder(next);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     isDraggingRef.current = false;
     setActiveTask(null);
-    const { active } = event;
+
+    const { active, over } = event;
+    if (!over) { refresh(); return; }
+
     const taskId = active.id as string;
+    const overId = over.id as string;
     const originalTask = initialTasks.find(t => t.id === taskId);
     if (!originalTask) return;
 
     const finalSid = findColumn(taskId);
-    if (!finalSid) return;
-    const finalIds = taskOrderRef.current[finalSid] ?? [];
+    if (!finalSid) { refresh(); return; }
+
+    let finalIds = [...(taskOrderRef.current[finalSid] ?? [])];
+
+    // Same-column sort (cross-column was handled in handleDragOver)
+    const overSid = findColumn(overId);
+    if (overSid === finalSid && !(overId in taskOrderRef.current)) {
+      const from = finalIds.indexOf(taskId);
+      const to = finalIds.indexOf(overId);
+      if (from !== -1 && to !== -1 && from !== to) {
+        finalIds = arrayMove(finalIds, from, to);
+        const next = { ...taskOrderRef.current, [finalSid]: finalIds };
+        taskOrderRef.current = next;
+        setTaskOrder(next);
+      }
+    }
 
     const supabase = createClient();
     await Promise.all(
@@ -356,13 +365,22 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
     refresh();
   }
 
+  function handleDragCancel(_event: DragCancelEvent) {
+    isDraggingRef.current = false;
+    setActiveTask(null);
+    const reset = buildTaskOrder(initialTasks, sections);
+    taskOrderRef.current = reset;
+    setTaskOrder(reset);
+  }
+
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div className="flex flex-col h-full">
         {/* Topbar */}

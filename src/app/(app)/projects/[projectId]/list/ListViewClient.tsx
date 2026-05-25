@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, closestCenter,
-  type DragEndEvent, type DragStartEvent, type DragOverEvent,
+  useSensor, useSensors, useDroppable, pointerWithin,
+  type DragEndEvent, type DragStartEvent, type DragOverEvent, type DragCancelEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
@@ -64,7 +64,6 @@ function TaskRow({ task }: { task: Task }) {
   );
 }
 
-// Ghost shown in DragOverlay while dragging
 function TaskGhost({ task }: { task: Task }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-white border border-[#6366f1]/30 rounded-lg shadow-lg">
@@ -146,6 +145,7 @@ function SectionBlock({ section, orderedTasks, projectId, onTaskAdded, onDeleted
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const { setNodeRef, isOver } = useDroppable({ id: section.id });
+  const taskIds = orderedTasks.map(t => t.id);
 
   async function deleteSection() {
     if (!confirm(`Delete section "${section.name}"? Tasks inside will become unsectioned.`)) return;
@@ -155,8 +155,6 @@ function SectionBlock({ section, orderedTasks, projectId, onTaskAdded, onDeleted
     await supabase.from('sections').delete().eq('id', section.id);
     onDeleted();
   }
-
-  const taskIds = orderedTasks.map(t => t.id);
 
   return (
     <div>
@@ -265,9 +263,26 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
   );
 }
 
-// ─── Main component ──────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const NONE = '__none__';
+
+function buildOrder(tasks: Task[], sections: Section[]): Record<string, string[]> {
+  const order: Record<string, string[]> = {};
+  order[NONE] = tasks
+    .filter(t => !t.section_id)
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .map(t => t.id);
+  for (const s of sections) {
+    order[s.id] = tasks
+      .filter(t => t.section_id === s.id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map(t => t.id);
+  }
+  return order;
+}
+
+// ─── Main component ──────────────────────────────────────────────────────────
 
 export default function ListViewClient({ project, sections: initialSections, tasks: initialTasks }: Props) {
   const color = getProjectColor(project.color);
@@ -275,36 +290,30 @@ export default function ListViewClient({ project, sections: initialSections, tas
   const [addingSection, setAddingSection] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
 
-  // localOrder maps sectionId (or NONE for unsectioned) → ordered task IDs
-  const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({});
-  const localOrderRef = useRef<Record<string, string[]>>({});
+  // Lazy-initialized so tasks render immediately on first paint
+  const [localOrder, setLocalOrder] = useState<Record<string, string[]>>(() =>
+    buildOrder(initialTasks, initialSections)
+  );
+  const localOrderRef = useRef(localOrder);
   const isDraggingRef = useRef(false);
 
-  // Sync from props whenever tasks/sections change (skip during drag)
+  // Sync from props when tasks/sections change outside of a drag
   useEffect(() => {
     if (isDraggingRef.current) return;
-    const order: Record<string, string[]> = {};
-    order[NONE] = initialTasks
-      .filter(t => !t.section_id)
-      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-      .map(t => t.id);
-    for (const s of initialSections) {
-      order[s.id] = initialTasks
-        .filter(t => t.section_id === s.id)
-        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map(t => t.id);
-    }
-    setLocalOrder(order);
-    localOrderRef.current = order;
+    const next = buildOrder(initialTasks, initialSections);
+    localOrderRef.current = next;
+    setLocalOrder(next);
   }, [initialTasks, initialSections]);
 
   const taskById = Object.fromEntries(initialTasks.map(t => [t.id, t]));
 
-  function findContainer(taskId: string): string {
+  function findContainer(id: string): string | null {
+    // id might itself be a container key
+    if (id in localOrderRef.current) return id;
     for (const [sid, ids] of Object.entries(localOrderRef.current)) {
-      if (ids.includes(taskId)) return sid;
+      if (ids.includes(id)) return sid;
     }
-    return NONE;
+    return null;
   }
 
   const sensors = useSensors(
@@ -316,57 +325,66 @@ export default function ListViewClient({ project, sections: initialSections, tas
 
   function handleDragStart(event: DragStartEvent) {
     isDraggingRef.current = true;
-    const task = initialTasks.find(t => t.id === event.active.id);
-    setActiveTask(task ?? null);
+    setActiveTask(initialTasks.find(t => t.id === event.active.id) ?? null);
   }
 
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
+
     const activeId = active.id as string;
     const overId = over.id as string;
-
     const activeSid = findContainer(activeId);
-    // over.id is either a container ID (section or NONE) or a task ID
-    const isContainer = overId in localOrderRef.current;
-    const targetSid = isContainer ? overId : findContainer(overId);
+    const targetSid = findContainer(overId);
 
+    if (!activeSid || !targetSid || activeSid === targetSid) return;
+
+    // Cross-container move: remove from source, insert at target position
     const cur = localOrderRef.current;
-    if (activeSid === targetSid) {
-      // Same container: reorder
-      const ids = cur[activeSid] ?? [];
-      const from = ids.indexOf(activeId);
-      const to = ids.indexOf(overId);
-      if (from !== -1 && to !== -1 && from !== to) {
-        const next = { ...cur, [activeSid]: arrayMove(ids, from, to) };
-        localOrderRef.current = next;
-        setLocalOrder(next);
-      }
-    } else {
-      // Cross-container move
-      const next = { ...cur };
-      next[activeSid] = (next[activeSid] ?? []).filter(id => id !== activeId);
-      const targetIds = [...(next[targetSid] ?? [])];
-      const overIdx = isContainer ? targetIds.length : targetIds.indexOf(overId);
-      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId);
-      next[targetSid] = targetIds;
-      localOrderRef.current = next;
-      setLocalOrder(next);
-    }
+    const sourceIds = cur[activeSid].filter(id => id !== activeId);
+    const destIds = [...(cur[targetSid] ?? [])];
+
+    // Insert before the over item if it's a task, otherwise append
+    const overIsTask = !(overId in cur);
+    const insertAt = overIsTask ? destIds.indexOf(overId) : destIds.length;
+    destIds.splice(insertAt === -1 ? destIds.length : insertAt, 0, activeId);
+
+    const next = { ...cur, [activeSid]: sourceIds, [targetSid]: destIds };
+    localOrderRef.current = next;
+    setLocalOrder(next);
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     isDraggingRef.current = false;
     setActiveTask(null);
-    const { active } = event;
+
+    const { active, over } = event;
+    if (!over) { refresh(); return; }
+
     const taskId = active.id as string;
+    const overId = over.id as string;
     const originalTask = initialTasks.find(t => t.id === taskId);
     if (!originalTask) return;
 
     const finalSid = findContainer(taskId);
-    const finalSectionId = finalSid === NONE ? null : finalSid;
-    const finalIds = localOrderRef.current[finalSid] ?? [];
+    if (!finalSid) { refresh(); return; }
 
+    let finalIds = [...(localOrderRef.current[finalSid] ?? [])];
+
+    // Apply same-container sort (cross-container was already done in handleDragOver)
+    const overSid = findContainer(overId);
+    if (overSid === finalSid && !(overId in localOrderRef.current)) {
+      const from = finalIds.indexOf(taskId);
+      const to = finalIds.indexOf(overId);
+      if (from !== -1 && to !== -1 && from !== to) {
+        finalIds = arrayMove(finalIds, from, to);
+        const next = { ...localOrderRef.current, [finalSid]: finalIds };
+        localOrderRef.current = next;
+        setLocalOrder(next);
+      }
+    }
+
+    const finalSectionId = finalSid === NONE ? null : finalSid;
     const supabase = createClient();
     await Promise.all(
       finalIds.map((id, idx) => {
@@ -380,16 +398,25 @@ export default function ListViewClient({ project, sections: initialSections, tas
     refresh();
   }
 
+  function handleDragCancel(_event: DragCancelEvent) {
+    isDraggingRef.current = false;
+    setActiveTask(null);
+    const reset = buildOrder(initialTasks, initialSections);
+    localOrderRef.current = reset;
+    setLocalOrder(reset);
+  }
+
   const unsectionedIds = localOrder[NONE] ?? [];
   const unsectionedTasks = unsectionedIds.map(id => taskById[id]).filter(Boolean);
 
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <div className="flex flex-col h-full">
         {/* Topbar */}
@@ -432,7 +459,6 @@ export default function ListViewClient({ project, sections: initialSections, tas
 
         {/* Sections + tasks */}
         <div className="flex-1 overflow-y-auto bg-white">
-          {/* Unsectioned tasks */}
           {unsectionedTasks.length > 0 && (
             <SortableContext items={unsectionedIds} strategy={verticalListSortingStrategy}>
               {unsectionedTasks.map(task => <TaskRow key={task.id} task={task} />)}
