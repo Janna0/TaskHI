@@ -50,12 +50,13 @@ export function ProjectView() {
     const saved = (localStorage.getItem(`taskhi:default-view:${id}`) as View) || 'list'
     setView(saved)
     setDefaultViewState(saved)
-    loadAll()
+    loadAll(true)
     loadMembers()
   }, [id])
 
-  async function loadAll() {
-    setLoading(true)
+  // showLoader=true only on first load; pass false for background refreshes
+  async function loadAll(showLoader = false) {
+    if (showLoader) setLoading(true)
     try {
       const [projRes, secRes, tskRes] = await Promise.all([
         supabase.rpc('get_project_by_id', { p_id: id! }).single(),
@@ -72,12 +73,10 @@ export function ProjectView() {
           .single()
         if (ownerData) setProjectOwner(ownerData as Profile)
       }
-      console.log('[loadAll] secRes', secRes.data, secRes.error)
-      console.log('[loadAll] tskRes', tskRes.data, tskRes.error)
       setSections(secRes.data ?? [])
       if (tskRes.data) setTasks(tskRes.data)
     } finally {
-      setLoading(false)
+      if (showLoader) setLoading(false)
     }
   }
 
@@ -136,7 +135,7 @@ export function ProjectView() {
   }
 
   function handleTaskUpdated() {
-    loadAll()
+    loadAll(false)
     if (selectedTask) {
       supabase.from('tasks').select('*').eq('id', selectedTask.id).single()
         .then(({ data }) => { if (data) setSelectedTask(data) })
@@ -167,7 +166,6 @@ export function ProjectView() {
           </button>
 
           <div className="ml-auto flex items-center gap-3">
-            {/* Member avatars + picker */}
             <MemberPicker
               projectId={project.id}
               members={members.filter(m => m.user_id !== project.owner_id)}
@@ -222,7 +220,6 @@ export function ProjectView() {
                   <span className={cn('w-1.5 h-1.5 rounded-full shrink-0', isActive ? 'bg-primary-500' : 'bg-slate-400')} title="Default view" />
                 )}
               </button>
-              {/* Dropdown trigger */}
               <button
                 onClick={e => { e.stopPropagation(); setTabMenu(tabMenu === tab.id ? null : tab.id) }}
                 className={cn(
@@ -251,8 +248,8 @@ export function ProjectView() {
                 </>
               )}
             </div>
-            )
-          })}
+            )})
+          }
         </div>
       </div>
 
@@ -277,7 +274,7 @@ export function ProjectView() {
           )}
           {view === 'list' && (
             <ListView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)} onRefresh={loadAll} />
+              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)} onRefresh={() => loadAll(false)} />
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
@@ -285,27 +282,27 @@ export function ProjectView() {
               onTaskClick={task => setSelectedTask(task)}
               onTaskMoved={handleTaskMoved}
               onColumnsChanged={handleColumnsChanged}
-              onRefresh={loadAll} />
+              onRefresh={() => loadAll(false)} />
           )}
         </div>
         {selectedTask && (
           <TaskDetailPanel task={selectedTask} sections={sections} memberMap={memberMap}
             onClose={() => setSelectedTask(null)}
             onUpdated={handleTaskUpdated}
-            onDeleted={() => { setSelectedTask(null); loadAll() }} />
+            onDeleted={() => { setSelectedTask(null); loadAll(false) }} />
         )}
       </div>
 
       {showCreate && (
         <CreateTaskModal open={showCreate} onClose={() => setShowCreate(false)}
-          onCreated={() => { setShowCreate(false); loadAll() }}
+          onCreated={() => { setShowCreate(false); loadAll(false) }}
           projectId={project.id} sections={sections} />
       )}
     </div>
   )
 }
 
-// ─── Member Picker (header) ───────────────────────────────────────────────────
+// ── Member Picker (header) ───────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -351,7 +348,6 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
     setTimeout(() => setCopied(false), 2000)
   }
 
-  // All people shown in avatar stack: owner + members
   const avatarList: { id: string; name: string; color: string; isOwner?: boolean }[] = [
     ...(ownerProfile ? [{ id: ownerProfile.id, name: ownerDisplayName, color: ownerAvatarColor, isOwner: true }] : []),
     ...members.map(m => ({
@@ -363,7 +359,6 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
 
   return (
     <div className="relative flex items-center" ref={ref}>
-      {/* Avatar stack */}
       <div className="flex items-center -space-x-2 cursor-pointer" onClick={openPicker}>
         {avatarList.slice(0, 5).map((a, i) => (
           <div key={a.id}
@@ -379,17 +374,14 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
             +{avatarList.length - 5}
           </div>
         )}
-        {/* Add button */}
         <div className="w-8 h-8 rounded-full border-2 border-dashed border-slate-300 hover:border-primary-400 bg-white flex items-center justify-center text-slate-400 hover:text-primary-500 transition-colors ml-1"
           title="Manage members">
           <Plus size={13} />
         </div>
       </div>
 
-      {/* Picker dropdown */}
       {open && (
         <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-xl shadow-xl z-50">
-          {/* Current members */}
           {(ownerProfile || members.length > 0) && (
             <div className="px-3 py-2 border-b border-slate-100">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Members</p>
@@ -418,7 +410,6 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
             </div>
           )}
 
-          {/* Search to add */}
           <div className="flex items-center gap-2 px-3 py-2.5 border-b border-slate-100">
             <Search size={13} className="text-slate-400 shrink-0" />
             <input autoFocus placeholder="Add member by name or email…"
@@ -456,7 +447,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ─── Overview Tab ─────────────────────────────────────────────────────────────
+// ── Overview Tab ────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 
@@ -474,7 +465,6 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
   const [editingDesc, setEditingDesc] = useState(false)
   const [desc, setDesc] = useState(project.description ?? '')
 
-  // Key resources
   const storageKey = `taskhi:resources:${project.id}`
   const [resources, setResources] = useState<Resource[]>(() => {
     try { return JSON.parse(localStorage.getItem(storageKey) ?? '[]') } catch { return [] }
@@ -501,8 +491,6 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
 
   return (
     <div className="max-w-2xl mx-auto px-8 py-8 space-y-10">
-
-      {/* Progress */}
       <div className="space-y-2">
         <div className="flex items-center justify-between text-sm text-slate-500">
           <span>{done} of {total} tasks complete</span>
@@ -516,7 +504,6 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
 
       <div className="border-t border-slate-100" />
 
-      {/* Description */}
       <section>
         <h2 className="text-base font-semibold text-slate-900 mb-3">Project description</h2>
         {editingDesc ? (
@@ -542,14 +529,10 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
 
       <div className="border-t border-slate-100" />
 
-      {/* Project roles */}
       <section>
         <h2 className="text-base font-semibold text-slate-900 mb-4">Project roles</h2>
         <div className="flex flex-wrap gap-6 items-start">
-          {/* Inline add member */}
           <InlineAddMember members={members} ownerProfile={ownerProfile} onAdd={onAddMember} />
-
-          {/* Owner */}
           {ownerProfile && (
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-semibold shrink-0"
@@ -562,8 +545,6 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
               </div>
             </div>
           )}
-
-          {/* Members */}
           {members.map(m => {
             const mName = m.profile?.name || m.profile?.email?.split('@')[0] || 'Member'
             return (
@@ -582,13 +563,11 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
               </button>
             </div>
           )})}
-
         </div>
       </section>
 
       <div className="border-t border-slate-100" />
 
-      {/* Key resources */}
       <section>
         <h2 className="text-base font-semibold text-slate-900 mb-4">Key resources</h2>
         <div className="space-y-2">
@@ -633,7 +612,6 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
   )
 }
 
-// Inline add member for the Overview tab roles section
 function InlineAddMember({ members, ownerProfile, onAdd }: {
   members: ProjectMember[]
   ownerProfile: Profile | null
