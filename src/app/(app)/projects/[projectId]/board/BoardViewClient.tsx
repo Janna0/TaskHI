@@ -1,8 +1,17 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Plus, MoreHorizontal, Loader2 } from 'lucide-react';
+import {
+  DndContext, DragOverlay, PointerSensor, TouchSensor,
+  useSensor, useSensors, useDroppable, closestCenter,
+  type DragEndEvent, type DragStartEvent, type DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Plus, MoreHorizontal, Loader2, GripVertical } from 'lucide-react';
 import { PriorityBadge, StatusBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
@@ -10,11 +19,31 @@ import type { Section, Task } from '@/lib/supabase/types';
 
 const COL_COLORS = ['#94a3b8', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899', '#ef4444'];
 
+// ─── Task card (sortable) ─────────────────────────────────────────────────────
+
 function TaskCard({ task }: { task: Task }) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+    data: { type: 'task' },
+  });
+
   return (
-    <div className="bg-white border border-[#e2e8f0] rounded-lg p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group">
-      <p className="text-sm text-[#334155] leading-snug mb-2">{task.title}</p>
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 }}
+      className="bg-white border border-[#e2e8f0] rounded-lg p-3 shadow-sm hover:shadow-md transition-all cursor-pointer group"
+    >
+      <div className="flex items-start gap-2 mb-2">
+        <div
+          {...listeners}
+          {...attributes}
+          className="flex-shrink-0 mt-0.5 cursor-grab active:cursor-grabbing text-[#cbd5e1] hover:text-[#94a3b8] opacity-0 group-hover:opacity-100 transition-opacity touch-none select-none"
+        >
+          <GripVertical className="h-3.5 w-3.5" />
+        </div>
+        <p className="text-sm text-[#334155] leading-snug flex-1">{task.title}</p>
+      </div>
       <div className="flex items-center gap-2 flex-wrap">
         <StatusBadge status={task.status} />
         <PriorityBadge priority={task.priority} />
@@ -27,6 +56,16 @@ function TaskCard({ task }: { task: Task }) {
     </div>
   );
 }
+
+function TaskCardGhost({ task }: { task: Task }) {
+  return (
+    <div className="bg-white border border-[#6366f1]/30 rounded-lg p-3 shadow-lg">
+      <p className="text-sm text-[#334155] leading-snug">{task.title}</p>
+    </div>
+  );
+}
+
+// ─── Add task card ────────────────────────────────────────────────────────────
 
 function AddTaskCard({ projectId, sectionId, taskCount, onSaved }: {
   projectId: string;
@@ -57,11 +96,7 @@ function AddTaskCard({ projectId, sectionId, taskCount, onSaved }: {
       depth: 0,
     });
     setSaving(false);
-    if (err) {
-      calledRef.current = false;
-      setError(`Failed: ${err.message}`);
-      return;
-    }
+    if (err) { calledRef.current = false; setError(`Failed: ${err.message}`); return; }
     onSaved();
   }
 
@@ -85,6 +120,8 @@ function AddTaskCard({ projectId, sectionId, taskCount, onSaved }: {
     </div>
   );
 }
+
+// ─── Add column input ─────────────────────────────────────────────────────────
 
 function AddColumnInput({ projectId, sectionCount, onSaved, onCancel }: {
   projectId: string;
@@ -111,11 +148,7 @@ function AddColumnInput({ projectId, sectionCount, onSaved, onCancel }: {
       position: sectionCount,
     });
     setSaving(false);
-    if (err) {
-      calledRef.current = false;
-      setError(`Failed: ${err.message}`);
-      return;
-    }
+    if (err) { calledRef.current = false; setError(`Failed: ${err.message}`); return; }
     onSaved();
   }
 
@@ -142,109 +175,252 @@ function AddColumnInput({ projectId, sectionCount, onSaved, onCancel }: {
   );
 }
 
+// ─── Column droppable wrapper ─────────────────────────────────────────────────
+
+function Column({ section, orderedTasks, dot, addingHere, projectId, onAddTask, onTaskAdded }: {
+  section: Section;
+  orderedTasks: Task[];
+  dot: string;
+  addingHere: boolean;
+  projectId: string;
+  onAddTask: () => void;
+  onTaskAdded: () => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: section.id });
+  const taskIds = orderedTasks.map(t => t.id);
+
+  return (
+    <div className="flex-shrink-0 w-64 flex flex-col bg-[#f8fafc] border border-[#e2e8f0] rounded-xl overflow-hidden">
+      {/* Column header */}
+      <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e2e8f0]">
+        <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
+        <span className="text-xs font-semibold text-[#334155] flex-1 truncate">{section.name}</span>
+        <span className="text-xs text-[#94a3b8] bg-white border border-[#e2e8f0] rounded px-1.5 py-0.5">{orderedTasks.length}</span>
+        <button
+          onClick={onAddTask}
+          className="text-[#94a3b8] hover:text-[#6366f1] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button className="text-[#94a3b8] hover:text-[#334155] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors">
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      {/* Cards */}
+      <div
+        ref={setNodeRef}
+        className={`flex flex-col gap-2 p-2 flex-1 min-h-[80px] transition-colors ${isOver ? 'bg-[#eff6ff]' : ''}`}
+      >
+        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+          {orderedTasks.map(task => <TaskCard key={task.id} task={task} />)}
+        </SortableContext>
+        {addingHere && (
+          <AddTaskCard
+            projectId={projectId}
+            sectionId={section.id}
+            taskCount={orderedTasks.length}
+            onSaved={onTaskAdded}
+          />
+        )}
+        {orderedTasks.length === 0 && !addingHere && !isOver && (
+          <div className="flex items-center justify-center border-2 border-dashed border-[#e2e8f0] rounded-lg text-xs text-[#94a3b8] min-h-[60px]">
+            Drop tasks here
+          </div>
+        )}
+      </div>
+
+      {/* Add task footer */}
+      <button
+        onClick={onAddTask}
+        className="flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-[#6366f1] px-3 py-2.5 border-t border-[#e2e8f0] hover:bg-[#f1f5f9] transition-colors"
+      >
+        <Plus className="h-3.5 w-3.5" /> Add task
+      </button>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 interface Props {
   project: { id: string; name: string; color: string };
   sections: Section[];
   tasks: Task[];
 }
 
-export default function BoardViewClient({ project, sections, tasks }: Props) {
+export default function BoardViewClient({ project, sections, tasks: initialTasks }: Props) {
   const color = getProjectColor(project.color);
   const router = useRouter();
   const [addingTaskTo, setAddingTaskTo] = useState<string | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  // taskOrder maps sectionId → ordered task IDs
+  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({});
+  const taskOrderRef = useRef<Record<string, string[]>>({});
+  const isDraggingRef = useRef(false);
+
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    const order: Record<string, string[]> = {};
+    for (const s of sections) {
+      order[s.id] = initialTasks
+        .filter(t => t.section_id === s.id)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map(t => t.id);
+    }
+    setTaskOrder(order);
+    taskOrderRef.current = order;
+  }, [initialTasks, sections]);
+
+  const taskById = Object.fromEntries(initialTasks.map(t => [t.id, t]));
+
+  function findColumn(taskId: string): string {
+    for (const [sid, ids] of Object.entries(taskOrderRef.current)) {
+      if (ids.includes(taskId)) return sid;
+    }
+    return '';
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
+  );
 
   function refresh() { router.refresh(); }
 
+  function handleDragStart(event: DragStartEvent) {
+    isDraggingRef.current = true;
+    const task = initialTasks.find(t => t.id === event.active.id);
+    setActiveTask(task ?? null);
+  }
+
+  function handleDragOver(event: DragOverEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    const activeSid = findColumn(activeId);
+    if (!activeSid) return;
+
+    const isContainer = overId in taskOrderRef.current;
+    const targetSid = isContainer ? overId : findColumn(overId);
+    if (!targetSid) return;
+
+    const cur = taskOrderRef.current;
+    if (activeSid === targetSid) {
+      const ids = cur[activeSid] ?? [];
+      const from = ids.indexOf(activeId);
+      const to = ids.indexOf(overId);
+      if (from !== -1 && to !== -1 && from !== to) {
+        const next = { ...cur, [activeSid]: arrayMove(ids, from, to) };
+        taskOrderRef.current = next;
+        setTaskOrder(next);
+      }
+    } else {
+      const next = { ...cur };
+      next[activeSid] = (next[activeSid] ?? []).filter(id => id !== activeId);
+      const targetIds = [...(next[targetSid] ?? [])];
+      const overIdx = isContainer ? targetIds.length : targetIds.indexOf(overId);
+      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId);
+      next[targetSid] = targetIds;
+      taskOrderRef.current = next;
+      setTaskOrder(next);
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    isDraggingRef.current = false;
+    setActiveTask(null);
+    const { active } = event;
+    const taskId = active.id as string;
+    const originalTask = initialTasks.find(t => t.id === taskId);
+    if (!originalTask) return;
+
+    const finalSid = findColumn(taskId);
+    if (!finalSid) return;
+    const finalIds = taskOrderRef.current[finalSid] ?? [];
+
+    const supabase = createClient();
+    await Promise.all(
+      finalIds.map((id, idx) => {
+        const update: Record<string, unknown> = { position: idx };
+        if (id === taskId && finalSid !== originalTask.section_id) {
+          update.section_id = finalSid;
+        }
+        return supabase.from('tasks').update(update).eq('id', id);
+      })
+    );
+    refresh();
+  }
+
   return (
-    <div className="flex flex-col h-full">
-      {/* Topbar */}
-      <div className="border-b border-[#e2e8f0] bg-white px-4 py-2 flex items-center gap-2 flex-shrink-0">
-        <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
-        <span className="font-semibold text-sm text-[#1e293b]">{project.name}</span>
-        <div className="flex items-center gap-1 ml-4">
-          {(['Overview', 'List', 'Board'] as const).map(label => (
-            <Link key={label} href={`/projects/${project.id}/${label.toLowerCase()}`}
-              className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-                label === 'Board' ? 'bg-[#6366f1]/10 text-[#6366f1]' : 'text-[#64748b] hover:bg-[#f1f5f9]'
-              }`}>{label}</Link>
-          ))}
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex flex-col h-full">
+        {/* Topbar */}
+        <div className="border-b border-[#e2e8f0] bg-white px-4 py-2 flex items-center gap-2 flex-shrink-0">
+          <div className="h-3 w-3 rounded-full" style={{ backgroundColor: color }} />
+          <span className="font-semibold text-sm text-[#1e293b]">{project.name}</span>
+          <div className="flex items-center gap-1 ml-4">
+            {(['Overview', 'List', 'Board'] as const).map(label => (
+              <Link key={label} href={`/projects/${project.id}/${label.toLowerCase()}`}
+                className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+                  label === 'Board' ? 'bg-[#6366f1]/10 text-[#6366f1]' : 'text-[#64748b] hover:bg-[#f1f5f9]'
+                }`}>{label}</Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Board */}
+        <div className="flex-1 overflow-x-auto p-4">
+          <div className="flex gap-3 h-full items-start">
+            {sections.map((section, idx) => {
+              const dot = COL_COLORS[idx % COL_COLORS.length];
+              const orderedTasks = (taskOrder[section.id] ?? []).map(id => taskById[id]).filter(Boolean);
+              return (
+                <Column
+                  key={section.id}
+                  section={section}
+                  orderedTasks={orderedTasks}
+                  dot={dot}
+                  addingHere={addingTaskTo === section.id}
+                  projectId={project.id}
+                  onAddTask={() => setAddingTaskTo(section.id)}
+                  onTaskAdded={() => { setAddingTaskTo(null); refresh(); }}
+                />
+              );
+            })}
+
+            {addingColumn ? (
+              <AddColumnInput
+                projectId={project.id}
+                sectionCount={sections.length}
+                onSaved={() => { setAddingColumn(false); refresh(); }}
+                onCancel={() => setAddingColumn(false)}
+              />
+            ) : (
+              <button
+                onClick={() => setAddingColumn(true)}
+                className="flex-shrink-0 flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] px-3 py-2 rounded-lg hover:bg-[#f1f5f9] transition-colors"
+              >
+                <Plus className="h-4 w-4" /> Add column
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Board */}
-      <div className="flex-1 overflow-x-auto p-4">
-        <div className="flex gap-3 h-full items-start">
-
-          {sections.map((section, idx) => {
-            const colTasks = tasks.filter(t => t.section_id === section.id);
-            const dot = COL_COLORS[idx % COL_COLORS.length];
-            const isAddingHere = addingTaskTo === section.id;
-            return (
-              <div key={section.id} className="flex-shrink-0 w-64 flex flex-col bg-[#f8fafc] border border-[#e2e8f0] rounded-xl overflow-hidden">
-                {/* Column header */}
-                <div className="flex items-center gap-2 px-3 py-2.5 border-b border-[#e2e8f0]">
-                  <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: dot }} />
-                  <span className="text-xs font-semibold text-[#334155] flex-1 truncate">{section.name}</span>
-                  <span className="text-xs text-[#94a3b8] bg-white border border-[#e2e8f0] rounded px-1.5 py-0.5">{colTasks.length}</span>
-                  <button
-                    onClick={() => setAddingTaskTo(section.id)}
-                    className="text-[#94a3b8] hover:text-[#6366f1] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                  <button className="text-[#94a3b8] hover:text-[#334155] p-0.5 rounded hover:bg-[#e2e8f0] transition-colors">
-                    <MoreHorizontal className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {/* Cards */}
-                <div className="flex flex-col gap-2 p-2 min-h-[80px]">
-                  {colTasks.map(task => <TaskCard key={task.id} task={task} />)}
-                  {isAddingHere && (
-                    <AddTaskCard
-                      projectId={project.id}
-                      sectionId={section.id}
-                      taskCount={colTasks.length}
-                      onSaved={() => { setAddingTaskTo(null); refresh(); }}
-                    />
-                  )}
-                  {colTasks.length === 0 && !isAddingHere && (
-                    <div className="flex items-center justify-center border-2 border-dashed border-[#e2e8f0] rounded-lg text-xs text-[#94a3b8] min-h-[60px]">
-                      Drop tasks here
-                    </div>
-                  )}
-                </div>
-
-                {/* Add task footer */}
-                <button
-                  onClick={() => setAddingTaskTo(section.id)}
-                  className="flex items-center gap-1.5 text-xs text-[#94a3b8] hover:text-[#6366f1] px-3 py-2.5 border-t border-[#e2e8f0] hover:bg-[#f1f5f9] transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add task
-                </button>
-              </div>
-            );
-          })}
-
-          {/* Add column */}
-          {addingColumn ? (
-            <AddColumnInput
-              projectId={project.id}
-              sectionCount={sections.length}
-              onSaved={() => { setAddingColumn(false); refresh(); }}
-              onCancel={() => setAddingColumn(false)}
-            />
-          ) : (
-            <button
-              onClick={() => setAddingColumn(true)}
-              className="flex-shrink-0 flex items-center gap-2 text-sm text-[#94a3b8] hover:text-[#6366f1] px-3 py-2 rounded-lg hover:bg-[#f1f5f9] transition-colors"
-            >
-              <Plus className="h-4 w-4" /> Add column
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
+      <DragOverlay dropAnimation={null}>
+        {activeTask && <TaskCardGhost task={activeTask} />}
+      </DragOverlay>
+    </DndContext>
   );
 }

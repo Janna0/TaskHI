@@ -1,13 +1,20 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, useDraggable,
-  type DragEndEvent, type DragStartEvent,
+  useSensor, useSensors, useDroppable, closestCenter,
+  type DragEndEvent, type DragStartEvent, type DragOverEvent,
 } from '@dnd-kit/core';
-import { Plus, ChevronDown, ChevronRight, Filter, SortDesc, MoreHorizontal, Loader2, Trash2, GripVertical } from 'lucide-react';
+import {
+  SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import {
+  Plus, ChevronDown, ChevronRight, Filter, SortDesc,
+  MoreHorizontal, Loader2, Trash2, GripVertical,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { StatusBadge, PriorityBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
@@ -20,21 +27,19 @@ interface Props {
   tasks: Task[];
 }
 
-// ─── Task row ────────────────────────────────────────────────────────────────
+// ─── Task row (sortable) ──────────────────────────────────────────────────────
 
 function TaskRow({ task }: { task: Task }) {
   const isOverdue = task.due_date && new Date(task.due_date) < new Date() && task.status !== 'done';
   const isDone = task.status === 'done';
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
 
   return (
     <div
       ref={setNodeRef}
-      className={`flex items-center gap-3 px-4 py-2 hover:bg-[#f8fafc] transition-colors border-b border-[#f1f5f9] group
-        ${isDone ? 'opacity-60' : ''}
-        ${isDragging ? 'opacity-30' : ''}`}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.3 : 1 }}
+      className={`flex items-center gap-3 px-4 py-2 hover:bg-[#f8fafc] transition-colors border-b border-[#f1f5f9] group ${isDone ? 'opacity-60' : ''}`}
     >
-      {/* Drag handle — div not button so pointer events aren't swallowed */}
       <div
         {...listeners}
         {...attributes}
@@ -42,13 +47,9 @@ function TaskRow({ task }: { task: Task }) {
       >
         <GripVertical className="h-3.5 w-3.5" />
       </div>
-
       <div className="flex-1 min-w-0">
-        <span className={`text-sm ${isDone ? 'line-through text-[#94a3b8]' : 'text-[#334155]'}`}>
-          {task.title}
-        </span>
+        <span className={`text-sm ${isDone ? 'line-through text-[#94a3b8]' : 'text-[#334155]'}`}>{task.title}</span>
       </div>
-
       <div className="flex items-center gap-3 flex-shrink-0">
         <StatusBadge status={task.status} />
         <PriorityBadge priority={task.priority} className="hidden md:flex" />
@@ -134,9 +135,9 @@ function AddTaskRow({ projectId, sectionId, taskCount, onSaved }: {
 
 // ─── Section block ───────────────────────────────────────────────────────────
 
-function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
+function SectionBlock({ section, orderedTasks, projectId, onTaskAdded, onDeleted }: {
   section: Section;
-  tasks: Task[];
+  orderedTasks: Task[];
   projectId: string;
   onTaskAdded: () => void;
   onDeleted: () => void;
@@ -144,7 +145,6 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
   const [collapsed, setCollapsed] = useState(false);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState(false);
-
   const { setNodeRef, isOver } = useDroppable({ id: section.id });
 
   async function deleteSection() {
@@ -156,15 +156,16 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
     onDeleted();
   }
 
+  const taskIds = orderedTasks.map(t => t.id);
+
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 bg-[#f8fafc] border-b border-[#e2e8f0] group">
         <button onClick={() => setCollapsed(c => !c)} className="text-[#94a3b8] hover:text-[#334155]">
           {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
         </button>
         <span className="font-semibold text-sm text-[#334155]">{section.name}</span>
-        <span className="text-xs text-[#94a3b8]">{tasks.length}</span>
+        <span className="text-xs text-[#94a3b8]">{orderedTasks.length}</span>
         <div className="ml-auto flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
           <button onClick={() => setAdding(true)}
             className="flex items-center gap-1 text-xs text-[#6366f1] hover:underline">
@@ -180,24 +181,22 @@ function SectionBlock({ section, tasks, projectId, onTaskAdded, onDeleted }: {
         </div>
       </div>
 
-      {/* Drop zone */}
       {!collapsed && (
         <div
           ref={setNodeRef}
-          className={`min-h-[4px] transition-colors ${isOver ? 'bg-[#eff6ff]' : ''}`}
+          className={`min-h-[4px] transition-colors ${isOver && orderedTasks.length === 0 ? 'bg-[#eff6ff]' : ''}`}
         >
-          {tasks.map(task => (
-            <TaskRow key={task.id} task={task} />
-          ))}
+          <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
+            {orderedTasks.map(task => <TaskRow key={task.id} task={task} />)}
+          </SortableContext>
           {adding && (
             <AddTaskRow
               projectId={projectId}
               sectionId={section.id}
-              taskCount={tasks.length}
+              taskCount={orderedTasks.length}
               onSaved={() => { setAdding(false); onTaskAdded(); }}
             />
           )}
-          {/* Always-visible add task footer */}
           <div className="flex items-center gap-2 px-4 py-2 border-b border-[#f1f5f9]">
             <div className="w-3.5" />
             <button onClick={() => setAdding(true)}
@@ -268,11 +267,45 @@ function AddSectionRow({ projectId, sectionCount, onSaved, onCancel }: {
 
 // ─── Main component ──────────────────────────────────────────────────────────
 
+const NONE = '__none__';
+
 export default function ListViewClient({ project, sections: initialSections, tasks: initialTasks }: Props) {
   const color = getProjectColor(project.color);
   const router = useRouter();
   const [addingSection, setAddingSection] = useState(false);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+
+  // localOrder maps sectionId (or NONE for unsectioned) → ordered task IDs
+  const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({});
+  const localOrderRef = useRef<Record<string, string[]>>({});
+  const isDraggingRef = useRef(false);
+
+  // Sync from props whenever tasks/sections change (skip during drag)
+  useEffect(() => {
+    if (isDraggingRef.current) return;
+    const order: Record<string, string[]> = {};
+    order[NONE] = initialTasks
+      .filter(t => !t.section_id)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map(t => t.id);
+    for (const s of initialSections) {
+      order[s.id] = initialTasks
+        .filter(t => t.section_id === s.id)
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map(t => t.id);
+    }
+    setLocalOrder(order);
+    localOrderRef.current = order;
+  }, [initialTasks, initialSections]);
+
+  const taskById = Object.fromEntries(initialTasks.map(t => [t.id, t]));
+
+  function findContainer(taskId: string): string {
+    for (const [sid, ids] of Object.entries(localOrderRef.current)) {
+      if (ids.includes(taskId)) return sid;
+    }
+    return NONE;
+  }
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -282,30 +315,82 @@ export default function ListViewClient({ project, sections: initialSections, tas
   function refresh() { router.refresh(); }
 
   function handleDragStart(event: DragStartEvent) {
+    isDraggingRef.current = true;
     const task = initialTasks.find(t => t.id === event.active.id);
     setActiveTask(task ?? null);
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
-    setActiveTask(null);
+  function handleDragOver(event: DragOverEvent) {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
+    const activeId = active.id as string;
+    const overId = over.id as string;
 
+    const activeSid = findContainer(activeId);
+    // over.id is either a container ID (section or NONE) or a task ID
+    const isContainer = overId in localOrderRef.current;
+    const targetSid = isContainer ? overId : findContainer(overId);
+
+    const cur = localOrderRef.current;
+    if (activeSid === targetSid) {
+      // Same container: reorder
+      const ids = cur[activeSid] ?? [];
+      const from = ids.indexOf(activeId);
+      const to = ids.indexOf(overId);
+      if (from !== -1 && to !== -1 && from !== to) {
+        const next = { ...cur, [activeSid]: arrayMove(ids, from, to) };
+        localOrderRef.current = next;
+        setLocalOrder(next);
+      }
+    } else {
+      // Cross-container move
+      const next = { ...cur };
+      next[activeSid] = (next[activeSid] ?? []).filter(id => id !== activeId);
+      const targetIds = [...(next[targetSid] ?? [])];
+      const overIdx = isContainer ? targetIds.length : targetIds.indexOf(overId);
+      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId);
+      next[targetSid] = targetIds;
+      localOrderRef.current = next;
+      setLocalOrder(next);
+    }
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    isDraggingRef.current = false;
+    setActiveTask(null);
+    const { active } = event;
     const taskId = active.id as string;
-    const newSectionId = over.id as string;
-    const task = initialTasks.find(t => t.id === taskId);
-    if (!task || task.section_id === newSectionId) return;
+    const originalTask = initialTasks.find(t => t.id === taskId);
+    if (!originalTask) return;
 
+    const finalSid = findContainer(taskId);
+    const finalSectionId = finalSid === NONE ? null : finalSid;
+    const finalIds = localOrderRef.current[finalSid] ?? [];
 
     const supabase = createClient();
-    await supabase.from('tasks').update({ section_id: newSectionId }).eq('id', taskId);
+    await Promise.all(
+      finalIds.map((id, idx) => {
+        const update: Record<string, unknown> = { position: idx };
+        if (id === taskId && finalSectionId !== originalTask.section_id) {
+          update.section_id = finalSectionId;
+        }
+        return supabase.from('tasks').update(update).eq('id', id);
+      })
+    );
     refresh();
   }
 
-  const unsectioned = initialTasks.filter(t => !t.section_id);
+  const unsectionedIds = localOrder[NONE] ?? [];
+  const unsectionedTasks = unsectionedIds.map(id => taskById[id]).filter(Boolean);
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
+      onDragEnd={handleDragEnd}
+    >
       <div className="flex flex-col h-full">
         {/* Topbar */}
         <div className="border-b border-[#e2e8f0] bg-white px-4 py-2 flex items-center gap-2 flex-shrink-0">
@@ -347,22 +432,24 @@ export default function ListViewClient({ project, sections: initialSections, tas
 
         {/* Sections + tasks */}
         <div className="flex-1 overflow-y-auto bg-white">
-          {unsectioned.length > 0 && unsectioned.map(task => (
-            <TaskRow key={task.id} task={task} />
-          ))}
+          {/* Unsectioned tasks */}
+          {unsectionedTasks.length > 0 && (
+            <SortableContext items={unsectionedIds} strategy={verticalListSortingStrategy}>
+              {unsectionedTasks.map(task => <TaskRow key={task.id} task={task} />)}
+            </SortableContext>
+          )}
 
           {initialSections.map(section => (
             <SectionBlock
               key={section.id}
               section={section}
-              tasks={initialTasks.filter(t => t.section_id === section.id)}
+              orderedTasks={(localOrder[section.id] ?? []).map(id => taskById[id]).filter(Boolean)}
               projectId={project.id}
               onTaskAdded={refresh}
               onDeleted={refresh}
             />
           ))}
 
-          {/* Add section */}
           {addingSection ? (
             <AddSectionRow
               projectId={project.id}
@@ -383,7 +470,6 @@ export default function ListViewClient({ project, sections: initialSections, tas
         </div>
       </div>
 
-      {/* Floating ghost while dragging */}
       <DragOverlay dropAnimation={null}>
         {activeTask && <TaskGhost task={activeTask} />}
       </DragOverlay>
