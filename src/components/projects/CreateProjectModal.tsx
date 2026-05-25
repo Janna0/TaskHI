@@ -13,6 +13,8 @@ interface Props {
   onCreated: () => void
 }
 
+const DEFAULT_SECTIONS = ['To Do', 'In Progress', 'Done']
+
 export function CreateProjectModal({ open, onClose, onCreated }: Props) {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -31,10 +33,16 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
       color,
       owner_id: user!.id,
     }).select().single()
+    if (err) { setLoading(false); setError(err.message); return }
+    // Seed default sections
+    await supabase.from('sections').insert(
+      DEFAULT_SECTIONS.map((sectionName, i) => ({
+        project_id: data.id,
+        name: sectionName,
+        position: i,
+      }))
+    )
     setLoading(false)
-    if (err) { setError(err.message); return }
-    // Create a default section
-    await supabase.from('sections').insert({ project_id: data.id, name: 'Tasks', position: 0 })
     setName(''); setDescription(''); setColor(PROJECT_COLORS[0]); setError('')
     onCreated()
     navigate(`/projects/${data.id}`)
