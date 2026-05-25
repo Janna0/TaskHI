@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -7,9 +7,13 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  pointerWithin,
+  rectIntersection,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
+  type DragCancelEvent,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -44,6 +48,17 @@ const COLUMN_STYLES: Record<string, { header: string; dot: string }> = {
 
 function getColStyle(status: string) {
   return COLUMN_STYLES[status] ?? { header: 'bg-purple-50', dot: 'bg-purple-500' }
+}
+
+function buildTaskOrder(tasks: Task[], columns: BoardColumnConfig[]): Record<string, string[]> {
+  const order: Record<string, string[]> = {}
+  for (const col of columns) {
+    order[col.status] = tasks
+      .filter(t => t.status === col.status)
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+      .map(t => t.id)
+  }
+  return order
 }
 
 interface Props {
@@ -302,10 +317,13 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
   const [localColumns, setLocalColumns] = useState<BoardColumnConfig[]>(columns)
   const localColumnsRef = useRef<BoardColumnConfig[]>(columns)
 
-  // Local task order per status
-  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>({})
-  const taskOrderRef = useRef<Record<string, string[]>>({})
+  // Local task order per status — lazy init so tasks render immediately
+  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>(
+    () => buildTaskOrder(tasks, columns)
+  )
+  const taskOrderRef = useRef<Record<string, string[]>>(buildTaskOrder(tasks, columns))
   const isDraggingRef = useRef(false)
+  const lastOverId = useRef<string | null>(null)
 
   // Active drag info
   const [activeDragType, setActiveDragType] = useState<'task' | 'column' | null>(null)
@@ -327,13 +345,7 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
   // Sync tasks prop → taskOrder (skip during drag)
   useEffect(() => {
     if (isDraggingRef.current) return
-    const order: Record<string, string[]> = {}
-    for (const col of columns) {
-      order[col.status] = tasks
-        .filter(t => t.status === col.status)
-        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-        .map(t => t.id)
-    }
+    const order = buildTaskOrder(tasks, columns)
     setTaskOrder(order)
     taskOrderRef.current = order
   }, [tasks, columns])
@@ -352,6 +364,43 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     }
     return ''
   }
+
+  // Multi-container collision detection:
+  // - For column drags: closestCenter among column droppables only
+  // - For task drags: pointerWithin → rectIntersection, then if result is a column,
+  //   drill in with closestCenter among that column's tasks
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const activeType = args.active.data.current?.type as string | undefined
+    if (activeType === 'column') {
+      return closestCenter({
+        ...args,
+        droppableContainers: args.droppableContainers.filter(
+          c => localColumnsRef.current.some(col => col.status === c.id)
+        ),
+      })
+    }
+    const within = pointerWithin(args)
+    const candidates = within.length > 0 ? within : rectIntersection(args)
+    if (candidates.length === 0) {
+      return lastOverId.current ? [{ id: lastOverId.current }] : []
+    }
+    let overId = candidates[0].id as string
+    // If we landed on a column container, find the closest task inside it
+    const colItems = taskOrderRef.current[overId]
+    if (colItems !== undefined) {
+      if (colItems.length > 0) {
+        const inner = closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter(
+            c => colItems.includes(c.id as string)
+          ),
+        })
+        if (inner.length > 0) overId = inner[0].id as string
+      }
+    }
+    lastOverId.current = overId
+    return [{ id: overId }]
+  }, [])
 
   function handleDragStart(event: DragStartEvent) {
     isDraggingRef.current = true
@@ -373,36 +422,24 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
       const activeStatus = findStatusForTask(activeId)
       const overType = over.data.current?.type
 
-      // overId is either a task ID or a column status
       const targetStatus = overType === 'column' ? overId : findStatusForTask(overId)
       if (!targetStatus) return
 
-      const cur = taskOrderRef.current
+      // Skip same-column reorders — useSortable handles the visual via transforms;
+      // we finalize the order in handleDragEnd to avoid transform/state conflicts.
+      if (activeStatus === targetStatus) return
 
-      if (activeStatus === targetStatus) {
-        // Within-column reorder
-        const ids = cur[activeStatus] ?? []
-        const from = ids.indexOf(activeId)
-        const to = ids.indexOf(overId)
-        if (from !== -1 && to !== -1 && from !== to) {
-          const newIds = arrayMove(ids, from, to)
-          const newOrder = { ...cur, [activeStatus]: newIds }
-          taskOrderRef.current = newOrder
-          setTaskOrder(newOrder)
-        }
-      } else {
-        // Cross-column move
-        const newOrder = { ...cur }
-        newOrder[activeStatus] = (newOrder[activeStatus] ?? []).filter(id => id !== activeId)
-        const targetIds = [...(newOrder[targetStatus] ?? [])]
-        const overIdx = targetIds.indexOf(overId)
-        targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
-        newOrder[targetStatus] = targetIds
-        taskOrderRef.current = newOrder
-        setTaskOrder(newOrder)
-      }
+      // Cross-column move: update state so the card appears in the new column
+      const cur = taskOrderRef.current
+      const newOrder = { ...cur }
+      newOrder[activeStatus] = (newOrder[activeStatus] ?? []).filter(id => id !== activeId)
+      const targetIds = [...(newOrder[targetStatus] ?? [])]
+      const overIdx = targetIds.indexOf(overId)
+      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
+      newOrder[targetStatus] = targetIds
+      taskOrderRef.current = newOrder
+      setTaskOrder(newOrder)
     } else if (type === 'column') {
-      // Only reorder when over another column (not a task card)
       if (over.data.current?.type !== 'column') return
       const cols = localColumnsRef.current
       const from = cols.findIndex(c => c.status === active.id)
@@ -417,6 +454,7 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
 
   async function handleDragEnd(event: DragEndEvent) {
     isDraggingRef.current = false
+    lastOverId.current = null
     const type = event.active.data.current?.type
     setActiveDragType(null)
     setActiveTaskId(null)
@@ -426,6 +464,27 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
       const taskId = event.active.id as string
       const originalTask = tasks.find(t => t.id === taskId)
       if (!originalTask) return
+
+      // Apply same-column reorder now (skipped during dragOver)
+      if (event.over && event.over.id !== taskId) {
+        const overId = event.over.id as string
+        const overType = event.over.data.current?.type
+        if (overType === 'task') {
+          const activeStatus = findStatusForTask(taskId)
+          const overStatus = findStatusForTask(overId)
+          if (activeStatus === overStatus) {
+            const ids = taskOrderRef.current[activeStatus] ?? []
+            const from = ids.indexOf(taskId)
+            const to = ids.indexOf(overId)
+            if (from !== -1 && to !== -1 && from !== to) {
+              const newIds = arrayMove(ids, from, to)
+              const newOrder = { ...taskOrderRef.current, [activeStatus]: newIds }
+              taskOrderRef.current = newOrder
+              setTaskOrder(newOrder)
+            }
+          }
+        }
+      }
 
       const finalStatus = findStatusForTask(taskId)
       const finalIds = taskOrderRef.current[finalStatus] ?? []
@@ -444,6 +503,20 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     } else if (type === 'column') {
       onColumnsChanged(localColumnsRef.current)
     }
+  }
+
+  function handleDragCancel(_event: DragCancelEvent) {
+    isDraggingRef.current = false
+    lastOverId.current = null
+    setActiveDragType(null)
+    setActiveTaskId(null)
+    setActiveColStatus(null)
+    // Revert to last known good state from props
+    const order = buildTaskOrder(tasks, columns)
+    taskOrderRef.current = order
+    setTaskOrder(order)
+    localColumnsRef.current = columns
+    setLocalColumns(columns)
   }
 
   function renameColumn(status: string, newName: string) {
@@ -476,10 +549,11 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
     >
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
         <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
