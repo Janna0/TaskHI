@@ -27,7 +27,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Droppable section wrapper ────────────────────────────────────────────────
+// ── Droppable section wrapper ─────────────────────────────────────────────────
 
 function DroppableSection({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -41,7 +41,7 @@ function DroppableSection({ id, children }: { id: string; children: React.ReactN
   )
 }
 
-// ── Draggable task row ───────────────────────────────────────────────────────
+// ── Draggable task row ────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -65,7 +65,7 @@ function TaskRow({
         isDragging && 'opacity-30'
       )}
     >
-      {/* Drag handle */}
+      {/* Drag handle — stops click from opening task detail while dragging */}
       <div
         {...listeners}
         {...attributes}
@@ -110,7 +110,7 @@ function TaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ───────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -122,7 +122,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -131,11 +131,18 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [newSectionName, setNewSectionName] = useState('')
   const [sectionError, setSectionError] = useState('')
   const [activeTask, setActiveTask] = useState<Task | null>(null)
+  // Optimistic overrides: taskId -> newSectionId
+  const [sectionOverrides, setSectionOverrides] = useState<Record<string, string>>({})
   const inputRef = useRef<HTMLInputElement>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+  )
+
+  // Apply local overrides so the UI updates instantly without a refetch
+  const effectiveTasks = tasks.map(t =>
+    t.id in sectionOverrides ? { ...t, section_id: sectionOverrides[t.id] } : t
   )
 
   function toggle(id: string) {
@@ -157,7 +164,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   }
 
   function handleDragStart(event: DragStartEvent) {
-    const task = tasks.find(t => t.id === event.active.id)
+    const task = effectiveTasks.find(t => t.id === event.active.id)
     setActiveTask(task ?? null)
   }
 
@@ -165,15 +172,34 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     setActiveTask(null)
     const { active, over } = event
     if (!over) return
+
     const taskId = active.id as string
     const newSectionId = over.id as string
-    const task = tasks.find(t => t.id === taskId)
+    const task = effectiveTasks.find(t => t.id === taskId)
     if (!task || task.section_id === newSectionId) return
-    await supabase.from('tasks').update({ section_id: newSectionId }).eq('id', taskId)
-    onRefresh()
+
+    const prevSectionId = task.section_id
+
+    // 1. Update UI immediately — no loading flash
+    setSectionOverrides(prev => ({ ...prev, [taskId]: newSectionId }))
+
+    // 2. Persist in the background
+    const { error } = await supabase
+      .from('tasks')
+      .update({ section_id: newSectionId })
+      .eq('id', taskId)
+
+    if (error) {
+      // Revert on failure
+      setSectionOverrides(prev => ({
+        ...prev,
+        [taskId]: prevSectionId ?? '',
+      }))
+    }
+    // No onRefresh() — the optimistic state is already correct
   }
 
-  const ungrouped = tasks.filter(t => !t.section_id)
+  const ungrouped = effectiveTasks.filter(t => !t.section_id)
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
@@ -189,11 +215,10 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         </div>
 
         {sections.map(section => {
-          const sectionTasks = tasks.filter(t => t.section_id === section.id)
+          const sectionTasks = effectiveTasks.filter(t => t.section_id === section.id)
           const isCollapsed = collapsed[section.id]
           return (
             <div key={section.id}>
-              {/* Section header */}
               <div
                 className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50 group"
                 onClick={() => toggle(section.id)}
