@@ -60,3 +60,18 @@ export interface Task {
   created_at: string
   updated_at: string
 }
+
+export interface Notification {
+  id: string
+  user_id: string
+  actor_id: string | null
+  type: 'task_assigned' | 'mention'
+  task_id: string | null
+  project_id: string | null
+  comment_id: string | null
+  is_read: boolean
+  created_at: string
+  actor?: { name: string | null; avatar_color: string | null } | null
+  task?: { title: string | null } | null
+  project?: { name: string | null; color: string | null } | null
+}

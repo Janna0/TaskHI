@@ -43,10 +43,11 @@ function renderContent(content: string) {
   )
 }
 
-// ── Comments ─────────────────────────────────────────────────────────────────
+// ── Comments ───────────────────────────────────────────────────────────────────
 
-function CommentsSection({ taskId, memberMap }: {
+function CommentsSection({ taskId, projectId, memberMap }: {
   taskId: string
+  projectId: string
   memberMap: Record<string, { name: string; color: string }>
 }) {
   const { user } = useAuth()
@@ -95,11 +96,35 @@ function CommentsSection({ taskId, memberMap }: {
     const trimmed = input.trim()
     if (!trimmed || !user || submitting) return
     setSubmitting(true)
-    await supabase.from('task_comments').insert({
-      task_id: taskId,
-      author_id: user.id,
-      content: trimmed,
-    })
+
+    const { data: commentData } = await supabase
+      .from('task_comments')
+      .insert({ task_id: taskId, author_id: user.id, content: trimmed })
+      .select()
+      .single()
+
+    // Notify mentioned members
+    if (commentData) {
+      const mentions = [...trimmed.matchAll(/@(\w+)/g)].map(m => m[1].toLowerCase())
+      const toNotify = [...new Set(
+        Object.entries(memberMap)
+          .filter(([uid, m]) => mentions.includes(m.name.split(' ')[0].toLowerCase()) && uid !== user.id)
+          .map(([uid]) => uid)
+      )]
+      if (toNotify.length > 0) {
+        await supabase.from('notifications').insert(
+          toNotify.map(uid => ({
+            user_id: uid,
+            actor_id: user.id,
+            type: 'mention',
+            task_id: taskId,
+            project_id: projectId,
+            comment_id: commentData.id,
+          }))
+        )
+      }
+    }
+
     setInput('')
     setSubmitting(false)
     loadComments()
@@ -208,6 +233,7 @@ function CommentsSection({ taskId, memberMap }: {
 // ── Main panel ──────────────────────────────────────────────────────────────
 
 export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
+  const { user } = useAuth()
   const [title, setTitle] = useState(task.title)
   const [status, setStatus] = useState<string>(task.status)
   const [priority, setPriority] = useState<string>(task.priority)
@@ -250,6 +276,22 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       notes: notes || null,
       assignee_ids: assigneeIds,
     }).eq('id', task.id)
+
+    // Notify newly added assignees
+    const prevAssignees = task.assignee_ids ?? []
+    const newAssignees = assigneeIds.filter(id => !prevAssignees.includes(id) && id !== user?.id)
+    if (newAssignees.length > 0) {
+      await supabase.from('notifications').insert(
+        newAssignees.map(assigneeId => ({
+          user_id: assigneeId,
+          actor_id: user?.id,
+          type: 'task_assigned',
+          task_id: task.id,
+          project_id: task.project_id,
+        }))
+      )
+    }
+
     setSaving(false)
     setDirty(false)
     onUpdated()
@@ -377,7 +419,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
         </div>
 
         {/* Comments */}
-        <CommentsSection taskId={task.id} memberMap={memberMap} />
+        <CommentsSection taskId={task.id} projectId={task.project_id} memberMap={memberMap} />
       </div>
 
       {/* Footer */}

@@ -10,6 +10,7 @@ import { ProjectView } from './pages/ProjectView'
 import { MyTasksPage } from './pages/MyTasksPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { InboxPage } from './pages/InboxPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -57,6 +58,7 @@ function AppRoutes() {
       <Route path="/projects" element={<PrivateRoute><ProjectsPage /></PrivateRoute>} />
       <Route path="/projects/:id" element={<PrivateRoute><ProjectView /></PrivateRoute>} />
       <Route path="/my-tasks" element={<PrivateRoute><MyTasksPage /></PrivateRoute>} />
+      <Route path="/inbox" element={<PrivateRoute><InboxPage /></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

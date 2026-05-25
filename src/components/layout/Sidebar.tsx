@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
-import { FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight } from 'lucide-react'
+import { FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn, getInitials, PROJECT_COLORS } from '../../lib/utils'
 import { Project } from '../../types'
@@ -34,11 +34,29 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const [showColorPanel, setShowColorPanel] = useState(false)
   const [renameProject, setRenameProject] = useState<Project | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [unreadCount, setUnreadCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
   const displayName = profile?.name || profile?.email?.split('@')[0] || user?.email?.split('@')[0] || '?'
   const avatarColor = profile?.avatar_color ?? '#6366f1'
+
+  useEffect(() => {
+    if (!user) return
+    loadUnreadCount()
+    const handler = () => loadUnreadCount()
+    window.addEventListener('taskhi:notifications-changed', handler)
+    return () => window.removeEventListener('taskhi:notifications-changed', handler)
+  }, [user])
+
+  async function loadUnreadCount() {
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user!.id)
+      .eq('is_read', false)
+    setUnreadCount(count ?? 0)
+  }
 
   useEffect(() => {
     if (!contextMenu) return
@@ -144,6 +162,15 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
         </NavLink>
         <NavLink to="/my-tasks" className={navClass}>
           <CheckSquare size={15} /> My Tasks
+        </NavLink>
+        <NavLink to="/inbox" className={navClass}>
+          <Bell size={15} />
+          Inbox
+          {unreadCount > 0 && (
+            <span className="ml-auto bg-primary-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </NavLink>
         <NavLink to="/projects" end className={navClass}>
           <FolderOpen size={15} /> Projects
