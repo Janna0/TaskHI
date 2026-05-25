@@ -133,7 +133,8 @@ function TaskRow({
   onClick,
 }: {
   task: Task
-  memberMap: Record<string, { name: string; color: string }>  onClick: () => void
+  memberMap: Record<string, { name: string; color: string }>
+  onClick: () => void
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
@@ -215,6 +216,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [sectionError, setSectionError] = useState('')
   const [activeTask, setActiveTask] = useState<Task | null>(null)
   const [sectionOverrides, setSectionOverrides] = useState<Record<string, string>>({})
+  const [hoveredSection, setHoveredSection] = useState<string | null>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
 
   const sensors = useSensors(
@@ -240,7 +242,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
       ? `Delete this section? The ${taskCount} task${taskCount > 1 ? 's' : ''} inside will be moved to "No section".`
       : 'Delete this section?'
     if (!confirm(msg)) return
-    // Unassign tasks first, then delete the section
     await supabase.from('tasks').update({ section_id: null }).eq('section_id', sectionId)
     await supabase.from('sections').delete().eq('id', sectionId)
     onRefresh()
@@ -299,24 +300,29 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         {sections.map(section => {
           const sectionTasks = effectiveTasks.filter(t => t.section_id === section.id)
           const isCollapsed = collapsed[section.id]
+          const isHovered = hoveredSection === section.id
           return (
             <div key={section.id}>
               <div
-                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50 group"
+                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50"
                 onClick={() => toggle(section.id)}
+                onMouseEnter={() => setHoveredSection(section.id)}
+                onMouseLeave={() => setHoveredSection(null)}
               >
                 {isCollapsed
                   ? <ChevronRight size={14} className="text-slate-400" />
                   : <ChevronDown size={14} className="text-slate-400" />}
                 <span className="text-sm font-semibold text-slate-600">{section.name}</span>
                 <span className="text-xs text-slate-400">({sectionTasks.length})</span>
-                <button
-                  onClick={e => { e.stopPropagation(); handleDeleteSection(section.id, sectionTasks.length) }}
-                  className="ml-auto opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-400 transition-all"
-                  title="Delete section"
-                >
-                  <Trash2 size={13} />
-                </button>
+                {isHovered && (
+                  <button
+                    onClick={e => { e.stopPropagation(); handleDeleteSection(section.id, sectionTasks.length) }}
+                    className="ml-auto p-1 rounded hover:bg-red-50 text-slate-300 hover:text-red-400 transition-colors"
+                    title="Delete section"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                )}
               </div>
 
               {!isCollapsed && (
