@@ -231,8 +231,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
   }
 
-  // Only clears inlineAdding if the section that finished is still the active one,
-  // so clicking a different section's row mid-save doesn't clobber the new active row.
   function handleAddDone(sectionId: string) {
     setInlineAdding(prev => prev === sectionId ? null : prev)
     onRefresh()
@@ -294,7 +292,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           return (
             <div key={section.id}>
               <div
-                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50 group"
+                className="flex items-center gap-2 px-4 py-2 cursor-pointer hover:bg-slate-50"
                 onClick={() => toggle(section.id)}
               >
                 {isCollapsed
@@ -302,12 +300,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   : <ChevronDown size={14} className="text-slate-400" />}
                 <span className="text-sm font-semibold text-slate-600">{section.name}</span>
                 <span className="text-xs text-slate-400">({sectionTasks.length})</span>
-                <button
-                  className="ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-slate-200 text-slate-400"
-                  onClick={e => { e.stopPropagation(); setInlineAdding(section.id) }}
-                >
-                  <Plus size={14} />
-                </button>
               </div>
 
               {!isCollapsed && (
