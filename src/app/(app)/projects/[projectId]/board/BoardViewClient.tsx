@@ -1,11 +1,13 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, pointerWithin,
+  useSensor, useSensors, useDroppable,
+  pointerWithin, rectIntersection, closestCenter, getFirstCollision,
   type DragEndEvent, type DragStartEvent, type DragOverEvent, type DragCancelEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
@@ -277,6 +279,7 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
   }, [initialTasks, sections]);
 
   const taskById = Object.fromEntries(initialTasks.map(t => [t.id, t]));
+  const lastOverId = useRef<string | null>(null);
 
   function findColumn(id: string): string | null {
     if (id in taskOrderRef.current) return id;
@@ -285,6 +288,33 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
     }
     return null;
   }
+
+  // Multi-container collision detection:
+  // 1. pointer-within (tasks win over their parent column droppable)
+  // 2. rect-intersection fallback
+  // 3. if the winning droppable is a column, drill into it to find the closest task inside
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const within = pointerWithin(args);
+    const candidates = within.length > 0 ? within : rectIntersection(args);
+    let overId = getFirstCollision(candidates, 'id') as string | null;
+
+    if (overId !== null) {
+      const colItems = taskOrderRef.current[overId];
+      if (colItems && colItems.length > 0) {
+        const inner = closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter(
+            c => c.id !== overId && colItems.includes(c.id as string)
+          ),
+        });
+        if (inner.length > 0) overId = inner[0].id as string;
+      }
+      lastOverId.current = overId;
+      return [{ id: overId }];
+    }
+
+    return lastOverId.current ? [{ id: lastOverId.current }] : [];
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -325,6 +355,7 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
   async function handleDragEnd(event: DragEndEvent) {
     isDraggingRef.current = false;
     setActiveTask(null);
+    lastOverId.current = null;
 
     const { active, over } = event;
     if (!over) { refresh(); return; }
@@ -368,6 +399,7 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
   function handleDragCancel(_event: DragCancelEvent) {
     isDraggingRef.current = false;
     setActiveTask(null);
+    lastOverId.current = null;
     const reset = buildTaskOrder(initialTasks, sections);
     taskOrderRef.current = reset;
     setTaskOrder(reset);
@@ -376,7 +408,7 @@ export default function BoardViewClient({ project, sections, tasks: initialTasks
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={pointerWithin}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
