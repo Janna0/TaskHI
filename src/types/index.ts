@@ -26,6 +26,7 @@ export interface Project {
   name: string
   description: string
   color: string
+  icon?: string | null
   owner_id: string
   is_favorite: boolean
   status: 'active' | 'archived'

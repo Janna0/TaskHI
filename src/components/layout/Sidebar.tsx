@@ -1,8 +1,16 @@
+import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
-import { FolderOpen, CheckSquare, Star, Plus, LogOut, Home } from 'lucide-react'
+import { FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
-import { cn, getInitials } from '../../lib/utils'
+import { cn, getInitials, PROJECT_COLORS } from '../../lib/utils'
 import { Project } from '../../types'
+import { supabase } from '../../lib/supabase'
+
+const PROJECT_ICONS = [
+  '🚀', '📋', '⭐', '📊', '🎯', '💡', '🌍', '⚙️', '🐛', '🏠',
+  '✅', '🎨', '🔬', '📁', '💼', '🏆', '📢', '💬', '🎮', '🔧',
+  '📱', '🖥️', '📝', '🗂️', '🌟', '🔑', '🧩', '🎪', '🏗️', '🧪',
+]
 
 interface SidebarProps {
   projects: Project[]
@@ -22,17 +30,90 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const navigate = useNavigate()
   const favorites = projects.filter(p => p.is_favorite)
 
+  const [contextMenu, setContextMenu] = useState<{ project: Project; x: number; y: number } | null>(null)
+  const [showColorPanel, setShowColorPanel] = useState(false)
+  const [renameProject, setRenameProject] = useState<Project | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const menuRef = useRef<HTMLDivElement>(null)
+  const renameInputRef = useRef<HTMLInputElement>(null)
+
   const displayName = profile?.name || profile?.email?.split('@')[0] || user?.email?.split('@')[0] || '?'
   const avatarColor = profile?.avatar_color ?? '#6366f1'
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function onMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu()
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeMenu()
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [contextMenu])
+
+  useEffect(() => {
+    if (renameProject) requestAnimationFrame(() => renameInputRef.current?.focus())
+  }, [renameProject])
+
+  function openContextMenu(e: React.MouseEvent, project: Project) {
+    e.preventDefault()
+    e.stopPropagation()
+    setContextMenu({ project, x: e.clientX, y: e.clientY })
+    setShowColorPanel(false)
+  }
+
+  function closeMenu() {
+    setContextMenu(null)
+    setShowColorPanel(false)
+  }
+
+  async function handleRename() {
+    if (!renameProject || !renameValue.trim()) { setRenameProject(null); return }
+    await supabase.from('projects').update({ name: renameValue.trim() }).eq('id', renameProject.id)
+    window.dispatchEvent(new Event('taskhi:projects-changed'))
+    setRenameProject(null)
+  }
+
+  async function handleSetColor(color: string) {
+    if (!contextMenu) return
+    await supabase.from('projects').update({ color }).eq('id', contextMenu.project.id)
+    window.dispatchEvent(new Event('taskhi:projects-changed'))
+    closeMenu()
+  }
+
+  async function handleSetIcon(icon: string) {
+    if (!contextMenu) return
+    await supabase.from('projects').update({ icon }).eq('id', contextMenu.project.id)
+    window.dispatchEvent(new Event('taskhi:projects-changed'))
+    closeMenu()
+  }
+
+  async function handleArchive() {
+    if (!contextMenu) return
+    const p = contextMenu.project
+    closeMenu()
+    if (!confirm(`Archive "${p.name}"? It will be hidden from your sidebar.`)) return
+    await supabase.from('projects').update({ status: 'archived' }).eq('id', p.id)
+    window.dispatchEvent(new Event('taskhi:projects-changed'))
+    navigate('/projects')
+  }
 
   async function handleSignOut() {
     await signOut()
     navigate('/login')
   }
 
+  const menuX = contextMenu ? Math.min(contextMenu.x, window.innerWidth - 224) : 0
+  const menuY = contextMenu ? Math.min(contextMenu.y, window.innerHeight - 400) : 0
+
   return (
     <aside className="w-64 shrink-0 h-screen bg-[#1e1f21] flex flex-col">
-      {/* User row — click name/avatar to open profile settings */}
+      {/* User row */}
       <div className="px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <Link to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0 group">
@@ -68,18 +149,23 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           <FolderOpen size={15} /> Projects
         </NavLink>
 
-        {/* Starred — always visible */}
+        {/* Starred */}
         <div className="pt-5">
           <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">
             Starred
           </p>
           {favorites.map(p => (
-            <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass}>
+            <NavLink
+              key={p.id}
+              to={`/projects/${p.id}`}
+              className={navClass}
+              onContextMenu={e => openContextMenu(e, p)}
+            >
               <span
-                className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold shrink-0 text-white"
+                className="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0 text-white leading-none"
                 style={{ background: p.color }}
               >
-                {p.name[0]?.toUpperCase()}
+                {p.icon ?? p.name[0]?.toUpperCase()}
               </span>
               <span className="truncate">{p.name}</span>
               <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />
@@ -100,12 +186,17 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
             </button>
           </div>
           {projects.filter(p => p.status === 'active').map(p => (
-            <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass}>
+            <NavLink
+              key={p.id}
+              to={`/projects/${p.id}`}
+              className={navClass}
+              onContextMenu={e => openContextMenu(e, p)}
+            >
               <span
-                className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold shrink-0 text-white"
+                className="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0 text-white leading-none"
                 style={{ background: p.color }}
               >
-                {p.name[0]?.toUpperCase()}
+                {p.icon ?? p.name[0]?.toUpperCase()}
               </span>
               <span className="truncate">{p.name}</span>
               {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
@@ -121,6 +212,123 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           )}
         </div>
       </nav>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuY, left: menuX, zIndex: 9999 }}
+          className="bg-white rounded-lg shadow-xl border border-slate-200 py-1 w-56"
+        >
+          <button
+            onClick={() => {
+              setRenameValue(contextMenu.project.name)
+              setRenameProject(contextMenu.project)
+              closeMenu()
+            }}
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <Pencil size={14} className="text-slate-400 shrink-0" />
+            Rename
+          </button>
+
+          <button
+            onClick={() => setShowColorPanel(v => !v)}
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            <Palette size={14} className="text-slate-400 shrink-0" />
+            Set color & icon
+            <ChevronRight
+              size={13}
+              className={cn('ml-auto text-slate-300 transition-transform', showColorPanel && 'rotate-90')}
+            />
+          </button>
+
+          {showColorPanel && (
+            <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/60">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Color</p>
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {PROJECT_COLORS.map(c => (
+                  <button
+                    key={c}
+                    onClick={() => handleSetColor(c)}
+                    className={cn(
+                      'w-6 h-6 rounded-full transition-transform hover:scale-110',
+                      contextMenu.project.color === c && 'ring-2 ring-offset-1 ring-slate-500'
+                    )}
+                    style={{ background: c }}
+                  />
+                ))}
+              </div>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Icon</p>
+              <div className="flex flex-wrap gap-0.5">
+                {PROJECT_ICONS.map(icon => (
+                  <button
+                    key={icon}
+                    onClick={() => handleSetIcon(icon)}
+                    className={cn(
+                      'w-7 h-7 flex items-center justify-center text-base rounded hover:bg-slate-200 transition-colors',
+                      contextMenu.project.icon === icon && 'bg-slate-200 ring-1 ring-slate-400'
+                    )}
+                  >
+                    {icon}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="border-t border-slate-100 my-1" />
+
+          <button
+            onClick={handleArchive}
+            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+          >
+            <Archive size={14} className="shrink-0" />
+            Archive project
+          </button>
+        </div>
+      )}
+
+      {/* Rename modal */}
+      {renameProject && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
+          onMouseDown={() => setRenameProject(null)}
+        >
+          <div
+            className="bg-white rounded-lg shadow-xl border border-slate-200 p-4 w-72"
+            onMouseDown={e => e.stopPropagation()}
+          >
+            <p className="text-sm font-semibold text-slate-700 mb-2">Rename project</p>
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleRename()
+                if (e.key === 'Escape') setRenameProject(null)
+              }}
+              className="w-full text-sm border border-slate-300 rounded-md px-3 py-2 outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-400"
+              placeholder="Project name"
+            />
+            <div className="flex justify-end gap-2 mt-3">
+              <button
+                onClick={() => setRenameProject(null)}
+                className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRename}
+                className="text-xs bg-primary-600 text-white rounded-md px-3 py-1.5 hover:bg-primary-700 transition-colors"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }
