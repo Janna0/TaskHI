@@ -13,7 +13,8 @@ import {
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
-  type DragCancelEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
 } from '@dnd-kit/core'
 import {
   SortableContext,
@@ -217,8 +218,8 @@ function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, d
   onRename: (name: string) => void
   onRemove: () => void
   onAddTask: () => void
-  dragListeners: Record<string, unknown> | undefined
-  dragAttributes: Record<string, unknown> | undefined
+  dragListeners: DraggableSyntheticListeners
+  dragAttributes: DraggableAttributes
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(col.name)
@@ -505,7 +506,7 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     }
   }
 
-  function handleDragCancel(_event: DragCancelEvent) {
+  function handleDragCancel() {
     isDraggingRef.current = false
     lastOverId.current = null
     setActiveDragType(null)
