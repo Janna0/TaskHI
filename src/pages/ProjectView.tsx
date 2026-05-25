@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useSearchParams } from 'react-router-dom'
 import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus, Search, Copy, Check, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -22,6 +22,7 @@ const TABS: { id: View; label: string }[] = [
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
   const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [projectOwner, setProjectOwner] = useState<Profile | null>(null)
@@ -36,8 +37,17 @@ export function ProjectView() {
   const [loading, setLoading] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
 
+  const autoOpenTaskId = searchParams.get('task')
+
   const ownerDisplayName = projectOwner?.name || projectOwner?.email?.split('@')[0] || '?'
   const ownerAvatarColor = projectOwner?.avatar_color ?? '#6366f1'
+
+  // Auto-open task from inbox notification
+  useEffect(() => {
+    if (!autoOpenTaskId || tasks.length === 0 || selectedTask) return
+    const task = tasks.find(t => t.id === autoOpenTaskId)
+    if (task) setSelectedTask(task)
+  }, [autoOpenTaskId, tasks])
 
   function setAsDefault(v: View) {
     if (!id) return
@@ -65,7 +75,6 @@ export function ProjectView() {
       ])
       if (projRes.data) {
         const proj = projRes.data as unknown as Project
-        // Apply per-user favorite from localStorage
         setProject({ ...proj, is_favorite: loadFavoriteIds(user!.id).has(proj.id) })
         const { data: ownerData } = await supabase
           .from('profiles')
@@ -303,7 +312,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ───────────────────────────────────────────────────
+// ── Member Picker (header) ─────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -448,7 +457,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ────────────────────────────────────────────────────────────
+// ── Overview Tab ──────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 

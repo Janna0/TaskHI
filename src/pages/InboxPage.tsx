@@ -33,7 +33,6 @@ export function InboxPage() {
       .limit(100)
     if (data) setNotifications(data as Notification[])
     setLoading(false)
-    // Mark all unread as read silently
     await supabase.from('notifications').update({ is_read: true }).eq('user_id', user!.id).eq('is_read', false)
     window.dispatchEvent(new Event('taskhi:notifications-changed'))
   }
@@ -45,7 +44,11 @@ export function InboxPage() {
   }
 
   function handleClick(n: Notification) {
-    if (n.project_id) navigate(`/projects/${n.project_id}`)
+    if (n.project_id && n.task_id) {
+      navigate(`/projects/${n.project_id}?task=${n.task_id}`)
+    } else if (n.project_id) {
+      navigate(`/projects/${n.project_id}`)
+    }
   }
 
   const hasUnread = notifications.some(n => !n.is_read)
