@@ -19,13 +19,22 @@ export function RegisterPage() {
     if (!name.trim()) { setError('Name is required'); return }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return }
     setLoading(true)
-    const { error: err } = await supabase.auth.signUp({
+    const { data, error: err } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { name: name.trim() } },
     })
+    if (err) { setLoading(false); setError(err.message); return }
+    // Insert profile row so the user appears in member search dropdowns
+    if (data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        email: data.user.email!,
+        full_name: name.trim(),
+        name: name.trim(),
+      }, { onConflict: 'id' })
+    }
     setLoading(false)
-    if (err) { setError(err.message); return }
     navigate('/dashboard')
   }
 

@@ -33,28 +33,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user.id)
+      if (session?.user) loadProfile(session.user)
       else setLoading(false)
     })
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user.id)
+      if (session?.user) loadProfile(session.user)
       else { setProfile(null); setLoading(false) }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
-  async function loadProfile(userId: string) {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
-    setProfile(data)
+  async function loadProfile(authUser: User) {
+    const { data } = await supabase.from('profiles').select('*').eq('id', authUser.id).single()
+    if (data) {
+      setProfile(data)
+      setLoading(false)
+      return
+    }
+    // Profile row missing — create it from auth metadata.
+    // This handles users who registered before the profile-insert fix.
+    const displayName = authUser.user_metadata?.name || authUser.email?.split('@')[0] || ''
+    await supabase.from('profiles').upsert({
+      id: authUser.id,
+      email: authUser.email!,
+      full_name: displayName,
+      name: displayName,
+    }, { onConflict: 'id' })
+    const { data: created } = await supabase.from('profiles').select('*').eq('id', authUser.id).single()
+    setProfile(created)
     setLoading(false)
   }
 
   async function refreshProfile() {
-    if (user) await loadProfile(user.id)
+    if (user) await loadProfile(user)
   }
 
   function updateProfile(updates: Partial<Profile>) {
