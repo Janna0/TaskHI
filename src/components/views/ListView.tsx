@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -7,7 +7,9 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  pointerWithin,
   useDroppable,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
@@ -35,22 +37,11 @@ interface Props {
   onRefresh: () => void
 }
 
-function sectionNameToStatus(name: string): Task['status'] | null {
-  const n = name.toLowerCase().replace(/[-_\s]+/g, '')
-  if (n === 'todo') return 'todo'
-  if (n === 'inprogress') return 'in_progress'
-  if (n === 'review' || n === 'inreview') return 'review'
-  if (n === 'blocked') return 'blocked'
-  if (n === 'done' || n === 'complete' || n === 'completed' || n === 'finished') return 'done'
-  return null
-}
+// ── Inline add-task row ──────────────────────────────────────────────────────────────
 
-// ── Inline add-task row ──────────────────────────────────────────────────
-
-function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActive, onActivate, onDone }: {
+function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
   sectionId: string
-  sectionName: string
   position: number
   isActive: boolean
   onActivate: () => void
@@ -75,12 +66,11 @@ function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActiv
     const trimmed = title.trim()
     if (trimmed) {
       setSaving(true)
-      const inferredStatus = sectionNameToStatus(sectionName) ?? 'todo'
       await supabase.from('tasks').insert({
         project_id: projectId,
         section_id: sectionId,
         title: trimmed,
-        status: inferredStatus,
+        status: 'todo',
         priority: 'medium',
         position,
         depth: 0,
@@ -131,7 +121,7 @@ function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActiv
   )
 }
 
-// ── Sortable task row ────────────────────────────────────────────────────────
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -197,7 +187,7 @@ function TaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -208,7 +198,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Section action menu ───────────────────────────────────────────────────────────────────
+// ── Section action menu ────────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose }: {
   onRename: () => void
@@ -258,16 +248,16 @@ function SectionMenu({ onRename, onDelete, onClose }: {
 
 // ── Section drop zone (makes empty sections droppable) ────────────────────────────────────
 
-function SectionDropZone({ id, children }: { id: string; children: ReactNode }) {
+function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn('min-h-[32px] transition-colors', isOver && 'bg-primary-50/40')}>
+    <div ref={setNodeRef} className={cn('min-h-[60px] transition-colors', isOver && 'bg-primary-50/40')}>
       {children}
     </div>
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -293,6 +283,12 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   )
+
+  // pointerWithin first (exact hit), closestCenter as fallback for fast cross-section drags
+  const collisionDetection: CollisionDetection = (args) => {
+    const hits = pointerWithin(args)
+    return hits.length > 0 ? hits : closestCenter(args)
+  }
 
   useEffect(() => {
     if (renamingSection) requestAnimationFrame(() => renameInputRef.current?.focus())
@@ -379,7 +375,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     // Determine target section: overId is either a task ID or a section key
     let targetSid: string
     if (overId in localOrderRef.current) {
-      // It's a section key directly (from useDroppable on the section container)
+      // It's a section key directly
       targetSid = overId
     } else {
       targetSid = findSection(overId)
@@ -415,32 +411,46 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     isDraggingRef.current = false
     setActiveTask(null)
 
-    const { active } = event
+    const { active, over } = event
     const taskId = active.id as string
     const originalTask = tasks.find(t => t.id === taskId)
-    if (!originalTask) return
+    if (!originalTask) { onRefresh(); return }
+
+    if (!over) { onRefresh(); return }
+
+    // Use event.over as authoritative drop target — handleDragOver may have missed
+    // a fast cross-section drag, so apply the cross-section move here if needed.
+    const overId = over.id as string
+    const overSid = overId in localOrderRef.current ? overId : findSection(overId)
+    const currentSid = findSection(taskId)
+
+    if (overSid && overSid !== currentSid) {
+      const cur = localOrderRef.current
+      const sourceIds = (cur[currentSid] ?? []).filter(id => id !== taskId)
+      const destIds = [...(cur[overSid] ?? [])]
+      const overIsContainer = overId in cur
+      const insertAt = overIsContainer ? destIds.length : destIds.indexOf(overId)
+      destIds.splice(insertAt === -1 ? destIds.length : insertAt, 0, taskId)
+      const next = { ...cur, [currentSid]: sourceIds, [overSid]: destIds }
+      localOrderRef.current = next
+      setLocalOrder(next)
+    }
 
     const finalSid = findSection(taskId)
     const finalSectionIds = localOrderRef.current[finalSid] ?? []
     const newSectionId = finalSid || null
-    const crossSection = newSectionId !== originalTask.section_id
 
     await Promise.all(
       finalSectionIds.map((id, idx) => {
         const update: Record<string, unknown> = { position: idx }
-        if (id === taskId && crossSection) {
+        if (id === taskId && newSectionId !== originalTask.section_id) {
           update.section_id = newSectionId
-          const targetSection = sections.find(s => s.id === newSectionId)
-          if (targetSection) {
-            const inferredStatus = sectionNameToStatus(targetSection.name)
-            if (inferredStatus) update.status = inferredStatus
-          }
         }
         return supabase.from('tasks').update(update).eq('id', id)
       })
     )
 
-    if (crossSection) onRefresh()
+    if (newSectionId !== originalTask.section_id) onRefresh()
   }
 
   const ungroupedIds = localOrder[''] ?? []
@@ -448,7 +458,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -545,7 +555,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <AddTaskInlineRow
                     projectId={projectId}
                     sectionId={section.id}
-                    sectionName={section.name}
                     position={sectionTaskIds.length}
                     isActive={inlineAdding === section.id}
                     onActivate={() => setInlineAdding(section.id)}
