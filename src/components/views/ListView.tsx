@@ -7,6 +7,7 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  useDroppable,
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
@@ -21,7 +22,7 @@ import { CSS } from '@dnd-kit/utilities'
 import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
-import { StatusBadge, PriorityBadge } from '../ui/Badge'
+import { PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
 import { CreateTaskModal } from '../tasks/CreateTaskModal'
 
@@ -34,7 +35,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Inline add-task row ──────────────────────────────────────────────────────────────
+// ── Inline add-task row ──────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -118,7 +119,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Sortable task row ───────────────────────────────────────────────────────────────────
+// ── Sortable task row ────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -155,9 +156,6 @@ function TaskRow({
       <span className={cn('flex-1 text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
         {task.title}
       </span>
-      <div className="w-28 flex justify-center">
-        <StatusBadge status={task.status} />
-      </div>
       <div className="w-24 flex justify-center">
         <PriorityBadge priority={task.priority} />
       </div>
@@ -187,19 +185,18 @@ function TaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-white border border-primary-200 rounded-lg shadow-lg opacity-95">
       <GripVertical size={14} className="text-slate-300 shrink-0" />
       <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
-      <StatusBadge status={task.status} />
     </div>
   )
 }
 
-// ── Section action menu ────────────────────────────────────────────────────────────────────
+// ── Section action menu ───────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose }: {
   onRename: () => void
@@ -247,7 +244,18 @@ function SectionMenu({ onRename, onDelete, onClose }: {
   )
 }
 
-// ── Main component ──────────────────────────────────────────────────────────────
+// ── Section drop zone (makes empty sections droppable) ────────────────────────────────────
+
+function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
+  const { setNodeRef, isOver } = useDroppable({ id })
+  return (
+    <div ref={setNodeRef} className={cn('min-h-[32px] transition-colors', isOver && 'bg-primary-50/40')}>
+      {children}
+    </div>
+  )
+}
+
+// ── Main component ───────────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -359,7 +367,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     // Determine target section: overId is either a task ID or a section key
     let targetSid: string
     if (overId in localOrderRef.current) {
-      // It's a section key directly
+      // It's a section key directly (from useDroppable on the section container)
       targetSid = overId
     } else {
       targetSid = findSection(overId)
@@ -385,7 +393,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
       const targetIds = [...(newOrder[targetSid] ?? [])]
       const overIdx = targetIds.indexOf(overId)
       targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
-      newOrder[targetSid] = targetIds
+      newOrder[targetSec] = targetIds
       localOrderRef.current = newOrder
       setLocalOrder(newOrder)
     }
@@ -431,7 +439,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
           <span className="w-3.5 shrink-0" />
           <span className="flex-1">Task</span>
-          <span className="w-28 text-center">Status</span>
           <span className="w-24 text-center">Priority</span>
           <span className="w-24 text-center">Due date</span>
           <span className="w-8" />
@@ -504,8 +511,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
               {!isCollapsed && (
                 <>
-                  <SortableContext items={sectionTaskIds} strategy={verticalListSortingStrategy}>
-                    <div className="min-h-[4px]">
+                  <SectionDropZone id={section.id}>
+                    <SortableContext items={sectionTaskIds} strategy={verticalListSortingStrategy}>
                       {sectionTasks.map(task => (
                         <TaskRow
                           key={task.id}
@@ -514,8 +521,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                           onClick={() => onTaskClick(task)}
                         />
                       ))}
-                    </div>
-                  </SortableContext>
+                    </SortableContext>
+                  </SectionDropZone>
                   <AddTaskInlineRow
                     projectId={projectId}
                     sectionId={section.id}
