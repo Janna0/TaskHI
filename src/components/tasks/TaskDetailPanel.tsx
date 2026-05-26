@@ -41,8 +41,6 @@ function renderContent(content: string) {
   )
 }
 
-// ── Property row ───────────────────────────────────────────────────────────────
-
 function PropRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
     <div className="flex items-center py-2.5 hover:bg-slate-50 rounded-lg px-2 -mx-2 group transition-colors">
@@ -54,8 +52,6 @@ function PropRow({ icon, label, children }: { icon: ReactNode; label: string; ch
     </div>
   )
 }
-
-// ── Comments ───────────────────────────────────────────────────────────────────
 
 function CommentsSection({ taskId, projectId, memberMap }: {
   taskId: string
@@ -246,8 +242,6 @@ function CommentsSection({ taskId, projectId, memberMap }: {
   )
 }
 
-// ── Subtask row ────────────────────────────────────────────────────────────────────
-
 function SubtaskRow({ sub, memberMap, onUpdate }: {
   sub: Task
   memberMap: Record<string, { name: string; color: string }>
@@ -377,8 +371,6 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
     </div>
   )
 }
-
-// ── Main panel ──────────────────────────────────────────────────────────────
 
 export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
   const { user, profile } = useAuth()
@@ -553,7 +545,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
 
         {/* Properties */}
         <div className="px-6 py-2 border-b border-slate-100">
-          {/* Assignee */}
           <PropRow icon={<User size={14} />} label="Assignee">
             <div className="relative" ref={assigneePickerRef}>
               <button
@@ -612,7 +603,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </div>
           </PropRow>
 
-          {/* Due date */}
           <PropRow icon={<Calendar size={14} />} label="Due date">
             {dueDate ? (
               <input
@@ -637,7 +627,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             )}
           </PropRow>
 
-          {/* Priority */}
           <PropRow icon={<Flag size={14} />} label="Priority">
             <select
               className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
@@ -648,7 +637,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </select>
           </PropRow>
 
-          {/* Status */}
           <PropRow icon={<CheckSquare size={14} />} label="Status">
             <select
               className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
@@ -659,7 +647,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </select>
           </PropRow>
 
-          {/* Section */}
           {sections.length > 0 && (
             <PropRow icon={<Layers size={14} />} label="Section">
               <select

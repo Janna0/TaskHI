@@ -252,7 +252,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           <FolderOpen size={15} /> Projects
         </NavLink>
 
-        {/* Archived — always visible, collapsed by default */}
+        {/* Archived — collapsed sub-item under Projects */}
         <div>
           <button
             onClick={() => setShowArchived(v => !v)}
