@@ -50,20 +50,10 @@ export function ForgotPasswordPage() {
           ) : (
             <>
               <h1 className="text-xl font-bold text-slate-800 mb-1">Reset your password</h1>
-              <p className="text-sm text-slate-500 mb-6">
-                Enter your email and we'll send you a reset link.
-              </p>
+              <p className="text-sm text-slate-500 mb-6">Enter your email and we'll send you a reset link.</p>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <Input
-                  label="Email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  error={error}
-                  required
-                  autoFocus
-                />
+                <Input label="Email" type="email" placeholder="you@example.com"
+                  value={email} onChange={e => setEmail(e.target.value)} error={error} required autoFocus />
                 <Button type="submit" className="w-full" loading={loading}>Send reset link</Button>
               </form>
               <div className="mt-5 flex justify-center">

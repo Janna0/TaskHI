@@ -25,7 +25,6 @@ export function RegisterPage() {
       options: { data: { name: name.trim() } },
     })
     if (err) { setLoading(false); setError(err.message); return }
-    // Insert profile row so the user appears in member search dropdowns
     if (data.user) {
       await supabase.from('profiles').upsert({
         id: data.user.id,
@@ -41,7 +40,6 @@ export function RegisterPage() {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        {/* Logo */}
         <div className="flex items-center justify-center gap-2 mb-8">
           <div className="w-9 h-9 rounded-xl bg-primary-500 flex items-center justify-center">
             <CheckSquare size={18} className="text-white" />
@@ -54,30 +52,12 @@ export function RegisterPage() {
           <p className="text-sm text-slate-500 mb-6">Start tracking your work for free</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
-              label="Full name"
-              placeholder="Jane Smith"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              required
-            />
-            <Input
-              label="Email"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
-            <Input
-              label="Password"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              error={error}
-              required
-            />
+            <Input label="Full name" placeholder="Jane Smith" value={name}
+              onChange={e => setName(e.target.value)} required />
+            <Input label="Email" type="email" placeholder="you@example.com" value={email}
+              onChange={e => setEmail(e.target.value)} required />
+            <Input label="Password" type="password" placeholder="••••••••" value={password}
+              onChange={e => setPassword(e.target.value)} error={error} required />
             <Button type="submit" className="w-full" loading={loading}>Create account</Button>
           </form>
 

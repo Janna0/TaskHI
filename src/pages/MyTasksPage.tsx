@@ -66,7 +66,6 @@ export function MyTasksPage() {
         </div>
       ) : (
         <div className="space-y-1">
-          {/* Header */}
           <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
             <span className="flex-1">Task</span>
             <span className="w-28 text-center">Status</span>

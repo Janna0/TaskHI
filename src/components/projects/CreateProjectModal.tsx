@@ -34,7 +34,6 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
       owner_id: user!.id,
     }).select().single()
     if (err) { setLoading(false); setError(err.message); return }
-    // Seed default sections
     await supabase.from('sections').insert(
       DEFAULT_SECTIONS.map((sectionName, i) => ({
         project_id: data.id,

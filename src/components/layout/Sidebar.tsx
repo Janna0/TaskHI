@@ -131,7 +131,6 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
 
   return (
     <aside className="w-64 shrink-0 h-screen bg-[#1e1f21] flex flex-col">
-      {/* User row */}
       <div className="px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <Link to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0 group">
@@ -155,7 +154,6 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
         </div>
       </div>
 
-      {/* Nav */}
       <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
         <NavLink to="/dashboard" className={navClass}>
           <Home size={15} /> Home
@@ -176,7 +174,6 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           <FolderOpen size={15} /> Projects
         </NavLink>
 
-        {/* Starred */}
         <div className="pt-5">
           <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">
             Starred
@@ -200,7 +197,6 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           ))}
         </div>
 
-        {/* All projects */}
         <div className="pt-5">
           <div className="flex items-center justify-between px-3 mb-1">
             <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">Projects</p>
@@ -240,7 +236,6 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
         </div>
       </nav>
 
-      {/* Context Menu */}
       {contextMenu && (
         <div
           ref={menuRef}
@@ -317,7 +312,6 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
         </div>
       )}
 
-      {/* Rename modal */}
       {renameProject && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/20"
