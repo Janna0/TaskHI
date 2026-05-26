@@ -57,16 +57,6 @@ function buildTaskOrder(tasks: Task[], sections: Section[]): Record<string, stri
   return order
 }
 
-function sectionNameToStatus(name: string): Task['status'] | null {
-  const n = name.toLowerCase().replace(/[-_\s]+/g, '')
-  if (n === 'todo') return 'todo'
-  if (n === 'inprogress') return 'in_progress'
-  if (n === 'review' || n === 'inreview') return 'review'
-  if (n === 'blocked') return 'blocked'
-  if (n === 'done' || n === 'complete' || n === 'completed' || n === 'finished') return 'done'
-  return null
-}
-
 interface Props {
   sections: Section[]
   tasks: Task[]
@@ -137,7 +127,7 @@ function SortableTaskCard({ task, memberMap, onClick }: {
   )
 }
 
-// ── Task ghost for DragOverlay ──────────────────────────────────────────────────────────────────
+// ── Task ghost for DragOverlay ────────────────────────────────────────────────────────
 
 function TaskCardGhost({ task }: { task: Task }) {
   return (
@@ -147,7 +137,7 @@ function TaskCardGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Sortable column ───────────────────────────────────────────────────────────────────────
+// ── Sortable column ────────────────────────────────────────────────────────────────────
 
 function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive }: {
   section: Section
@@ -212,7 +202,7 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
   )
 }
 
-// ── Column header ───────────────────────────────────────────────────────────────────────
+// ── Column header ───────────────────────────────────────────────────────────────────
 
 function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes }: {
   section: Section
@@ -310,7 +300,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   )
 }
 
-// ── Add section form ────────────────────────────────────────────────────────────────────────
+// ── Add section form ──────────────────────────────────────────────────────────────────
 
 function AddSectionForm({ projectId, position, onDone }: {
   projectId: string
@@ -354,9 +344,10 @@ function AddSectionForm({ projectId, position, onDone }: {
   )
 }
 
-// ── Main BoardView ───────────────────────────────────────────────────────────────────
+// ── Main BoardView ────────────────────────────────────────────────────────────────────
 
-export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
+export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
+  const tasks = allTasks.filter(t => !t.parent_task_id)
   const [createSectionId, setCreateSectionId] = useState<string | null>(null)
   const [showAddSection, setShowAddSection] = useState(false)
 
@@ -529,14 +520,7 @@ export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, 
       await Promise.all(
         finalIds.map((id, idx) => {
           const upd: Record<string, unknown> = { position: idx }
-          if (id === taskId && crossSection) {
-            upd.section_id = finalSec
-            const targetSection = sections.find(s => s.id === finalSec)
-            if (targetSection) {
-              const inferredStatus = sectionNameToStatus(targetSection.name)
-              if (inferredStatus) upd.status = inferredStatus
-            }
-          }
+          if (id === taskId && crossSection) upd.section_id = finalSec
           return supabase.from('tasks').update(upd).eq('id', id)
         })
       )

@@ -454,12 +454,12 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
 
           {/* Due date */}
           <PropRow icon={<Calendar size={14} />} label="Due date">
-            <div className="relative flex items-center gap-1">
+            {dueDate ? (
               <input
                 type="date"
                 className={cn(
                   'text-sm bg-transparent outline-none cursor-pointer',
-                  dueDate ? (isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700') : 'text-slate-400'
+                  isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700'
                 )}
                 value={dueDate}
                 onChange={async e => {
@@ -467,8 +467,20 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                   await saveField({ due_date: e.target.value || null })
                 }}
               />
-              {!dueDate && <span className="absolute left-0 text-sm text-slate-400 pointer-events-none">No due date</span>}
-            </div>
+            ) : (
+              <label className="flex items-center gap-1 cursor-pointer">
+                <span className="text-sm text-slate-400">No due date</span>
+                <input
+                  type="date"
+                  className="sr-only"
+                  value=""
+                  onChange={async e => {
+                    setDueDate(e.target.value)
+                    await saveField({ due_date: e.target.value || null })
+                  }}
+                />
+              </label>
+            )}
           </PropRow>
 
           {/* Priority */}
