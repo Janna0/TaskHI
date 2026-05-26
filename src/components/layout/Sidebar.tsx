@@ -10,6 +10,7 @@ import {
   Image, Mountain, Flower2, LayoutDashboard,
   Shuffle, Gauge, Award, Scissors,
   ShoppingBasket, Map, Ticket, Compass,
+  RotateCcw,
   type LucideIcon,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
@@ -62,12 +63,15 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const { profile, user, signOut } = useAuth()
   const navigate = useNavigate()
   const favorites = projects.filter(p => p.is_favorite)
+  const activeProjects = projects.filter(p => p.status === 'active')
+  const archivedProjects = projects.filter(p => p.status === 'archived')
 
   const [contextMenu, setContextMenu] = useState<{ project: Project; x: number; y: number } | null>(null)
   const [showColorPanel, setShowColorPanel] = useState(false)
   const [renameProject, setRenameProject] = useState<Project | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
+  const [showArchived, setShowArchived] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
@@ -148,10 +152,18 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
     if (!contextMenu) return
     const p = contextMenu.project
     closeMenu()
-    if (!confirm(`Archive "${p.name}"? It will be hidden from your sidebar.`)) return
+    if (!confirm(`Archive "${p.name}"? It will be moved to the Archived section.`)) return
     await supabase.from('projects').update({ status: 'archived' }).eq('id', p.id)
     window.dispatchEvent(new Event('taskhi:projects-changed'))
     navigate('/projects')
+  }
+
+  async function handleUnarchive() {
+    if (!contextMenu) return
+    const p = contextMenu.project
+    closeMenu()
+    await supabase.from('projects').update({ status: 'active' }).eq('id', p.id)
+    window.dispatchEvent(new Event('taskhi:projects-changed'))
   }
 
   async function handleSignOut() {
@@ -161,6 +173,8 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
 
   const menuX = contextMenu ? Math.min(contextMenu.x, window.innerWidth - 224) : 0
   const menuY = contextMenu ? Math.min(contextMenu.y, window.innerHeight - 520) : 0
+
+  const isArchived = contextMenu?.project.status === 'archived'
 
   return (
     <aside className="w-64 shrink-0 h-screen bg-[#1e1f21] flex flex-col">
@@ -228,7 +242,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           ))}
         </div>
 
-        {/* All projects */}
+        {/* All active projects */}
         <div className="pt-5">
           <div className="flex items-center justify-between px-3 mb-1">
             <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">Projects</p>
@@ -240,7 +254,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               <Plus size={14} />
             </button>
           </div>
-          {projects.filter(p => p.status === 'active').map(p => (
+          {activeProjects.map(p => (
             <NavLink
               key={p.id}
               to={`/projects/${p.id}`}
@@ -252,7 +266,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
             </NavLink>
           ))}
-          {projects.length === 0 && (
+          {activeProjects.length === 0 && (
             <button
               onClick={onNewProject}
               className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/40 hover:text-white/70 w-full transition-colors"
@@ -261,6 +275,38 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
             </button>
           )}
         </div>
+
+        {/* Archived projects */}
+        {archivedProjects.length > 0 && (
+          <div className="pt-5">
+            <button
+              onClick={() => setShowArchived(v => !v)}
+              className="flex items-center gap-2 px-3 mb-1 w-full text-left group"
+            >
+              <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest flex-1">Archived</p>
+              <ChevronRight
+                size={12}
+                className={cn('text-white/30 transition-transform', showArchived && 'rotate-90')}
+              />
+            </button>
+            {showArchived && archivedProjects.map(p => (
+              <NavLink
+                key={p.id}
+                to={`/projects/${p.id}`}
+                className={navClass}
+                onContextMenu={e => openContextMenu(e, p)}
+              >
+                <span
+                  className="w-5 h-5 rounded flex items-center justify-center shrink-0 opacity-50"
+                  style={{ background: p.color }}
+                >
+                  <Archive size={10} />
+                </span>
+                <span className="truncate opacity-60">{p.name}</span>
+              </NavLink>
+            ))}
+          </div>
+        )}
       </nav>
 
       {/* Context Menu */}
@@ -270,31 +316,35 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           style={{ position: 'fixed', top: menuY, left: menuX, zIndex: 9999 }}
           className="bg-white rounded-lg shadow-xl border border-slate-200 py-1 w-56"
         >
-          <button
-            onClick={() => {
-              setRenameValue(contextMenu.project.name)
-              setRenameProject(contextMenu.project)
-              closeMenu()
-            }}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <Pencil size={14} className="text-slate-400 shrink-0" />
-            Rename
-          </button>
+          {!isArchived && (
+            <button
+              onClick={() => {
+                setRenameValue(contextMenu.project.name)
+                setRenameProject(contextMenu.project)
+                closeMenu()
+              }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Pencil size={14} className="text-slate-400 shrink-0" />
+              Rename
+            </button>
+          )}
 
-          <button
-            onClick={() => setShowColorPanel(v => !v)}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-          >
-            <Palette size={14} className="text-slate-400 shrink-0" />
-            Set color & icon
-            <ChevronRight
-              size={13}
-              className={cn('ml-auto text-slate-300 transition-transform', showColorPanel && 'rotate-90')}
-            />
-          </button>
+          {!isArchived && (
+            <button
+              onClick={() => setShowColorPanel(v => !v)}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Palette size={14} className="text-slate-400 shrink-0" />
+              Set color & icon
+              <ChevronRight
+                size={13}
+                className={cn('ml-auto text-slate-300 transition-transform', showColorPanel && 'rotate-90')}
+              />
+            </button>
+          )}
 
-          {showColorPanel && (
+          {showColorPanel && !isArchived && (
             <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/60">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Color</p>
               <div className="grid grid-cols-7 gap-1 mb-3">
@@ -334,13 +384,23 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
 
           <div className="border-t border-slate-100 my-1" />
 
-          <button
-            onClick={handleArchive}
-            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
-          >
-            <Archive size={14} className="shrink-0" />
-            Archive project
-          </button>
+          {isArchived ? (
+            <button
+              onClick={handleUnarchive}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <RotateCcw size={14} className="text-slate-400 shrink-0" />
+              Unarchive project
+            </button>
+          ) : (
+            <button
+              onClick={handleArchive}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
+            >
+              <Archive size={14} className="shrink-0" />
+              Archive project
+            </button>
+          )}
         </div>
       )}
 
