@@ -54,7 +54,6 @@ export function DashboardPage() {
 
   return (
     <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
-      {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">
           Good {getGreeting()}, {profile?.name?.split(' ')[0] ?? 'there'} 👋
@@ -62,14 +61,12 @@ export function DashboardPage() {
         <p className="text-slate-500 text-sm mt-1">Here's what's on your plate today.</p>
       </div>
 
-      {/* Stats row */}
       <div className="grid grid-cols-3 gap-4">
         <StatCard icon={<CheckSquare size={18} className="text-primary-500" />} label="Open tasks" value={tasks.length} color="bg-primary-50" />
         <StatCard icon={<AlertCircle size={18} className="text-red-500" />} label="Overdue" value={overdueTasks.length} color="bg-red-50" />
         <StatCard icon={<Star size={18} className="text-amber-500" />} label="Favorites" value={favorites.length} color="bg-amber-50" />
       </div>
 
-      {/* Overdue */}
       {overdueTasks.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold text-red-600 flex items-center gap-1.5 mb-3">
@@ -81,7 +78,6 @@ export function DashboardPage() {
         </section>
       )}
 
-      {/* Upcoming tasks */}
       <section>
         <h2 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5 mb-3">
           <Clock size={14} /> Upcoming tasks
@@ -97,7 +93,6 @@ export function DashboardPage() {
         )}
       </section>
 
-      {/* Favorites */}
       {favorites.length > 0 && (
         <section>
           <h2 className="text-sm font-semibold text-slate-600 flex items-center gap-1.5 mb-3">
@@ -109,7 +104,6 @@ export function DashboardPage() {
         </section>
       )}
 
-      {/* Recent projects */}
       <section>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-slate-600">Recent projects</h2>
