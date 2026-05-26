@@ -223,43 +223,45 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           <FolderOpen size={15} /> Projects
         </NavLink>
 
-        {/* Archived — collapsed sub-item under Projects */}
-        {archivedProjects.length > 0 && (
-          <div>
-            <button
-              onClick={() => setShowArchived(v => !v)}
-              className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left text-white/50 hover:bg-white/10 hover:text-white/80 transition-colors"
-            >
-              <Archive size={15} />
-              Archived
-              <ChevronRight
-                size={12}
-                className={cn('ml-auto text-white/30 transition-transform', showArchived && 'rotate-90')}
-              />
-            </button>
-            {showArchived && archivedProjects.map(p => (
-              <NavLink
-                key={p.id}
-                to={`/projects/${p.id}`}
-                className={({ isActive }) => cn(
-                  'flex items-center gap-2.5 pl-8 pr-3 py-1.5 rounded-md text-sm transition-colors',
-                  isActive
-                    ? 'bg-white/15 text-white/70 font-medium'
-                    : 'text-white/40 hover:bg-white/10 hover:text-white/60'
-                )}
-                onContextMenu={e => openContextMenu(e, p)}
-              >
-                <span
-                  className="w-4 h-4 rounded flex items-center justify-center shrink-0 opacity-50"
-                  style={{ background: p.color }}
+        {/* Archived — always visible, collapsed by default */}
+        <div>
+          <button
+            onClick={() => setShowArchived(v => !v)}
+            className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left text-white/50 hover:bg-white/10 hover:text-white/80 transition-colors"
+          >
+            <Archive size={15} />
+            Archived
+            <ChevronRight
+              size={12}
+              className={cn('ml-auto text-white/30 transition-transform', showArchived && 'rotate-90')}
+            />
+          </button>
+          {showArchived && (
+            archivedProjects.length === 0
+              ? <p className="pl-8 pr-3 py-1.5 text-xs text-white/25">No archived projects</p>
+              : archivedProjects.map(p => (
+                <NavLink
+                  key={p.id}
+                  to={`/projects/${p.id}`}
+                  className={({ isActive }) => cn(
+                    'flex items-center gap-2.5 pl-8 pr-3 py-1.5 rounded-md text-sm transition-colors',
+                    isActive
+                      ? 'bg-white/15 text-white/70 font-medium'
+                      : 'text-white/40 hover:bg-white/10 hover:text-white/60'
+                  )}
+                  onContextMenu={e => openContextMenu(e, p)}
                 >
-                  <Archive size={9} />
-                </span>
-                <span className="truncate">{p.name}</span>
-              </NavLink>
-            ))}
-          </div>
-        )}
+                  <span
+                    className="w-4 h-4 rounded flex items-center justify-center shrink-0 opacity-50"
+                    style={{ background: p.color }}
+                  >
+                    <Archive size={9} />
+                  </span>
+                  <span className="truncate">{p.name}</span>
+                </NavLink>
+              ))
+          )}
+        </div>
 
         {/* Starred */}
         <div className="pt-5">

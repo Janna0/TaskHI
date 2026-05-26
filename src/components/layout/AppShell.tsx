@@ -20,8 +20,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [user])
 
   async function loadProjects() {
-    const { data } = await supabase.rpc('get_my_projects')
-    if (data) setProjects(await withFavorites(data, user!.id))
+    const [{ data: activeData }, { data: archivedData }] = await Promise.all([
+      supabase.rpc('get_my_projects'),
+      supabase.from('projects').select('*').eq('owner_id', user!.id).eq('status', 'archived').order('name'),
+    ])
+    const all = [...(activeData ?? []), ...(archivedData ?? [])]
+    setProjects(await withFavorites(all, user!.id))
   }
 
   return (
