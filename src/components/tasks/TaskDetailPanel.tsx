@@ -248,6 +248,136 @@ function CommentsSection({ taskId, projectId, memberMap }: {
   )
 }
 
+// ── Subtask row ────────────────────────────────────────────────────────────────────
+
+function SubtaskRow({ sub, memberMap, onUpdate }: {
+  sub: Task
+  memberMap: Record<string, { name: string; color: string }>
+  onUpdate: () => void
+}) {
+  const [showAssignee, setShowAssignee] = useState(false)
+  const pickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setShowAssignee(false)
+      }
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  async function toggleDone() {
+    const next = sub.status === 'done' ? 'todo' : 'done'
+    await supabase.from('tasks').update({ status: next }).eq('id', sub.id)
+    onUpdate()
+  }
+
+  async function setDueDate(date: string) {
+    await supabase.from('tasks').update({ due_date: date || null }).eq('id', sub.id)
+    onUpdate()
+  }
+
+  async function toggleAssignee(uid: string) {
+    const current = sub.assignee_ids ?? []
+    const next = current.includes(uid) ? current.filter(id => id !== uid) : [...current, uid]
+    await supabase.from('tasks').update({ assignee_ids: next }).eq('id', sub.id)
+    onUpdate()
+  }
+
+  const assignees = (sub.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  const memberEntries = Object.entries(memberMap)
+
+  return (
+    <div className="flex items-center gap-2.5 py-1.5 px-2 -mx-2 rounded-lg hover:bg-slate-50 group">
+      <button
+        onClick={toggleDone}
+        className={cn(
+          'w-4 h-4 rounded-full border-2 shrink-0 transition-colors flex items-center justify-center',
+          sub.status === 'done' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 hover:border-slate-400'
+        )}
+      >
+        {sub.status === 'done' && (
+          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
+            <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
+      </button>
+
+      <span className={cn('flex-1 text-sm min-w-0 truncate', sub.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
+        {sub.title}
+      </span>
+
+      {/* Due date */}
+      {sub.due_date ? (
+        <input
+          type="date"
+          value={sub.due_date}
+          onChange={e => setDueDate(e.target.value)}
+          className={cn(
+            'text-xs bg-transparent outline-none cursor-pointer shrink-0',
+            isOverdue(sub.due_date) && sub.status !== 'done' ? 'text-red-400' : 'text-slate-400'
+          )}
+        />
+      ) : (
+        <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Set due date">
+          <Calendar size={13} className="text-slate-300 hover:text-slate-500" />
+          <input type="date" className="sr-only" onChange={e => setDueDate(e.target.value)} />
+        </label>
+      )}
+
+      {/* Assignee */}
+      <div className="relative shrink-0" ref={pickerRef}>
+        <button
+          onClick={() => setShowAssignee(v => !v)}
+          className={cn(
+            'flex items-center transition-opacity',
+            assignees.length === 0 && 'opacity-0 group-hover:opacity-100'
+          )}
+          title="Assign"
+        >
+          {assignees.length > 0 ? (
+            <div className="flex -space-x-1">
+              {assignees.slice(0, 2).map((a, i) => (
+                <div key={i} className="w-5 h-5 rounded-full border border-white flex items-center justify-center text-white text-[9px] font-semibold" style={{ background: a.color }}>
+                  {getInitials(a.name)}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <User size={13} className="text-slate-300 hover:text-slate-500" />
+          )}
+        </button>
+
+        {showAssignee && memberEntries.length > 0 && (
+          <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 p-1.5 min-w-[160px]">
+            {memberEntries.map(([uid, m]) => {
+              const selected = (sub.assignee_ids ?? []).includes(uid)
+              return (
+                <button
+                  key={uid}
+                  onClick={() => toggleAssignee(uid)}
+                  className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left"
+                >
+                  <div
+                    className={cn('w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold border-2', selected ? 'border-primary-500' : 'border-transparent')}
+                    style={{ background: m.color }}
+                  >
+                    {getInitials(m.name)}
+                  </div>
+                  <span className="text-sm text-slate-700">{m.name}</span>
+                  {selected && <span className="ml-auto text-primary-500 text-xs">✓</span>}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Main panel ──────────────────────────────────────────────────────────────
 
 export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
@@ -346,12 +476,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setSubtaskInput('')
     loadSubtasks()
     onUpdated()
-  }
-
-  async function toggleSubtaskDone(sub: Task) {
-    const next = sub.status === 'done' ? 'todo' : 'done'
-    await supabase.from('tasks').update({ status: next }).eq('id', sub.id)
-    loadSubtasks()
   }
 
   async function handleDelete() {
@@ -557,31 +681,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           {/* Existing subtasks */}
           <div className="space-y-0.5 mb-2">
             {subtasks.map(sub => (
-              <div key={sub.id} className="flex items-center gap-3 py-1.5 px-2 -mx-2 rounded-lg hover:bg-slate-50 group">
-                <button
-                  onClick={() => toggleSubtaskDone(sub)}
-                  className={cn(
-                    'w-4 h-4 rounded-full border-2 shrink-0 transition-colors flex items-center justify-center',
-                    sub.status === 'done'
-                      ? 'border-emerald-500 bg-emerald-500'
-                      : 'border-slate-300 hover:border-slate-400'
-                  )}
-                >
-                  {sub.status === 'done' && (
-                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
-                      <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  )}
-                </button>
-                <span className={cn('flex-1 text-sm', sub.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
-                  {sub.title}
-                </span>
-                {sub.due_date && (
-                  <span className={cn('text-xs shrink-0', isOverdue(sub.due_date) && sub.status !== 'done' ? 'text-red-400' : 'text-slate-400')}>
-                    {formatDate(sub.due_date)}
-                  </span>
-                )}
-              </div>
+              <SubtaskRow key={sub.id} sub={sub} memberMap={memberMap} onUpdate={loadSubtasks} />
             ))}
           </div>
 
