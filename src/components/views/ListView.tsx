@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -246,7 +246,7 @@ function SectionMenu({ onRename, onDelete, onClose }: {
 
 // ── Section drop zone (makes empty sections droppable) ────────────────────────────────────
 
-function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
+function SectionDropZone({ id, children }: { id: string; children: ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
     <div ref={setNodeRef} className={cn('min-h-[32px] transition-colors', isOver && 'bg-primary-50/40')}>
