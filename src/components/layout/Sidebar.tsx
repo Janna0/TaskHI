@@ -1,16 +1,49 @@
 import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
-import { FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell } from 'lucide-react'
+import {
+  FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell,
+  List, Kanban, LayoutList, Calendar,
+  Rocket, Users, TrendingUp,
+  Bug, Lightbulb, Globe, Settings,
+  BookOpen, Monitor, CheckCircle, Target,
+  Code, Megaphone, MessageCircle, Briefcase,
+  Image, Mountain, Flower2, LayoutDashboard,
+  Shuffle, Gauge, Award, Scissors,
+  ShoppingBasket, Map, Ticket, Compass,
+  type LucideIcon,
+} from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn, getInitials, PROJECT_COLORS } from '../../lib/utils'
 import { Project } from '../../types'
 import { supabase } from '../../lib/supabase'
 
-const PROJECT_ICONS = [
-  '🚀', '📋', '⭐', '📊', '🎯', '💡', '🌍', '⚙️', '🐛', '🏠',
-  '✅', '🎨', '🔬', '📁', '💼', '🏆', '📢', '💬', '🎮', '🔧',
-  '📱', '🖥️', '📝', '🗂️', '🌟', '🔑', '🧩', '🎪', '🏗️', '🧪',
-]
+const ICON_MAP: Record<string, LucideIcon> = {
+  List, Kanban, LayoutList, Calendar,
+  Rocket, Users, TrendingUp, Star,
+  Bug, Lightbulb, Globe, Settings,
+  BookOpen, Monitor, CheckCircle, Target,
+  Code, Megaphone, MessageCircle, Briefcase,
+  Image, Mountain, Flower2, LayoutDashboard,
+  Shuffle, Gauge, Award, Scissors,
+  ShoppingBasket, Map, Ticket, Compass,
+}
+
+const PROJECT_ICON_NAMES = Object.keys(ICON_MAP)
+
+function ProjectIconBadge({ project }: { project: Project }) {
+  const Icon = project.icon ? ICON_MAP[project.icon] : undefined
+  return (
+    <span
+      className="w-5 h-5 rounded flex items-center justify-center shrink-0 text-white"
+      style={{ background: project.color }}
+    >
+      {Icon
+        ? <Icon size={12} strokeWidth={2.5} />
+        : <span className="text-[11px] font-bold leading-none">{project.name[0]?.toUpperCase()}</span>
+      }
+    </span>
+  )
+}
 
 interface SidebarProps {
   projects: Project[]
@@ -127,7 +160,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   }
 
   const menuX = contextMenu ? Math.min(contextMenu.x, window.innerWidth - 224) : 0
-  const menuY = contextMenu ? Math.min(contextMenu.y, window.innerHeight - 400) : 0
+  const menuY = contextMenu ? Math.min(contextMenu.y, window.innerHeight - 520) : 0
 
   return (
     <aside className="w-64 shrink-0 h-screen bg-[#1e1f21] flex flex-col">
@@ -188,12 +221,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               className={navClass}
               onContextMenu={e => openContextMenu(e, p)}
             >
-              <span
-                className="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0 text-white leading-none"
-                style={{ background: p.color }}
-              >
-                {p.icon ?? p.name[0]?.toUpperCase()}
-              </span>
+              <ProjectIconBadge project={p} />
               <span className="truncate">{p.name}</span>
               <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />
             </NavLink>
@@ -219,12 +247,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               className={navClass}
               onContextMenu={e => openContextMenu(e, p)}
             >
-              <span
-                className="w-5 h-5 rounded flex items-center justify-center text-[11px] font-bold shrink-0 text-white leading-none"
-                style={{ background: p.color }}
-              >
-                {p.icon ?? p.name[0]?.toUpperCase()}
-              </span>
+              <ProjectIconBadge project={p} />
               <span className="truncate">{p.name}</span>
               {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
             </NavLink>
@@ -274,7 +297,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
           {showColorPanel && (
             <div className="px-3 py-2 border-t border-slate-100 bg-slate-50/60">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Color</p>
-              <div className="flex flex-wrap gap-1.5 mb-3">
+              <div className="grid grid-cols-7 gap-1 mb-3">
                 {PROJECT_COLORS.map(c => (
                   <button
                     key={c}
@@ -288,19 +311,23 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
                 ))}
               </div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Icon</p>
-              <div className="flex flex-wrap gap-0.5">
-                {PROJECT_ICONS.map(icon => (
-                  <button
-                    key={icon}
-                    onClick={() => handleSetIcon(icon)}
-                    className={cn(
-                      'w-7 h-7 flex items-center justify-center text-base rounded hover:bg-slate-200 transition-colors',
-                      contextMenu.project.icon === icon && 'bg-slate-200 ring-1 ring-slate-400'
-                    )}
-                  >
-                    {icon}
-                  </button>
-                ))}
+              <div className="grid grid-cols-4 gap-0.5">
+                {PROJECT_ICON_NAMES.map(name => {
+                  const Icon = ICON_MAP[name]
+                  return (
+                    <button
+                      key={name}
+                      onClick={() => handleSetIcon(name)}
+                      title={name}
+                      className={cn(
+                        'w-8 h-8 flex items-center justify-center rounded hover:bg-slate-200 transition-colors',
+                        contextMenu.project.icon === name && 'bg-slate-200 ring-1 ring-primary-400'
+                      )}
+                    >
+                      <Icon size={16} className="text-slate-600" />
+                    </button>
+                  )
+                })}
               </div>
             </div>
           )}
