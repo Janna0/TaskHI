@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell,
-  RotateCcw, type LucideIcon,
+  RotateCcw, Upload, type LucideIcon,
   Briefcase, Target, Rocket, Calendar,
   Mountain, Compass, Globe, Leaf,
   Music, Camera, Sparkles,
@@ -30,16 +30,23 @@ const ICON_MAP: Record<string, LucideIcon> = {
 
 const PROJECT_ICON_NAMES = Object.keys(ICON_MAP)
 
+function isImageUrl(icon: string | null | undefined): boolean {
+  return !!icon && (icon.startsWith('http') || icon.startsWith('data:'))
+}
+
 function ProjectIconBadge({ project }: { project: Project }) {
-  const Icon = project.icon ? ICON_MAP[project.icon] : undefined
+  const isImg = isImageUrl(project.icon)
+  const Icon = !isImg && project.icon ? ICON_MAP[project.icon] : undefined
   return (
     <span
-      className="w-5 h-5 rounded flex items-center justify-center shrink-0 text-white"
+      className="w-5 h-5 rounded flex items-center justify-center shrink-0 overflow-hidden text-white"
       style={{ background: project.color }}
     >
-      {Icon
-        ? <Icon size={12} strokeWidth={2.5} />
-        : <span className="text-[11px] font-bold leading-none">{project.name[0]?.toUpperCase()}</span>
+      {isImg
+        ? <img src={project.icon!} alt="" className="w-full h-full object-cover" />
+        : Icon
+          ? <Icon size={12} strokeWidth={2.5} />
+          : <span className="text-[11px] font-bold leading-none">{project.name[0]?.toUpperCase()}</span>
       }
     </span>
   )
@@ -143,6 +150,19 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   async function handleSetIcon(icon: string) {
     if (!contextMenu) return
     await supabase.from('projects').update({ icon }).eq('id', contextMenu.project.id)
+    window.dispatchEvent(new Event('taskhi:projects-changed'))
+    closeMenu()
+  }
+
+  async function handleIconUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!contextMenu || !e.target.files?.[0]) return
+    const file = e.target.files[0]
+    const ext = file.name.split('.').pop() ?? 'png'
+    const path = `${contextMenu.project.id}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('project-icons').upload(path, file)
+    if (error) return
+    const { data } = supabase.storage.from('project-icons').getPublicUrl(path)
+    await supabase.from('projects').update({ icon: data.publicUrl }).eq('id', contextMenu.project.id)
     window.dispatchEvent(new Event('taskhi:projects-changed'))
     closeMenu()
   }
@@ -369,6 +389,11 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
                 ))}
               </div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Icon</p>
+              <label className="flex items-center gap-2 w-full px-2 py-1.5 mb-1 rounded-md border border-dashed border-slate-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer transition-colors text-slate-500 hover:text-primary-600">
+                <Upload size={13} className="shrink-0" />
+                <span className="text-xs">Upload image…</span>
+                <input type="file" accept="image/*" className="hidden" onChange={handleIconUpload} />
+              </label>
               <div className="grid grid-cols-4 gap-0.5">
                 {PROJECT_ICON_NAMES.map(name => {
                   const Icon = ICON_MAP[name]
