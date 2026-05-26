@@ -1,5 +1,4 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,35 +11,16 @@ serve(async (req) => {
   }
 
   try {
-    const { task_id, assignee_id, assigner_name } = await req.json()
+    const { assignee_email, assignee_name, task_title, project_name, assigned_by_name } = await req.json()
 
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-    )
-
-    const [{ data: assignee }, { data: task }] = await Promise.all([
-      supabase.from('profiles').select('email, name').eq('id', assignee_id).single(),
-      supabase.from('tasks').select('title, project_id').eq('id', task_id).single(),
-    ])
-
-    if (!assignee?.email || !task) {
-      return new Response(JSON.stringify({ error: 'Missing data' }), {
+    if (!assignee_email || !task_title) {
+      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       })
     }
 
-    const { data: project } = await supabase
-      .from('projects')
-      .select('name')
-      .eq('id', task.project_id)
-      .single()
-
-    const recipientName = assignee.name ?? assignee.email.split('@')[0]
-    const projectName = project?.name ?? 'a project'
-
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${Deno.env.get('RESEND_API_KEY')}`,
@@ -48,20 +28,20 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         from: Deno.env.get('FROM_EMAIL') ?? 'TaskHI <onboarding@resend.dev>',
-        to: [assignee.email],
-        subject: `You've been assigned: ${task.title}`,
+        to: [assignee_email],
+        subject: `You've been assigned: ${task_title}`,
         html: `
           <div style="font-family: Inter, -apple-system, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; color: #1e293b;">
             <div style="margin-bottom: 24px;">
               <span style="font-size: 22px; font-weight: 700; color: #6366f1;">TaskHI</span>
             </div>
-            <p style="font-size: 15px; margin: 0 0 8px;">Hi ${recipientName},</p>
+            <p style="font-size: 15px; margin: 0 0 8px;">Hi ${assignee_name},</p>
             <p style="font-size: 15px; color: #475569; margin: 0 0 24px;">
-              <strong style="color: #1e293b;">${assigner_name}</strong> assigned you to a task in
-              <strong style="color: #1e293b;">${projectName}</strong>.
+              <strong style="color: #1e293b;">${assigned_by_name}</strong> assigned you to a task in
+              <strong style="color: #1e293b;">${project_name}</strong>.
             </p>
             <div style="background: #f8fafc; border-left: 4px solid #6366f1; padding: 14px 18px; border-radius: 6px; margin-bottom: 32px;">
-              <p style="margin: 0; font-size: 15px; font-weight: 600; color: #1e293b;">${task.title}</p>
+              <p style="margin: 0; font-size: 15px; font-weight: 600; color: #1e293b;">${task_title}</p>
             </div>
             <p style="font-size: 12px; color: #94a3b8; margin: 0;">
               You’re receiving this email because you were assigned to a task in TaskHI.
@@ -71,7 +51,7 @@ serve(async (req) => {
       }),
     })
 
-    return new Response(JSON.stringify({ ok: true }), {
+    return new Response(JSON.stringify({ ok: res.ok }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   } catch (err) {
