@@ -41,7 +41,7 @@ function renderContent(content: string) {
   )
 }
 
-// ── Property row ───────────────────────────────────────────────────────────────
+// ── Property row ──────────────────────────────────────────────────────────────────────────────
 
 function PropRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
@@ -55,7 +55,7 @@ function PropRow({ icon, label, children }: { icon: ReactNode; label: string; ch
   )
 }
 
-// ── Comments ───────────────────────────────────────────────────────────────────
+// ── Comments ──────────────────────────────────────────────────────────────────────────────
 
 function CommentsSection({ taskId, projectId, memberMap }: {
   taskId: string
@@ -248,7 +248,7 @@ function CommentsSection({ taskId, projectId, memberMap }: {
   )
 }
 
-// ── Subtask row ────────────────────────────────────────────────────────────────────
+// ── Subtask row ───────────────────────────────────────────────────────────────────────────────────
 
 function SubtaskRow({ sub, memberMap, onUpdate }: {
   sub: Task
@@ -382,10 +382,10 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
   )
 }
 
-// ── Main panel ──────────────────────────────────────────────────────────────
+// ── Main panel ──────────────────────────────────────────────────────────────────────────
 
 export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [title, setTitle] = useState(task.title)
   const [status, setStatus] = useState<string>(task.status)
   const [priority, setPriority] = useState<string>(task.priority)
@@ -463,6 +463,12 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           task_id: task.id, project_id: task.project_id,
         }))
       )
+      const assignerName = profile?.name || user?.email?.split('@')[0] || 'Someone'
+      added.forEach(id => {
+        supabase.functions.invoke('notify-assignment', {
+          body: { task_id: task.id, assignee_id: id, assigner_name: assignerName },
+        }).catch(() => {})
+      })
     }
   }
 
