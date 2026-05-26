@@ -158,13 +158,7 @@ function TaskRow({
       <span className={cn('flex-1 text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
         {task.title}
       </span>
-      <div className="w-24 flex justify-center">
-        <PriorityBadge priority={task.priority} />
-      </div>
-      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-        {task.due_date ? formatDate(task.due_date) : '—'}
-      </div>
-      <div className="w-10 flex justify-center">
+      <div className="w-20 flex justify-center">
         <div className="flex -space-x-1.5">
           {assignees.slice(0, 2).map((a, i) => (
             <div
@@ -182,6 +176,12 @@ function TaskRow({
             </div>
           )}
         </div>
+      </div>
+      <div className="w-24 flex justify-center">
+        <PriorityBadge priority={task.priority} />
+      </div>
+      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+        {task.due_date ? formatDate(task.due_date) : '—'}
       </div>
     </div>
   )
@@ -468,9 +468,9 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
           <span className="w-3.5 shrink-0" />
           <span className="flex-1">Task</span>
+          <span className="w-20 text-center">Assignee</span>
           <span className="w-24 text-center">Priority</span>
           <span className="w-24 text-center">Due date</span>
-          <span className="w-8" />
         </div>
 
         {sections.map(section => {
