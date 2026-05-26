@@ -57,6 +57,16 @@ function buildTaskOrder(tasks: Task[], sections: Section[]): Record<string, stri
   return order
 }
 
+function sectionNameToStatus(name: string): Task['status'] | null {
+  const n = name.toLowerCase().replace(/[-_\s]+/g, '')
+  if (n === 'todo') return 'todo'
+  if (n === 'inprogress') return 'in_progress'
+  if (n === 'review' || n === 'inreview') return 'review'
+  if (n === 'blocked') return 'blocked'
+  if (n === 'done' || n === 'complete' || n === 'completed' || n === 'finished') return 'done'
+  return null
+}
+
 interface Props {
   sections: Section[]
   tasks: Task[]
@@ -127,7 +137,7 @@ function SortableTaskCard({ task, memberMap, onClick }: {
   )
 }
 
-// ── Task ghost for DragOverlay ──────────────────────────────────────────────────────────────
+// ── Task ghost for DragOverlay ──────────────────────────────────────────────────────────────────
 
 function TaskCardGhost({ task }: { task: Task }) {
   return (
@@ -300,7 +310,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   )
 }
 
-// ── Add section form ──────────────────────────────────────────────────────────────────────
+// ── Add section form ────────────────────────────────────────────────────────────────────────
 
 function AddSectionForm({ projectId, position, onDone }: {
   projectId: string
@@ -519,7 +529,14 @@ export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, 
       await Promise.all(
         finalIds.map((id, idx) => {
           const upd: Record<string, unknown> = { position: idx }
-          if (id === taskId && crossSection) upd.section_id = finalSec
+          if (id === taskId && crossSection) {
+            upd.section_id = finalSec
+            const targetSection = sections.find(s => s.id === finalSec)
+            if (targetSection) {
+              const inferredStatus = sectionNameToStatus(targetSection.name)
+              if (inferredStatus) upd.status = inferredStatus
+            }
+          }
           return supabase.from('tasks').update(upd).eq('id', id)
         })
       )

@@ -35,6 +35,16 @@ interface Props {
   onRefresh: () => void
 }
 
+function sectionNameToStatus(name: string): Task['status'] | null {
+  const n = name.toLowerCase().replace(/[-_\s]+/g, '')
+  if (n === 'todo') return 'todo'
+  if (n === 'inprogress') return 'in_progress'
+  if (n === 'review' || n === 'inreview') return 'review'
+  if (n === 'blocked') return 'blocked'
+  if (n === 'done' || n === 'complete' || n === 'completed' || n === 'finished') return 'done'
+  return null
+}
+
 // ── Inline add-task row ──────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
@@ -64,11 +74,14 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
     const trimmed = title.trim()
     if (trimmed) {
       setSaving(true)
+      const inferredStatus = sectionNameToStatus(
+        sections.find(() => true)?.name ?? ''
+      ) ?? 'todo'
       await supabase.from('tasks').insert({
         project_id: projectId,
         section_id: sectionId,
         title: trimmed,
-        status: 'todo',
+        status: inferredStatus,
         priority: 'medium',
         position,
         depth: 0,
@@ -411,17 +424,24 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const finalSid = findSection(taskId)
     const finalSectionIds = localOrderRef.current[finalSid] ?? []
     const newSectionId = finalSid || null
+    const crossSection = newSectionId !== originalTask.section_id
 
-    // Persist updated positions (and section if changed) for all tasks in the final section
     await Promise.all(
       finalSectionIds.map((id, idx) => {
         const update: Record<string, unknown> = { position: idx }
-        if (id === taskId && newSectionId !== originalTask.section_id) {
+        if (id === taskId && crossSection) {
           update.section_id = newSectionId
+          const targetSection = sections.find(s => s.id === newSectionId)
+          if (targetSection) {
+            const inferredStatus = sectionNameToStatus(targetSection.name)
+            if (inferredStatus) update.status = inferredStatus
+          }
         }
         return supabase.from('tasks').update(update).eq('id', id)
       })
     )
+
+    if (crossSection) onRefresh()
   }
 
   const ungroupedIds = localOrder[''] ?? []
