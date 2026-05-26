@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type ReactNode } from 'react'
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -7,7 +7,9 @@ import {
   useSensor,
   useSensors,
   closestCenter,
+  pointerWithin,
   useDroppable,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
   type DragOverEvent,
@@ -83,7 +85,6 @@ function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActiv
         status: inferredStatus,
         priority: 'medium',
         position,
-        depth: 0,
       })
       setSaving(false)
     }
@@ -256,12 +257,12 @@ function SectionMenu({ onRename, onDelete, onClose }: {
   )
 }
 
-// ── Section drop zone (makes empty sections droppable) ────────────────────────────────────
+// ── Section drop zone (empty sections need a droppable target) ───────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn('min-h-[32px] transition-colors', isOver && 'bg-primary-50/40')}>
+    <div ref={setNodeRef} className={cn('min-h-[60px] transition-colors', isOver && 'bg-primary-50/40')}>
       {children}
     </div>
   )
@@ -284,9 +285,18 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const renameInputRef = useRef<HTMLInputElement>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
 
+  // localOrder: sectionId → taskId[]; '' key for ungrouped tasks
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
   const localOrderRef = useRef<Record<string, string[]>>({})
   const isDraggingRef = useRef(false)
+
+  // Prefer pointer-within (exact hit) over center-distance guessing.
+  // This ensures the section/task the pointer is physically inside always wins.
+  const collisionDetection = useCallback<CollisionDetection>((args) => {
+    const hits = pointerWithin(args)
+    if (hits.length > 0) return hits
+    return closestCenter(args)
+  }, [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -297,6 +307,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     if (renamingSection) requestAnimationFrame(() => renameInputRef.current?.focus())
   }, [renamingSection])
 
+  // Sync tasks prop → localOrder whenever tasks/sections change (skip during active drag)
   useEffect(() => {
     if (isDraggingRef.current) return
     const order: Record<string, string[]> = { '': [] }
@@ -311,6 +322,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     localOrderRef.current = order
   }, [tasks, sections])
 
+  // Find which section (by key in localOrder) contains the given task ID
   function findSection(taskId: string): string {
     for (const [sid, ids] of Object.entries(localOrderRef.current)) {
       if (ids.includes(taskId)) return sid
@@ -373,6 +385,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const overId = over.id as string
     const activeSid = findSection(activeId)
 
+    // Determine target section: overId is either a section key or a task ID
     let targetSid: string
     if (overId in localOrderRef.current) {
       targetSid = overId
@@ -383,6 +396,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const cur = localOrderRef.current
 
     if (activeSid === targetSid) {
+      // Within-section reorder
       const ids = cur[activeSid] ?? []
       const from = ids.indexOf(activeId)
       const to = ids.indexOf(overId)
@@ -392,7 +406,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         localOrderRef.current = newOrder
         setLocalOrder(newOrder)
       }
-    } else {
+    } else if (targetSid !== '') {
+      // Cross-section move (live preview)
       const newOrder = { ...cur }
       newOrder[activeSid] = (newOrder[activeSid] ?? []).filter(id => id !== activeId)
       const targetIds = [...(newOrder[targetSid] ?? [])]
@@ -408,10 +423,41 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     isDraggingRef.current = false
     setActiveTask(null)
 
-    const { active } = event
+    const { active, over } = event
     const taskId = active.id as string
     const originalTask = tasks.find(t => t.id === taskId)
     if (!originalTask) return
+
+    // No drop target — revert UI to DB state
+    if (!over) {
+      onRefresh()
+      return
+    }
+
+    const overId = over.id as string
+
+    // Use event.over as the authoritative drop target.
+    // If handleDragOver missed a fast cross-section move we fix it here
+    // so the task always lands where the user released the pointer.
+    let dropSid: string
+    if (overId in localOrderRef.current) {
+      dropSid = overId
+    } else {
+      dropSid = findSection(overId)
+    }
+
+    const currentSid = findSection(taskId)
+    if (dropSid !== '' && currentSid !== dropSid) {
+      // handleDragOver didn't move it yet — do it now before saving
+      const newOrder = { ...localOrderRef.current }
+      newOrder[currentSid] = (newOrder[currentSid] ?? []).filter(id => id !== taskId)
+      const targetIds = [...(newOrder[dropSid] ?? [])]
+      const overIdx = targetIds.indexOf(overId)
+      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, taskId)
+      newOrder[dropSid] = targetIds
+      localOrderRef.current = newOrder
+      setLocalOrder(newOrder)
+    }
 
     const finalSid = findSection(taskId)
     const finalSectionIds = localOrderRef.current[finalSid] ?? []
@@ -441,18 +487,19 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={closestCenter}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-1">
+        {/* Column headers — no STATUS column */}
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
           <span className="w-3.5 shrink-0" />
           <span className="flex-1">Task</span>
           <span className="w-24 text-center">Priority</span>
           <span className="w-24 text-center">Due date</span>
-          <span className="w-8" />
+          <span className="w-10" />
         </div>
 
         {sections.map(section => {
@@ -549,6 +596,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           )
         })}
 
+        {/* Ungrouped tasks */}
         {ungroupedIds.length > 0 && (
           <div>
             {sections.length > 0 && (
@@ -573,6 +621,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           </div>
         )}
 
+        {/* Add section */}
         <div className="px-4 py-2 border-t border-slate-100 mt-1">
           {addingSection ? (
             <div className="space-y-1">
