@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
 import { X, Trash2, Send, User, Calendar, Flag, Layers, CheckSquare, Plus } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -43,7 +43,7 @@ function renderContent(content: string) {
 
 // ── Property row ───────────────────────────────────────────────────────────────
 
-function PropRow({ icon, label, children }: { icon: React.ReactNode; label: string; children: React.ReactNode }) {
+function PropRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
     <div className="flex items-center py-2.5 hover:bg-slate-50 rounded-lg px-2 -mx-2 group transition-colors">
       <div className="flex items-center gap-2.5 w-32 shrink-0">
@@ -311,7 +311,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   }
 
   async function handleNotesBlur() {
-    if (notes !== (task.notes ?? '')) await saveField({ notes: notes || null })
+    if (notes !== (task.notes ?? '')) await saveField({ notes: notes || undefined })
   }
 
   async function toggleAssignee(uid: string) {
