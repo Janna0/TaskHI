@@ -18,13 +18,12 @@ export function ProfilePage() {
   const [error, setError] = useState<string | null>(null)
   const [passwordSent, setPasswordSent] = useState(false)
 
-  // Sync from profile whenever it loads or changes
   useEffect(() => {
     if (profile) {
       setName(profile.name ?? '')
       setColor(profile.avatar_color ?? '#6366f1')
     }
-  }, [profile?.id]) // only re-sync when switching users, not on every profile update
+  }, [profile?.id])
 
   const displayName = name.trim() || emailFallback || '?'
 
@@ -67,7 +66,6 @@ export function ProfilePage() {
 
       <h1 className="text-xl font-bold text-slate-900 mb-8">My profile</h1>
 
-      {/* Avatar preview + color picker */}
       <div className="flex items-center gap-6 mb-8 p-4 bg-slate-50 rounded-xl">
         <div
           className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0 transition-colors"
@@ -93,7 +91,6 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {/* Display name */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Display name</label>
         <input
@@ -105,7 +102,6 @@ export function ProfilePage() {
         />
       </div>
 
-      {/* Email (read-only) */}
       <div className="mb-8">
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
         <input
@@ -131,7 +127,6 @@ export function ProfilePage() {
         {saved ? <><Check size={14} /> Saved!</> : saving ? 'Saving…' : 'Save changes'}
       </button>
 
-      {/* Password reset */}
       <div className="border-t border-slate-100 pt-8">
         <h2 className="text-base font-semibold text-slate-900 mb-1">Password</h2>
         <p className="text-sm text-slate-500 mb-4">We'll email you a link to reset your password.</p>
