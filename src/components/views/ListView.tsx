@@ -393,7 +393,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
       const targetIds = [...(newOrder[targetSid] ?? [])]
       const overIdx = targetIds.indexOf(overId)
       targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
-      newOrder[targetSec] = targetIds
+      newOrder[targetSid] = targetIds
       localOrderRef.current = newOrder
       setLocalOrder(newOrder)
     }
