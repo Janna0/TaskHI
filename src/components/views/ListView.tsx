@@ -37,7 +37,158 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Inline add-task row ──────────────────────────────────────────────────────────────
+// ── Assignee avatars (shared) ──────────────────────────────────────────────────────────
+
+function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<string, { name: string; color: string }> }) {
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  return (
+    <div className="flex -space-x-1.5">
+      {assignees.slice(0, 2).map((a, i) => (
+        <div
+          key={i}
+          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
+          style={{ background: a.color }}
+          title={a.name}
+        >
+          {getInitials(a.name)}
+        </div>
+      ))}
+      {assignees.length > 2 && (
+        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
+          +{assignees.length - 2}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
+
+function TaskRow({
+  task,
+  memberMap,
+  onClick,
+  hasSubtasks,
+  isExpanded,
+  onToggleExpand,
+  onAddSubtask,
+}: {
+  task: Task
+  memberMap: Record<string, { name: string; color: string }>
+  onClick: () => void
+  hasSubtasks: boolean
+  isExpanded: boolean
+  onToggleExpand: () => void
+  onAddSubtask: () => void
+}) {
+  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 group',
+        isDragging && 'opacity-30'
+      )}
+    >
+      <div
+        {...listeners}
+        {...attributes}
+        onClick={e => e.stopPropagation()}
+        className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 transition-opacity touch-none select-none shrink-0"
+      >
+        <GripVertical size={14} />
+      </div>
+
+      <span className="flex-1 flex items-center gap-1 min-w-0">
+        <button
+          onClick={e => { e.stopPropagation(); onToggleExpand() }}
+          className={cn(
+            'shrink-0 text-slate-400 hover:text-slate-600 transition-colors rounded',
+            !hasSubtasks && 'invisible pointer-events-none'
+          )}
+        >
+          {isExpanded
+            ? <ChevronDown size={13} />
+            : <ChevronRight size={13} />}
+        </button>
+        <span className={cn('text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
+          {task.title}
+        </span>
+      </span>
+
+      <div className="w-20 flex justify-center">
+        <AssigneeAvatars task={task} memberMap={memberMap} />
+      </div>
+      <div className="w-24 flex justify-center">
+        <PriorityBadge priority={task.priority} />
+      </div>
+      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+        {task.due_date ? formatDate(task.due_date) : '—'}
+      </div>
+      <button
+        onClick={e => { e.stopPropagation(); onAddSubtask() }}
+        title="Add subtask"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-400 hover:text-primary-600 hover:bg-slate-100 transition-all shrink-0"
+      >
+        <Plus size={12} />
+      </button>
+    </div>
+  )
+}
+
+// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────
+
+function SubtaskRow({
+  task,
+  memberMap,
+  onClick,
+}: {
+  task: Task
+  memberMap: Record<string, { name: string; color: string }>
+  onClick: () => void
+}) {
+  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const isDone = task.status === 'done'
+
+  return (
+    <div
+      onClick={onClick}
+      className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 cursor-pointer border-b border-slate-50 group"
+    >
+      <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+      <span className={cn('flex-1 text-sm truncate', isDone ? 'line-through text-slate-400' : 'text-slate-600')}>
+        {task.title}
+      </span>
+      <div className="w-20 flex justify-center">
+        <AssigneeAvatars task={task} memberMap={memberMap} />
+      </div>
+      <div className="w-24 flex justify-center">
+        <PriorityBadge priority={task.priority} />
+      </div>
+      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+        {task.due_date ? formatDate(task.due_date) : '—'}
+      </div>
+      <div className="w-[22px] shrink-0" />
+    </div>
+  )
+}
+
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
+
+function TaskGhost({ task }: { task: Task }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 bg-white border border-primary-200 rounded-lg shadow-lg opacity-95">
+      <GripVertical size={14} className="text-slate-300 shrink-0" />
+      <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
+    </div>
+  )
+}
+
+// ── Add task inline ────────────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -121,79 +272,63 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Sortable task row ───────────────────────────────────────────────────────────────────
+// ── Add subtask inline ────────────────────────────────────────────────────────────────────
 
-function TaskRow({
-  task,
-  memberMap,
-  onClick,
-}: {
-  task: Task
-  memberMap: Record<string, { name: string; color: string }>
-  onClick: () => void
+function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
+  projectId: string
+  parentTask: Task
+  subtaskCount: number
+  onSaved: () => void
 }) {
-  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
-  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const [title, setTitle] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committedRef = useRef(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [])
+
+  async function commit() {
+    if (committedRef.current) return
+    committedRef.current = true
+    const trimmed = title.trim()
+    if (trimmed) {
+      setSaving(true)
+      await supabase.from('tasks').insert({
+        project_id: projectId,
+        section_id: parentTask.section_id,
+        parent_task_id: parentTask.id,
+        title: trimmed,
+        status: 'todo',
+        priority: 'medium',
+        position: subtaskCount,
+        depth: (parentTask.depth ?? 0) + 1,
+      })
+      setSaving(false)
+    }
+    onSaved()
+  }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 group',
-        isDragging && 'opacity-30'
-      )}
-    >
-      <div
-        {...listeners}
-        {...attributes}
-        onClick={e => e.stopPropagation()}
-        className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 transition-opacity touch-none select-none shrink-0"
-      >
-        <GripVertical size={14} />
-      </div>
-
-      <span className={cn('flex-1 text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
-        {task.title}
-      </span>
-      <div className="w-20 flex justify-center">
-        <div className="flex -space-x-1.5">
-          {assignees.slice(0, 2).map((a, i) => (
-            <div
-              key={i}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
-              style={{ background: a.color }}
-              title={a.name}
-            >
-              {getInitials(a.name)}
-            </div>
-          ))}
-          {assignees.length > 2 && (
-            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
-              +{assignees.length - 2}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="w-24 flex justify-center">
-        <PriorityBadge priority={task.priority} />
-      </div>
-      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-        {task.due_date ? formatDate(task.due_date) : '—'}
-      </div>
-    </div>
-  )
-}
-
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
-
-function TaskGhost({ task }: { task: Task }) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white border border-primary-200 rounded-lg shadow-lg opacity-95">
-      <GripVertical size={14} className="text-slate-300 shrink-0" />
-      <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
+    <div className="flex items-center gap-3 px-4 py-1.5 pl-[52px] bg-slate-50 border-b border-slate-100">
+      <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') onSaved()
+        }}
+        onBlur={commit}
+        placeholder="Subtask name…"
+        className="flex-1 text-sm text-slate-600 bg-transparent outline-none placeholder-slate-400"
+      />
+      {saving
+        ? <span className="text-xs text-slate-400 shrink-0">Saving…</span>
+        : <span className="text-[10px] text-slate-300 shrink-0">Enter · Esc to cancel</span>
+      }
     </div>
   )
 }
@@ -246,7 +381,7 @@ function SectionMenu({ onRename, onDelete, onClose }: {
   )
 }
 
-// ── Section drop zone (makes empty sections droppable) ────────────────────────────────────
+// ── Section drop zone ────────────────────────────────────────────────────────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -271,10 +406,24 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [openMenuSection, setOpenMenuSection] = useState<string | null>(null)
   const [renamingSection, setRenamingSection] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
+  const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
 
-  // localOrder: sectionId → taskId[]; '' key for ungrouped tasks
+  // Only top-level tasks participate in section drag-and-drop
+  const rootTasks = tasks.filter(t => !t.parent_task_id)
+  const subtasksByParent: Record<string, Task[]> = {}
+  for (const t of tasks) {
+    if (t.parent_task_id) {
+      if (!subtasksByParent[t.parent_task_id]) subtasksByParent[t.parent_task_id] = []
+      subtasksByParent[t.parent_task_id].push(t)
+    }
+  }
+  for (const key of Object.keys(subtasksByParent)) {
+    subtasksByParent[key].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  }
+
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
   const localOrderRef = useRef<Record<string, string[]>>({})
   const isDraggingRef = useRef(false)
@@ -284,7 +433,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   )
 
-  // pointerWithin first (exact hit), closestCenter as fallback for fast cross-section drags
   const collisionDetection: CollisionDetection = (args) => {
     const hits = pointerWithin(args)
     return hits.length > 0 ? hits : closestCenter(args)
@@ -294,22 +442,22 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     if (renamingSection) requestAnimationFrame(() => renameInputRef.current?.focus())
   }, [renamingSection])
 
-  // Sync tasks prop → localOrder whenever tasks/sections change (skip during active drag)
   useEffect(() => {
     if (isDraggingRef.current) return
     const order: Record<string, string[]> = { '': [] }
     for (const s of sections) {
-      order[s.id] = tasks
+      order[s.id] = rootTasks
         .filter(t => t.section_id === s.id)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
         .map(t => t.id)
     }
-    order[''] = tasks.filter(t => !t.section_id).map(t => t.id)
+    order[''] = rootTasks.filter(t => !t.section_id).map(t => t.id)
     setLocalOrder(order)
     localOrderRef.current = order
   }, [tasks, sections])
 
-  // Find which section (by key in localOrder) contains the given task ID
+  const taskById = Object.fromEntries(tasks.map(t => [t.id, t]))
+
   function findSection(taskId: string): string {
     for (const [sid, ids] of Object.entries(localOrderRef.current)) {
       if (ids.includes(taskId)) return sid
@@ -319,6 +467,14 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
   function toggle(id: string) {
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  function toggleTask(taskId: string) {
+    setExpandedTasks(prev => {
+      const next = new Set(prev)
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId)
+      return next
+    })
   }
 
   function handleAddDone(sectionId: string) {
@@ -372,10 +528,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const overId = over.id as string
     const activeSid = findSection(activeId)
 
-    // Determine target section: overId is either a task ID or a section key
     let targetSid: string
     if (overId in localOrderRef.current) {
-      // It's a section key directly
       targetSid = overId
     } else {
       targetSid = findSection(overId)
@@ -384,7 +538,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const cur = localOrderRef.current
 
     if (activeSid === targetSid) {
-      // Within-section reorder
       const ids = cur[activeSid] ?? []
       const from = ids.indexOf(activeId)
       const to = ids.indexOf(overId)
@@ -395,7 +548,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         setLocalOrder(newOrder)
       }
     } else {
-      // Cross-section move
       const newOrder = { ...cur }
       newOrder[activeSid] = (newOrder[activeSid] ?? []).filter(id => id !== activeId)
       const targetIds = [...(newOrder[targetSid] ?? [])]
@@ -418,8 +570,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
     if (!over) { onRefresh(); return }
 
-    // Use event.over as authoritative drop target — handleDragOver may have missed
-    // a fast cross-section drag, so apply the cross-section move here if needed.
     const overId = over.id as string
     const overSid = overId in localOrderRef.current ? overId : findSection(overId)
     const currentSid = findSection(taskId)
@@ -453,6 +603,58 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     if (newSectionId !== originalTask.section_id) onRefresh()
   }
 
+  function renderTaskWithSubtasks(task: Task) {
+    const taskSubtasks = subtasksByParent[task.id] ?? []
+    const isExpanded = expandedTasks.has(task.id)
+    const isAddingSubtask = addingSubtaskFor === task.id
+
+    return (
+      <>
+        <TaskRow
+          task={task}
+          memberMap={memberMap}
+          onClick={() => onTaskClick(task)}
+          hasSubtasks={taskSubtasks.length > 0 || isAddingSubtask}
+          isExpanded={isExpanded || isAddingSubtask}
+          onToggleExpand={() => toggleTask(task.id)}
+          onAddSubtask={() => {
+            setExpandedTasks(prev => new Set([...prev, task.id]))
+            setAddingSubtaskFor(task.id)
+          }}
+        />
+        {(isExpanded || isAddingSubtask) && (
+          <div className="border-l-2 border-slate-100 ml-[34px]">
+            {taskSubtasks.map(sub => (
+              <SubtaskRow
+                key={sub.id}
+                task={sub}
+                memberMap={memberMap}
+                onClick={() => onTaskClick(sub)}
+              />
+            ))}
+            {isAddingSubtask && (
+              <AddSubtaskInlineRow
+                projectId={projectId}
+                parentTask={task}
+                subtaskCount={taskSubtasks.length}
+                onSaved={() => { setAddingSubtaskFor(null); onRefresh() }}
+              />
+            )}
+            {!isAddingSubtask && (
+              <button
+                onClick={() => setAddingSubtaskFor(task.id)}
+                className="flex w-full items-center gap-2 px-4 py-1.5 pl-[18px] text-xs text-slate-400 hover:text-primary-600 hover:bg-slate-50 transition-colors"
+              >
+                <Plus size={11} className="shrink-0" />
+                Add subtask
+              </button>
+            )}
+          </div>
+        )}
+      </>
+    )
+  }
+
   const ungroupedIds = localOrder[''] ?? []
 
   return (
@@ -471,13 +673,14 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           <span className="w-20 text-center">Assignee</span>
           <span className="w-24 text-center">Priority</span>
           <span className="w-24 text-center">Due date</span>
+          <span className="w-[22px] shrink-0" />
         </div>
 
         {sections.map(section => {
           const sectionTaskIds = localOrder[section.id] ?? []
           const sectionTasks = sectionTaskIds
-            .map(id => tasks.find(t => t.id === id))
-            .filter((t): t is Task => !!t)
+            .map(id => taskById[id])
+            .filter(Boolean)
           const isCollapsed = collapsed[section.id]
           const isHovered = hoveredSection === section.id
           const menuOpen = openMenuSection === section.id
@@ -543,12 +746,9 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <SectionDropZone id={section.id}>
                     <SortableContext items={sectionTaskIds} strategy={verticalListSortingStrategy}>
                       {sectionTasks.map(task => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          memberMap={memberMap}
-                          onClick={() => onTaskClick(task)}
-                        />
+                        <div key={task.id}>
+                          {renderTaskWithSubtasks(task)}
+                        </div>
                       ))}
                     </SortableContext>
                   </SectionDropZone>
@@ -576,15 +776,12 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
             )}
             <SortableContext items={ungroupedIds} strategy={verticalListSortingStrategy}>
               {ungroupedIds.map(id => {
-                const task = tasks.find(t => t.id === id)
+                const task = taskById[id]
                 if (!task) return null
                 return (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    memberMap={memberMap}
-                    onClick={() => onTaskClick(task)}
-                  />
+                  <div key={task.id}>
+                    {renderTaskWithSubtasks(task)}
+                  </div>
                 )
               })}
             </SortableContext>

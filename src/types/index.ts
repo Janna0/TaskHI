@@ -48,6 +48,7 @@ export interface Task {
   id: string
   project_id: string
   section_id: string | null
+  parent_task_id: string | null
   title: string
   description: string
   status: 'todo' | 'in_progress' | 'review' | 'blocked' | 'done'
@@ -57,6 +58,7 @@ export interface Task {
   created_by: string
   assignee_ids: string[]
   position: number
+  depth: number
   created_at: string
   updated_at: string
 }

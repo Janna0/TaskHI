@@ -1,28 +1,27 @@
--- TaskHI Database Schema
--- Run this in the Supabase SQL Editor
+-- TaskHI schema — run this to create all tables from scratch
+-- Or run the MIGRATION section at the bottom if you already ran this once
 
--- Profiles (extends auth.users)
 create table if not exists profiles (
-  id uuid references auth.users(id) on delete cascade primary key,
+  id uuid primary key references auth.users(id) on delete cascade,
   name text not null default '',
   avatar_url text,
+  avatar_color text default '#6366f1',
   created_at timestamptz default now()
 );
 
--- Projects
 create table if not exists projects (
   id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null references profiles(id) on delete cascade,
   name text not null,
   description text default '',
-  color text default '#6366f1',
-  owner_id uuid not null references profiles(id) on delete cascade,
-  is_favorite boolean default false,
+  color text default 'indigo',
+  icon text,
   status text default 'active',
+  board_columns jsonb,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
--- Sections
 create table if not exists sections (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
@@ -31,11 +30,11 @@ create table if not exists sections (
   created_at timestamptz default now()
 );
 
--- Tasks
 create table if not exists tasks (
   id uuid primary key default gen_random_uuid(),
   project_id uuid not null references projects(id) on delete cascade,
   section_id uuid references sections(id) on delete set null,
+  parent_task_id uuid references tasks(id) on delete cascade,
   title text not null,
   description text default '',
   notes text default '',
@@ -45,6 +44,7 @@ create table if not exists tasks (
   created_by uuid not null default auth.uid() references profiles(id),
   assignee_id uuid references profiles(id),
   position integer default 0,
+  depth integer default 0,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -101,6 +101,8 @@ grant select on all tables in schema public to anon;
 -- -----------------------------------------------
 alter table tasks add column if not exists notes text default '';
 alter table tasks alter column created_by set default auth.uid();
+alter table tasks add column if not exists parent_task_id uuid references tasks(id) on delete cascade;
+alter table tasks add column if not exists depth integer default 0;
 
 -- Fix missing write permissions (run this if starring / editing doesn't persist)
 grant all on all tables in schema public to authenticated;
