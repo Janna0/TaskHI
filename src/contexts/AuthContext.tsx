@@ -54,8 +54,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
       return
     }
-    // Profile row missing — create it from auth metadata.
-    // This handles users who registered before the profile-insert fix.
     const displayName = authUser.user_metadata?.name || authUser.email?.split('@')[0] || ''
     await supabase.from('profiles').upsert({
       id: authUser.id,
