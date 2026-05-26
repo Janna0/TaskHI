@@ -153,7 +153,6 @@ function CommentsSection({ taskId, projectId, memberMap }: {
 
   return (
     <div>
-      {/* Comment list */}
       {comments.length > 0 && (
         <div className="space-y-4 mb-4">
           {comments.map(c => {
@@ -194,7 +193,6 @@ function CommentsSection({ taskId, projectId, memberMap }: {
         </div>
       )}
 
-      {/* Input row */}
       <div className="flex gap-3 items-start">
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 mt-0.5"
@@ -309,7 +307,6 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
         {sub.title}
       </span>
 
-      {/* Due date */}
       {sub.due_date ? (
         <input
           type="date"
@@ -331,7 +328,6 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
         </div>
       )}
 
-      {/* Assignee */}
       <div className="relative shrink-0" ref={pickerRef}>
         <button
           onClick={() => setShowAssignee(v => !v)}
@@ -394,6 +390,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [notes, setNotes] = useState(task.notes ?? '')
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignee_ids ?? [])
   const [deleting, setDeleting] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [subtasks, setSubtasks] = useState<Task[]>([])
   const [subtaskInput, setSubtaskInput] = useState('')
@@ -410,6 +407,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setSectionId(task.section_id ?? '')
     setNotes(task.notes ?? '')
     setAssigneeIds(task.assignee_ids ?? [])
+    setSaved(false)
     loadSubtasks()
   }, [task.id])
 
@@ -432,33 +430,22 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     if (data) setSubtasks(data as Task[])
   }
 
-  async function saveField(fields: Partial<{
-    title: string; status: string; priority: string; due_date: string | null;
-    section_id: string | null; notes: string; assignee_ids: string[]
-  }>) {
-    await supabase.from('tasks').update(fields).eq('id', task.id)
-    onUpdated()
-    setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
+  async function handleSave() {
+    setSaving(true)
+    const trimmedTitle = title.trim() || task.title
+    setTitle(trimmedTitle)
 
-  async function handleTitleBlur() {
-    const trimmed = title.trim() || task.title
-    if (trimmed !== task.title) await saveField({ title: trimmed })
-  }
+    await supabase.from('tasks').update({
+      title: trimmedTitle,
+      status,
+      priority,
+      due_date: dueDate || null,
+      section_id: sectionId || null,
+      notes: notes || null,
+      assignee_ids: assigneeIds,
+    }).eq('id', task.id)
 
-  async function handleNotesBlur() {
-    if (notes !== (task.notes ?? '')) await saveField({ notes: notes || undefined })
-  }
-
-  async function toggleAssignee(uid: string) {
-    const next = assigneeIds.includes(uid)
-      ? assigneeIds.filter(id => id !== uid)
-      : [...assigneeIds, uid]
-    setAssigneeIds(next)
-    await saveField({ assignee_ids: next })
-
-    const added = next.filter(id => !(task.assignee_ids ?? []).includes(id) && id !== user?.id)
+    const added = assigneeIds.filter(id => !(task.assignee_ids ?? []).includes(id) && id !== user?.id)
     if (added.length > 0) {
       await supabase.from('notifications').insert(
         added.map(id => ({
@@ -477,13 +464,26 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           body: {
             assignee_email: p.email,
             assignee_name: p.name ?? p.email?.split('@')[0] ?? 'there',
-            task_title: task.title,
+            task_title: trimmedTitle,
             project_name: projectName,
             assigned_by_name: assignedByName,
           },
         }).catch(() => {})
       })
     }
+
+    onUpdated()
+    setSaving(false)
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2500)
+  }
+
+  async function handleDelete() {
+    if (!confirm('Delete this task?')) return
+    setDeleting(true)
+    await supabase.from('tasks').delete().eq('id', task.id)
+    setDeleting(false)
+    onDeleted()
   }
 
   async function addSubtask() {
@@ -500,14 +500,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setSubtaskInput('')
     loadSubtasks()
     onUpdated()
-  }
-
-  async function handleDelete() {
-    if (!confirm('Delete this task?')) return
-    setDeleting(true)
-    await supabase.from('tasks').delete().eq('id', task.id)
-    setDeleting(false)
-    onDeleted()
   }
 
   const assignedNames = assigneeIds.map(id => memberMap[id]?.name).filter(Boolean)
@@ -527,11 +519,19 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           </button>
         </div>
         <div className="flex items-center gap-2">
-          {saved && (
-            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 animate-pulse">
+          {saved ? (
+            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               Saved
             </span>
+          ) : (
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="text-xs font-medium bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors"
+            >
+              {saving ? 'Saving…' : 'Save'}
+            </button>
           )}
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 transition-colors">
             <X size={16} />
@@ -546,7 +546,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             className="w-full text-xl font-semibold text-slate-800 bg-transparent outline-none placeholder-slate-300 leading-snug"
             value={title}
             onChange={e => setTitle(e.target.value)}
-            onBlur={handleTitleBlur}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
             placeholder="Task title"
           />
         </div>
@@ -586,7 +586,11 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                     return (
                       <button
                         key={uid}
-                        onClick={() => toggleAssignee(uid)}
+                        onClick={() => {
+                          setAssigneeIds(prev =>
+                            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
+                          )
+                        }}
                         className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left"
                       >
                         <div
@@ -618,10 +622,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                   isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700'
                 )}
                 value={dueDate}
-                onChange={async e => {
-                  setDueDate(e.target.value)
-                  await saveField({ due_date: e.target.value || null })
-                }}
+                onChange={e => setDueDate(e.target.value)}
               />
             ) : (
               <label className="flex items-center gap-1 cursor-pointer">
@@ -630,10 +631,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                   type="date"
                   className="sr-only"
                   value=""
-                  onChange={async e => {
-                    setDueDate(e.target.value)
-                    await saveField({ due_date: e.target.value || null })
-                  }}
+                  onChange={e => setDueDate(e.target.value)}
                 />
               </label>
             )}
@@ -644,10 +642,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             <select
               className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
               value={priority}
-              onChange={async e => {
-                setPriority(e.target.value)
-                await saveField({ priority: e.target.value })
-              }}
+              onChange={e => setPriority(e.target.value)}
             >
               {Object.entries(PRIORITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
@@ -658,10 +653,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             <select
               className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
               value={status}
-              onChange={async e => {
-                setStatus(e.target.value)
-                await saveField({ status: e.target.value })
-              }}
+              onChange={e => setStatus(e.target.value)}
             >
               {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
@@ -673,10 +665,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
               <select
                 className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
                 value={sectionId}
-                onChange={async e => {
-                  setSectionId(e.target.value)
-                  await saveField({ section_id: e.target.value || null })
-                }}
+                onChange={e => setSectionId(e.target.value)}
               >
                 <option value="">No section</option>
                 {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
@@ -693,7 +682,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             placeholder="What is this task about?"
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            onBlur={handleNotesBlur}
             rows={4}
           />
         </div>
@@ -710,14 +698,12 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </button>
           </div>
 
-          {/* Existing subtasks */}
           <div className="space-y-0.5 mb-2">
             {subtasks.map(sub => (
               <SubtaskRow key={sub.id} sub={sub} memberMap={memberMap} onUpdate={loadSubtasks} />
             ))}
           </div>
 
-          {/* Add subtask input */}
           <div className="flex items-center gap-3 py-1 px-2 -mx-2 rounded-lg border border-dashed border-slate-200 hover:border-slate-300 transition-colors focus-within:border-primary-300 focus-within:bg-primary-50/20">
             <div className="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0" />
             <input
