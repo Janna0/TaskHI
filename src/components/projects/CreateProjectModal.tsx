@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import { Modal } from '../ui/Modal'
 import { Input, Textarea } from '../ui/Input'
 import { Button } from '../ui/Button'
@@ -57,11 +58,13 @@ export function CreateProjectModal({ open, onClose, onCreated }: Props) {
           value={description} onChange={e => setDescription(e.target.value)} />
         <div>
           <p className="text-xs font-medium text-slate-600 mb-2">Color</p>
-          <div className="flex gap-2 flex-wrap">
+          <div className="grid grid-cols-7 gap-2">
             {PROJECT_COLORS.map(c => (
               <button key={c} onClick={() => setColor(c)}
-                className={cn('w-7 h-7 rounded-full transition-transform hover:scale-110', color === c && 'ring-2 ring-offset-2 ring-slate-400')}
-                style={{ background: c }} />
+                className="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110"
+                style={{ background: c }}>
+                {color === c && <Check size={12} className="text-white" strokeWidth={3} />}
+              </button>
             ))}
           </div>
         </div>

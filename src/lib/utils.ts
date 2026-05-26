@@ -58,8 +58,8 @@ export const PRIORITY_BORDER: Record<string, string> = {
 }
 
 export const PROJECT_COLORS = [
-  '#6366f1', '#8b5cf6', '#0ea5e9', '#14b8a6',
-  '#10b981', '#f59e0b', '#f97316', '#f43f5e',
+  '#9CA3AF', '#F87171', '#FB923C', '#FBBF24', '#EAB308', '#A3E635', '#34D399',
+  '#22D3EE', '#818CF8', '#8B5CF6', '#C084FC', '#E879F9', '#F472B6', '#6B7280',
 ]
 
 export function getInitials(name: string | null | undefined): string {
