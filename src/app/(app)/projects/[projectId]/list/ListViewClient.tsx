@@ -4,8 +4,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor,
-  useSensor, useSensors, useDroppable, pointerWithin,
-  type DragEndEvent, type DragStartEvent, type DragOverEvent, type DragCancelEvent,
+  useSensor, useSensors, useDroppable, pointerWithin, closestCenter,
+  type CollisionDetection, type DragEndEvent, type DragStartEvent,
+  type DragOverEvent, type DragCancelEvent,
 } from '@dnd-kit/core';
 import {
   SortableContext, useSortable, arrayMove, verticalListSortingStrategy,
@@ -16,7 +17,7 @@ import {
   MoreHorizontal, Loader2, Trash2, GripVertical,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { StatusBadge, PriorityBadge } from '@/components/ui/badge';
+import { PriorityBadge } from '@/components/ui/badge';
 import { formatDate, getProjectColor } from '@/lib/utils';
 import { createClient } from '@/lib/supabase/client';
 import type { Section, Task } from '@/lib/supabase/types';
@@ -51,7 +52,6 @@ function TaskRow({ task }: { task: Task }) {
         <span className={`text-sm ${isDone ? 'line-through text-[#94a3b8]' : 'text-[#334155]'}`}>{task.title}</span>
       </div>
       <div className="flex items-center gap-3 flex-shrink-0">
-        <StatusBadge status={task.status} />
         <PriorityBadge priority={task.priority} className="hidden md:flex" />
         <span className={`text-xs w-16 text-right hidden sm:block ${isOverdue ? 'text-[#dc2626] font-medium' : 'text-[#94a3b8]'}`}>
           {task.due_date ? formatDate(task.due_date) : '—'}
@@ -69,7 +69,6 @@ function TaskGhost({ task }: { task: Task }) {
     <div className="flex items-center gap-3 px-4 py-2 bg-white border border-[#6366f1]/30 rounded-lg shadow-lg">
       <GripVertical className="h-3.5 w-3.5 text-[#94a3b8] flex-shrink-0" />
       <span className="flex-1 text-sm text-[#334155] truncate">{task.title}</span>
-      <StatusBadge status={task.status} />
     </div>
   );
 }
@@ -182,7 +181,7 @@ function SectionBlock({ section, orderedTasks, projectId, onTaskAdded, onDeleted
       {!collapsed && (
         <div
           ref={setNodeRef}
-          className={`min-h-[4px] transition-colors ${isOver && orderedTasks.length === 0 ? 'bg-[#eff6ff]' : ''}`}
+          className={`min-h-[60px] transition-colors ${isOver ? 'bg-[#eff6ff]/60' : ''}`}
         >
           <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
             {orderedTasks.map(task => <TaskRow key={task.id} task={task} />)}
@@ -321,6 +320,13 @@ export default function ListViewClient({ project, sections: initialSections, tas
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } }),
   );
 
+  // pointerWithin first (exact hit test), closestCenter as fallback so fast
+  // cross-section drags always resolve to a droppable.
+  const collisionDetection: CollisionDetection = (args) => {
+    const hits = pointerWithin(args);
+    return hits.length > 0 ? hits : closestCenter(args);
+  };
+
   function refresh() { router.refresh(); }
 
   function handleDragStart(event: DragStartEvent) {
@@ -366,14 +372,32 @@ export default function ListViewClient({ project, sections: initialSections, tas
     const originalTask = initialTasks.find(t => t.id === taskId);
     if (!originalTask) return;
 
+    // Determine the intended drop container from event.over (authoritative).
+    // handleDragOver may have missed a fast cross-section move, so we fix it here.
+    const overSidFromEvent = findContainer(overId) ?? (overId in localOrderRef.current ? overId : null);
+    const currentSid = findContainer(taskId);
+
+    if (overSidFromEvent && currentSid && overSidFromEvent !== currentSid) {
+      // handleDragOver didn't fire or was skipped — apply the cross-section move now.
+      const cur = localOrderRef.current;
+      const sourceIds = cur[currentSid].filter(id => id !== taskId);
+      const destIds = [...(cur[overSidFromEvent] ?? [])];
+      const overIsTask = !(overId in cur);
+      const insertAt = overIsTask ? destIds.indexOf(overId) : destIds.length;
+      destIds.splice(insertAt === -1 ? destIds.length : insertAt, 0, taskId);
+      const next = { ...cur, [currentSid]: sourceIds, [overSidFromEvent]: destIds };
+      localOrderRef.current = next;
+      setLocalOrder(next);
+    }
+
     const finalSid = findContainer(taskId);
     if (!finalSid) { refresh(); return; }
 
     let finalIds = [...(localOrderRef.current[finalSid] ?? [])];
 
-    // Apply same-container sort (cross-container was already done in handleDragOver)
-    const overSid = findContainer(overId);
-    if (overSid === finalSid && !(overId in localOrderRef.current)) {
+    // Same-container reorder (cross-container already resolved above or in handleDragOver)
+    const overSidNow = findContainer(overId);
+    if (overSidNow === finalSid && !(overId in localOrderRef.current)) {
       const from = finalIds.indexOf(taskId);
       const to = finalIds.indexOf(overId);
       if (from !== -1 && to !== -1 && from !== to) {
@@ -412,7 +436,7 @@ export default function ListViewClient({ project, sections: initialSections, tas
   return (
     <DndContext
       sensors={sensors}
-      collisionDetection={pointerWithin}
+      collisionDetection={collisionDetection}
       onDragStart={handleDragStart}
       onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
@@ -450,7 +474,6 @@ export default function ListViewClient({ project, sections: initialSections, tas
           <div className="w-3.5" />
           <span className="flex-1">Task</span>
           <div className="flex items-center gap-3 flex-shrink-0">
-            <span className="w-20">Status</span>
             <span className="w-16 hidden md:block">Priority</span>
             <span className="w-16 text-right hidden sm:block">Due</span>
             <span className="w-5" />
