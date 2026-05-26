@@ -1,13 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#4f46e5"/>
-      <stop offset="1" stop-color="#7c3aed"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="7" fill="url(#bg)"/>
-  <!-- Lightning bolt -->
+  <rect width="32" height="32" rx="7" fill="#6366f1"/>
   <path d="M21 4L9 18L16 18L11 28L23 14L16 14Z" fill="white"/>
-  <!-- Sparkle dot -->
-  <circle cx="25" cy="7" r="2" fill="white" opacity="0.55"/>
 </svg>
