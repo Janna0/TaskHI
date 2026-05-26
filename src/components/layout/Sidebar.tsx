@@ -2,16 +2,15 @@ import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell,
-  List, Kanban, LayoutList, Calendar,
-  Rocket, Users, TrendingUp,
-  Bug, Lightbulb, Globe, Settings,
-  BookOpen, Monitor, CheckCircle, Target,
-  Code, Megaphone, MessageCircle, Briefcase,
-  Image, Mountain, Flower2, LayoutDashboard,
-  Shuffle, Gauge, Award, Scissors,
-  ShoppingBasket, Map, Ticket, Compass,
-  RotateCcw,
-  type LucideIcon,
+  RotateCcw, type LucideIcon,
+  Briefcase, Target, Rocket, Calendar,
+  Mountain, Compass, Globe, Leaf,
+  Music, Camera, Sparkles,
+  Heart, Coffee, PartyPopper, Smile,
+  Zap, Flame, Trophy, Crown,
+  Code, MessageCircle, Megaphone, Shield,
+  Dumbbell, Bike, Plane, Anchor,
+  Gem, Lightbulb, Sun,
 } from 'lucide-react'
 import { useAuth } from '../../contexts/AuthContext'
 import { cn, getInitials, PROJECT_COLORS } from '../../lib/utils'
@@ -19,14 +18,14 @@ import { Project } from '../../types'
 import { supabase } from '../../lib/supabase'
 
 const ICON_MAP: Record<string, LucideIcon> = {
-  List, Kanban, LayoutList, Calendar,
-  Rocket, Users, TrendingUp, Star,
-  Bug, Lightbulb, Globe, Settings,
-  BookOpen, Monitor, CheckCircle, Target,
-  Code, Megaphone, MessageCircle, Briefcase,
-  Image, Mountain, Flower2, LayoutDashboard,
-  Shuffle, Gauge, Award, Scissors,
-  ShoppingBasket, Map, Ticket, Compass,
+  Briefcase, Target, Rocket, Calendar,
+  Mountain, Compass, Globe, Leaf,
+  Palette, Music, Camera, Sparkles,
+  Heart, Coffee, PartyPopper, Smile,
+  Zap, Flame, Trophy, Crown,
+  Code, MessageCircle, Megaphone, Shield,
+  Dumbbell, Bike, Plane, Anchor,
+  Gem, Star, Lightbulb, Sun,
 }
 
 const PROJECT_ICON_NAMES = Object.keys(ICON_MAP)
