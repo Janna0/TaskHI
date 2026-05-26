@@ -41,7 +41,7 @@ function renderContent(content: string) {
   )
 }
 
-// ── Property row ──────────────────────────────────────────────────────────────────────────────
+// ── Property row ───────────────────────────────────────────────────────────────
 
 function PropRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
   return (
@@ -55,7 +55,7 @@ function PropRow({ icon, label, children }: { icon: ReactNode; label: string; ch
   )
 }
 
-// ── Comments ──────────────────────────────────────────────────────────────────────────────
+// ── Comments ───────────────────────────────────────────────────────────────────
 
 function CommentsSection({ taskId, projectId, memberMap }: {
   taskId: string
@@ -153,6 +153,7 @@ function CommentsSection({ taskId, projectId, memberMap }: {
 
   return (
     <div>
+      {/* Comment list */}
       {comments.length > 0 && (
         <div className="space-y-4 mb-4">
           {comments.map(c => {
@@ -192,6 +193,8 @@ function CommentsSection({ taskId, projectId, memberMap }: {
           })}
         </div>
       )}
+
+      {/* Input row */}
       <div className="flex gap-3 items-start">
         <div
           className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 mt-0.5"
@@ -245,7 +248,7 @@ function CommentsSection({ taskId, projectId, memberMap }: {
   )
 }
 
-// ── Subtask row ───────────────────────────────────────────────────────────────────────────────────
+// ── Subtask row ────────────────────────────────────────────────────────────────────
 
 function SubtaskRow({ sub, memberMap, onUpdate }: {
   sub: Task
@@ -301,9 +304,12 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
           </svg>
         )}
       </button>
+
       <span className={cn('flex-1 text-sm min-w-0 truncate', sub.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
         {sub.title}
       </span>
+
+      {/* Due date */}
       {sub.due_date ? (
         <input
           type="date"
@@ -324,6 +330,8 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
           />
         </div>
       )}
+
+      {/* Assignee */}
       <div className="relative shrink-0" ref={pickerRef}>
         <button
           onClick={() => setShowAssignee(v => !v)}
@@ -345,6 +353,7 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
             <User size={13} className="text-slate-300 hover:text-slate-500" />
           )}
         </button>
+
         {showAssignee && memberEntries.length > 0 && (
           <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-40 p-1.5 min-w-[160px]">
             {memberEntries.map(([uid, m]) => {
@@ -373,7 +382,7 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
   )
 }
 
-// ── Main panel ──────────────────────────────────────────────────────────────────────────
+// ── Main panel ──────────────────────────────────────────────────────────────
 
 export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
   const { user, profile } = useAuth()
@@ -385,6 +394,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [notes, setNotes] = useState(task.notes ?? '')
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignee_ids ?? [])
   const [deleting, setDeleting] = useState(false)
+  const [saved, setSaved] = useState(false)
   const [subtasks, setSubtasks] = useState<Task[]>([])
   const [subtaskInput, setSubtaskInput] = useState('')
   const [showAssigneePicker, setShowAssigneePicker] = useState(false)
@@ -428,6 +438,8 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   }>) {
     await supabase.from('tasks').update(fields).eq('id', task.id)
     onUpdated()
+    setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
   }
 
   async function handleTitleBlur() {
@@ -502,6 +514,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
 
   return (
     <div className="w-[500px] shrink-0 border-l border-slate-200 bg-white flex flex-col h-full">
+      {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
           <button
@@ -513,12 +526,21 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             <Trash2 size={14} />
           </button>
         </div>
-        <button onClick={onClose} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 transition-colors">
-          <X size={16} />
-        </button>
+        <div className="flex items-center gap-2">
+          {saved && (
+            <span className="text-xs text-emerald-600 font-medium flex items-center gap-1 animate-pulse">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              Saved
+            </span>
+          )}
+          <button onClick={onClose} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 transition-colors">
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
+        {/* Title */}
         <div className="px-6 pt-5 pb-2">
           <input
             className="w-full text-xl font-semibold text-slate-800 bg-transparent outline-none placeholder-slate-300 leading-snug"
@@ -529,7 +551,9 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           />
         </div>
 
+        {/* Properties */}
         <div className="px-6 py-2 border-b border-slate-100">
+          {/* Assignee */}
           <PropRow icon={<User size={14} />} label="Assignee">
             <div className="relative" ref={assigneePickerRef}>
               <button
@@ -584,6 +608,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </div>
           </PropRow>
 
+          {/* Due date */}
           <PropRow icon={<Calendar size={14} />} label="Due date">
             {dueDate ? (
               <input
@@ -614,6 +639,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             )}
           </PropRow>
 
+          {/* Priority */}
           <PropRow icon={<Flag size={14} />} label="Priority">
             <select
               className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
@@ -627,6 +653,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </select>
           </PropRow>
 
+          {/* Status */}
           <PropRow icon={<CheckSquare size={14} />} label="Status">
             <select
               className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
@@ -640,6 +667,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </select>
           </PropRow>
 
+          {/* Section */}
           {sections.length > 0 && (
             <PropRow icon={<Layers size={14} />} label="Section">
               <select
@@ -657,6 +685,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           )}
         </div>
 
+        {/* Description */}
         <div className="px-6 py-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-700 mb-2">Description</h3>
           <textarea
@@ -669,6 +698,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           />
         </div>
 
+        {/* Subtasks */}
         <div className="px-6 py-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-slate-700">Subtasks</h3>
@@ -679,11 +709,15 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
               <Plus size={15} />
             </button>
           </div>
+
+          {/* Existing subtasks */}
           <div className="space-y-0.5 mb-2">
             {subtasks.map(sub => (
               <SubtaskRow key={sub.id} sub={sub} memberMap={memberMap} onUpdate={loadSubtasks} />
             ))}
           </div>
+
+          {/* Add subtask input */}
           <div className="flex items-center gap-3 py-1 px-2 -mx-2 rounded-lg border border-dashed border-slate-200 hover:border-slate-300 transition-colors focus-within:border-primary-300 focus-within:bg-primary-50/20">
             <div className="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0" />
             <input
@@ -700,6 +734,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           </div>
         </div>
 
+        {/* Comments */}
         <div className="px-6 py-4">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Comments</h3>
           <CommentsSection taskId={task.id} projectId={task.project_id} memberMap={memberMap} />
