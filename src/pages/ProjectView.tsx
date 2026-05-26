@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { Plus, Star, MoreHorizontal, Trash2, Link, X, UserMinus, Search, Copy, Check, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
-import { Project, Profile, Section, Task, ProjectMember, BoardColumnConfig } from '../types'
+import { Project, Profile, Section, Task, ProjectMember } from '../types'
 import { Button } from '../components/ui/Button'
 import { ListView } from '../components/views/ListView'
 import { BoardView } from '../components/views/BoardView'
@@ -126,23 +126,6 @@ export function ProjectView() {
     await supabase.from('projects').update({ status: 'archived' }).eq('id', project.id)
     window.dispatchEvent(new CustomEvent('taskhi:projects-changed'))
     window.location.hash = '/projects'
-  }
-
-  const DEFAULT_COLUMNS: BoardColumnConfig[] = [
-    { status: 'todo', name: 'To Do' },
-    { status: 'in_progress', name: 'In Progress' },
-    { status: 'done', name: 'Done' },
-  ]
-  const boardColumns = project?.board_columns ?? DEFAULT_COLUMNS
-
-  async function handleColumnsChanged(cols: BoardColumnConfig[]) {
-    setProject(p => p ? { ...p, board_columns: cols } : p)
-    await supabase.from('projects').update({ board_columns: cols }).eq('id', project!.id)
-  }
-
-  function handleTaskMoved(taskId: string, newStatus: string) {
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus as Task['status'] } : t))
-    if (selectedTask?.id === taskId) setSelectedTask(prev => prev ? { ...prev, status: newStatus as Task['status'] } : prev)
   }
 
   function handleTaskUpdated() {
@@ -289,10 +272,8 @@ export function ProjectView() {
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} columns={boardColumns}
+              memberMap={memberMap}
               onTaskClick={task => setSelectedTask(task)}
-              onTaskMoved={handleTaskMoved}
-              onColumnsChanged={handleColumnsChanged}
               onRefresh={() => loadAll(false)} />
           )}
         </div>

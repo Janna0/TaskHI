@@ -26,36 +26,31 @@ import {
 import { CSS } from '@dnd-kit/utilities'
 import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
-import { Task, Section, BoardColumnConfig } from '../../types'
+import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
 import { CreateTaskModal } from '../tasks/CreateTaskModal'
 
-const ALL_STATUSES: BoardColumnConfig[] = [
-  { status: 'todo',        name: 'To Do'       },
-  { status: 'in_progress', name: 'In Progress'  },
-  { status: 'review',      name: 'Review'       },
-  { status: 'blocked',     name: 'Blocked'      },
-  { status: 'done',        name: 'Done'         },
+const COL_COLORS = [
+  { header: 'bg-slate-100',  dot: 'bg-slate-400'  },
+  { header: 'bg-blue-50',    dot: 'bg-blue-500'   },
+  { header: 'bg-amber-50',   dot: 'bg-amber-500'  },
+  { header: 'bg-green-50',   dot: 'bg-green-500'  },
+  { header: 'bg-purple-50',  dot: 'bg-purple-500' },
+  { header: 'bg-rose-50',    dot: 'bg-rose-500'   },
+  { header: 'bg-cyan-50',    dot: 'bg-cyan-500'   },
+  { header: 'bg-orange-50',  dot: 'bg-orange-500' },
 ]
 
-const COLUMN_STYLES: Record<string, { header: string; dot: string }> = {
-  todo:        { header: 'bg-slate-100', dot: 'bg-slate-400' },
-  in_progress: { header: 'bg-blue-50',   dot: 'bg-blue-500'  },
-  review:      { header: 'bg-amber-50',  dot: 'bg-amber-500' },
-  blocked:     { header: 'bg-red-50',    dot: 'bg-red-500'   },
-  done:        { header: 'bg-green-50',  dot: 'bg-green-500' },
+function getColColor(idx: number) {
+  return COL_COLORS[idx % COL_COLORS.length]
 }
 
-function getColStyle(status: string) {
-  return COLUMN_STYLES[status] ?? { header: 'bg-purple-50', dot: 'bg-purple-500' }
-}
-
-function buildTaskOrder(tasks: Task[], columns: BoardColumnConfig[]): Record<string, string[]> {
+function buildTaskOrder(tasks: Task[], sections: Section[]): Record<string, string[]> {
   const order: Record<string, string[]> = {}
-  for (const col of columns) {
-    order[col.status] = tasks
-      .filter(t => t.status === col.status)
+  for (const sec of sections) {
+    order[sec.id] = tasks
+      .filter(t => t.section_id === sec.id)
       .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
       .map(t => t.id)
   }
@@ -67,10 +62,7 @@ interface Props {
   tasks: Task[]
   projectId: string
   memberMap: Record<string, { name: string; color: string }>
-  columns: BoardColumnConfig[]
   onTaskClick: (task: Task) => void
-  onTaskMoved: (taskId: string, newStatus: string) => void
-  onColumnsChanged: (cols: BoardColumnConfig[]) => void
   onRefresh: () => void
 }
 
@@ -147,8 +139,9 @@ function TaskCardGhost({ task }: { task: Task }) {
 
 // ── Sortable column ───────────────────────────────────────────────────────────────────────
 
-function SortableColumn({ col, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive }: {
-  col: BoardColumnConfig
+function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive }: {
+  section: Section
+  colIdx: number
   taskIds: string[]
   tasks: Task[]
   memberMap: Record<string, { name: string; color: string }>
@@ -158,9 +151,9 @@ function SortableColumn({ col, taskIds, tasks, memberMap, onTaskClick, onRename,
   onAddTask: () => void
   isTaskDragActive: boolean
 }) {
-  const appearance = getColStyle(col.status)
+  const appearance = getColColor(colIdx)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: col.status,
+    id: section.id,
     data: { type: 'column' },
   })
   const colTasks = taskIds.map(id => tasks.find(t => t.id === id)).filter((t): t is Task => !!t)
@@ -172,7 +165,7 @@ function SortableColumn({ col, taskIds, tasks, memberMap, onTaskClick, onRename,
       className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}
     >
       <ColumnHeader
-        col={col}
+        section={section}
         count={colTasks.length}
         appearance={appearance}
         onRename={onRename}
@@ -211,8 +204,8 @@ function SortableColumn({ col, taskIds, tasks, memberMap, onTaskClick, onRename,
 
 // ── Column header ───────────────────────────────────────────────────────────────────────
 
-function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes }: {
-  col: BoardColumnConfig
+function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes }: {
+  section: Section
   count: number
   appearance: { header: string; dot: string }
   onRename: (name: string) => void
@@ -222,15 +215,15 @@ function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, d
   dragAttributes: DraggableAttributes
 }) {
   const [editing, setEditing] = useState(false)
-  const [name, setName] = useState(col.name)
+  const [name, setName] = useState(section.name)
   const [showMenu, setShowMenu] = useState(false)
 
-  useEffect(() => { setName(col.name) }, [col.name])
+  useEffect(() => { setName(section.name) }, [section.name])
 
   function commit() {
     const trimmed = name.trim()
-    if (trimmed && trimmed !== col.name) onRename(trimmed)
-    else setName(col.name)
+    if (trimmed && trimmed !== section.name) onRename(trimmed)
+    else setName(section.name)
     setEditing(false)
   }
 
@@ -256,7 +249,7 @@ function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, d
             onBlur={commit}
             onKeyDown={e => {
               if (e.key === 'Enter') commit()
-              if (e.key === 'Escape') { setName(col.name); setEditing(false) }
+              if (e.key === 'Escape') { setName(section.name); setEditing(false) }
             }}
             className="text-sm font-semibold text-slate-700 bg-transparent border-b border-slate-500 outline-none w-28"
           />
@@ -265,7 +258,7 @@ function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, d
             className="text-sm font-semibold text-slate-700 truncate cursor-default"
             onDoubleClick={() => setEditing(true)}
           >
-            {col.name}
+            {section.name}
           </span>
         )}
 
@@ -296,7 +289,7 @@ function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, d
                   onClick={() => { setShowMenu(false); onRemove() }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
                 >
-                  <Trash2 size={13} /> Remove column
+                  <Trash2 size={13} /> Remove section
                 </button>
               </div>
             </>
@@ -307,76 +300,110 @@ function ColumnHeader({ col, count, appearance, onRename, onRemove, onAddTask, d
   )
 }
 
+// ── Add section form ──────────────────────────────────────────────────────────────────────
+
+function AddSectionForm({ projectId, position, onDone }: {
+  projectId: string
+  position: number
+  onDone: () => void
+}) {
+  const [name, setName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [])
+
+  async function commit() {
+    const trimmed = name.trim()
+    if (!trimmed) { onDone(); return }
+    setSaving(true)
+    await supabase.from('sections').insert({ project_id: projectId, name: trimmed, position })
+    setSaving(false)
+    onDone()
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-3 w-56">
+      <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">New section</p>
+      <input
+        ref={inputRef}
+        value={name}
+        onChange={e => setName(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') commit()
+          if (e.key === 'Escape') onDone()
+        }}
+        placeholder="Section name"
+        disabled={saving}
+        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-primary-400"
+      />
+    </div>
+  )
+}
+
 // ── Main BoardView ───────────────────────────────────────────────────────────────────
 
-export function BoardView({ sections, tasks, projectId, memberMap, columns, onTaskClick, onTaskMoved, onColumnsChanged, onRefresh }: Props) {
-  const [createStatus, setCreateStatus] = useState<string | null>(null)
-  const [showAddColumn, setShowAddColumn] = useState(false)
-  const addRef = useRef<HTMLDivElement>(null)
+export function BoardView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
+  const [createSectionId, setCreateSectionId] = useState<string | null>(null)
+  const [showAddSection, setShowAddSection] = useState(false)
 
-  // Local column order (optimistic during column drag)
-  const [localColumns, setLocalColumns] = useState<BoardColumnConfig[]>(columns)
-  const localColumnsRef = useRef<BoardColumnConfig[]>(columns)
+  // Local section order (optimistic during column drag)
+  const [localSections, setLocalSections] = useState<Section[]>(sections)
+  const localSectionsRef = useRef<Section[]>(sections)
 
-  // Local task order per status — lazy init so tasks render immediately
+  // Local task order per section — lazy init so tasks render immediately
   const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>(
-    () => buildTaskOrder(tasks, columns)
+    () => buildTaskOrder(tasks, sections)
   )
-  const taskOrderRef = useRef<Record<string, string[]>>(buildTaskOrder(tasks, columns))
+  const taskOrderRef = useRef<Record<string, string[]>>(buildTaskOrder(tasks, sections))
   const isDraggingRef = useRef(false)
   const lastOverId = useRef<string | null>(null)
 
   // Active drag info
   const [activeDragType, setActiveDragType] = useState<'task' | 'column' | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
-  const [activeColStatus, setActiveColStatus] = useState<string | null>(null)
+  const [activeColId, setActiveColId] = useState<string | null>(null)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   )
 
-  // Sync columns prop → local (skip during drag)
+  // Sync sections prop → local (skip during drag)
   useEffect(() => {
     if (isDraggingRef.current) return
-    setLocalColumns(columns)
-    localColumnsRef.current = columns
-  }, [columns])
+    setLocalSections(sections)
+    localSectionsRef.current = sections
+  }, [sections])
 
   // Sync tasks prop → taskOrder (skip during drag)
   useEffect(() => {
     if (isDraggingRef.current) return
-    const order = buildTaskOrder(tasks, columns)
+    const order = buildTaskOrder(tasks, sections)
     setTaskOrder(order)
     taskOrderRef.current = order
-  }, [tasks, columns])
+  }, [tasks, sections])
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (addRef.current && !addRef.current.contains(e.target as Node)) setShowAddColumn(false)
-    }
-    document.addEventListener('mousedown', onClickOutside)
-    return () => document.removeEventListener('mousedown', onClickOutside)
-  }, [])
-
-  function findStatusForTask(taskId: string): string {
-    for (const [status, ids] of Object.entries(taskOrderRef.current)) {
-      if (ids.includes(taskId)) return status
+  function findSectionForTask(taskId: string): string {
+    for (const [secId, ids] of Object.entries(taskOrderRef.current)) {
+      if (ids.includes(taskId)) return secId
     }
     return ''
   }
 
   // Multi-container collision detection:
-  // - For column drags: closestCenter among column droppables only
-  // - For task drags: pointerWithin → rectIntersection, then if result is a column,
-  //   drill in with closestCenter among that column's tasks
+  // - Column drags: closestCenter among section droppables only
+  // - Task drags: pointerWithin → rectIntersection, drill into column with closestCenter
   const collisionDetection = useCallback<CollisionDetection>((args) => {
     const activeType = args.active.data.current?.type as string | undefined
     if (activeType === 'column') {
       return closestCenter({
         ...args,
         droppableContainers: args.droppableContainers.filter(
-          c => localColumnsRef.current.some(col => col.status === c.id)
+          c => localSectionsRef.current.some(s => s.id === c.id)
         ),
       })
     }
@@ -386,7 +413,6 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
       return lastOverId.current ? [{ id: lastOverId.current }] : []
     }
     let overId = candidates[0].id as string
-    // If we landed on a column container, find the closest task inside it
     const colItems = taskOrderRef.current[overId]
     if (colItems !== undefined) {
       if (colItems.length > 0) {
@@ -408,7 +434,7 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     const type = event.active.data.current?.type as 'task' | 'column'
     setActiveDragType(type)
     if (type === 'task') setActiveTaskId(event.active.id as string)
-    if (type === 'column') setActiveColStatus(event.active.id as string)
+    if (type === 'column') setActiveColId(event.active.id as string)
   }
 
   function handleDragOver(event: DragOverEvent) {
@@ -420,35 +446,34 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     if (type === 'task') {
       const activeId = active.id as string
       const overId = over.id as string
-      const activeStatus = findStatusForTask(activeId)
+      const activeSec = findSectionForTask(activeId)
       const overType = over.data.current?.type
 
-      const targetStatus = overType === 'column' ? overId : findStatusForTask(overId)
-      if (!targetStatus) return
+      const targetSec = overType === 'column' ? overId : findSectionForTask(overId)
+      if (!targetSec) return
 
-      // Skip same-column reorders — useSortable handles the visual via transforms;
-      // we finalize the order in handleDragEnd to avoid transform/state conflicts.
-      if (activeStatus === targetStatus) return
+      // Skip same-section reorders — finalized in handleDragEnd to avoid transform conflicts
+      if (activeSec === targetSec) return
 
-      // Cross-column move: update state so the card appears in the new column
+      // Cross-section move: update state so card appears in the new column
       const cur = taskOrderRef.current
       const newOrder = { ...cur }
-      newOrder[activeStatus] = (newOrder[activeStatus] ?? []).filter(id => id !== activeId)
-      const targetIds = [...(newOrder[targetStatus] ?? [])]
+      newOrder[activeSec] = (newOrder[activeSec] ?? []).filter(id => id !== activeId)
+      const targetIds = [...(newOrder[targetSec] ?? [])]
       const overIdx = targetIds.indexOf(overId)
       targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
-      newOrder[targetStatus] = targetIds
+      newOrder[targetSec] = targetIds
       taskOrderRef.current = newOrder
       setTaskOrder(newOrder)
     } else if (type === 'column') {
       if (over.data.current?.type !== 'column') return
-      const cols = localColumnsRef.current
-      const from = cols.findIndex(c => c.status === active.id)
-      const to = cols.findIndex(c => c.status === over.id)
+      const secs = localSectionsRef.current
+      const from = secs.findIndex(s => s.id === active.id)
+      const to = secs.findIndex(s => s.id === over.id)
       if (from !== -1 && to !== -1 && from !== to) {
-        const newCols = arrayMove(cols, from, to)
-        localColumnsRef.current = newCols
-        setLocalColumns(newCols)
+        const newSecs = arrayMove(secs, from, to)
+        localSectionsRef.current = newSecs
+        setLocalSections(newSecs)
       }
     }
   }
@@ -459,27 +484,27 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     const type = event.active.data.current?.type
     setActiveDragType(null)
     setActiveTaskId(null)
-    setActiveColStatus(null)
+    setActiveColId(null)
 
     if (type === 'task') {
       const taskId = event.active.id as string
       const originalTask = tasks.find(t => t.id === taskId)
       if (!originalTask) return
 
-      // Apply same-column reorder now (skipped during dragOver)
+      // Apply same-section reorder now (skipped during dragOver)
       if (event.over && event.over.id !== taskId) {
         const overId = event.over.id as string
         const overType = event.over.data.current?.type
         if (overType === 'task') {
-          const activeStatus = findStatusForTask(taskId)
-          const overStatus = findStatusForTask(overId)
-          if (activeStatus === overStatus) {
-            const ids = taskOrderRef.current[activeStatus] ?? []
+          const activeSec = findSectionForTask(taskId)
+          const overSec = findSectionForTask(overId)
+          if (activeSec === overSec) {
+            const ids = taskOrderRef.current[activeSec] ?? []
             const from = ids.indexOf(taskId)
             const to = ids.indexOf(overId)
             if (from !== -1 && to !== -1 && from !== to) {
               const newIds = arrayMove(ids, from, to)
-              const newOrder = { ...taskOrderRef.current, [activeStatus]: newIds }
+              const newOrder = { ...taskOrderRef.current, [activeSec]: newIds }
               taskOrderRef.current = newOrder
               setTaskOrder(newOrder)
             }
@@ -487,22 +512,28 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
         }
       }
 
-      const finalStatus = findStatusForTask(taskId)
-      const finalIds = taskOrderRef.current[finalStatus] ?? []
-
-      if (finalStatus !== originalTask.status) {
-        onTaskMoved(taskId, finalStatus)
-      }
+      const finalSec = findSectionForTask(taskId)
+      const finalIds = taskOrderRef.current[finalSec] ?? []
+      const crossSection = finalSec !== originalTask.section_id
 
       await Promise.all(
         finalIds.map((id, idx) => {
           const upd: Record<string, unknown> = { position: idx }
-          if (id === taskId && finalStatus !== originalTask.status) upd.status = finalStatus
+          if (id === taskId && crossSection) upd.section_id = finalSec
           return supabase.from('tasks').update(upd).eq('id', id)
         })
       )
+
+      if (crossSection) onRefresh()
     } else if (type === 'column') {
-      onColumnsChanged(localColumnsRef.current)
+      // Persist new section positions
+      const newSecs = localSectionsRef.current
+      await Promise.all(
+        newSecs.map((sec, idx) =>
+          supabase.from('sections').update({ position: idx }).eq('id', sec.id)
+        )
+      )
+      onRefresh()
     }
   }
 
@@ -511,40 +542,27 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     lastOverId.current = null
     setActiveDragType(null)
     setActiveTaskId(null)
-    setActiveColStatus(null)
-    // Revert to last known good state from props
-    const order = buildTaskOrder(tasks, columns)
+    setActiveColId(null)
+    const order = buildTaskOrder(tasks, sections)
     taskOrderRef.current = order
     setTaskOrder(order)
-    localColumnsRef.current = columns
-    setLocalColumns(columns)
+    localSectionsRef.current = sections
+    setLocalSections(sections)
   }
 
-  function renameColumn(status: string, newName: string) {
-    const next = localColumnsRef.current.map(c => c.status === status ? { ...c, name: newName } : c)
-    localColumnsRef.current = next
-    setLocalColumns(next)
-    onColumnsChanged(next)
+  async function renameSection(id: string, newName: string) {
+    setLocalSections(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s))
+    await supabase.from('sections').update({ name: newName }).eq('id', id)
+    onRefresh()
   }
 
-  function removeColumn(status: string) {
-    const next = localColumnsRef.current.filter(c => c.status !== status)
-    localColumnsRef.current = next
-    setLocalColumns(next)
-    onColumnsChanged(next)
+  async function removeSection(id: string) {
+    setLocalSections(prev => prev.filter(s => s.id !== id))
+    await supabase.from('sections').delete().eq('id', id)
+    onRefresh()
   }
 
-  function addColumn(col: BoardColumnConfig) {
-    const next = [...localColumnsRef.current, col]
-    localColumnsRef.current = next
-    setLocalColumns(next)
-    onColumnsChanged(next)
-    setShowAddColumn(false)
-  }
-
-  const columnIds = localColumns.map(c => c.status)
-  const usedStatuses = new Set(localColumns.map(c => c.status))
-  const availableToAdd = ALL_STATUSES.filter(s => !usedStatuses.has(s.status))
+  const columnIds = localSections.map(s => s.id)
   const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) ?? null : null
 
   return (
@@ -558,48 +576,38 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
     >
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
         <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
-          {localColumns.map(col => (
+          {localSections.map((section, idx) => (
             <SortableColumn
-              key={col.status}
-              col={col}
-              taskIds={taskOrder[col.status] ?? []}
+              key={section.id}
+              section={section}
+              colIdx={idx}
+              taskIds={taskOrder[section.id] ?? []}
               tasks={tasks}
               memberMap={memberMap}
               onTaskClick={onTaskClick}
-              onRename={name => renameColumn(col.status, name)}
-              onRemove={() => removeColumn(col.status)}
-              onAddTask={() => setCreateStatus(col.status)}
+              onRename={name => renameSection(section.id, name)}
+              onRemove={() => removeSection(section.id)}
+              onAddTask={() => setCreateSectionId(section.id)}
               isTaskDragActive={activeDragType === 'task'}
             />
           ))}
 
-          {/* Add column */}
-          <div ref={addRef} className="shrink-0 w-56">
-            {showAddColumn && availableToAdd.length > 0 ? (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-lg overflow-hidden">
-                <p className="px-3 pt-2.5 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Add column</p>
-                {availableToAdd.map(s => {
-                  const sStyle = getColStyle(s.status)
-                  return (
-                    <button
-                      key={s.status}
-                      onClick={() => addColumn(s)}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-                    >
-                      <span className={cn('w-2.5 h-2.5 rounded-full shrink-0', sStyle.dot)} />
-                      {s.name}
-                    </button>
-                  )
-                })}
-              </div>
-            ) : availableToAdd.length > 0 ? (
+          {/* Add section */}
+          <div className="shrink-0 w-56">
+            {showAddSection ? (
+              <AddSectionForm
+                projectId={projectId}
+                position={localSections.length}
+                onDone={() => { setShowAddSection(false); onRefresh() }}
+              />
+            ) : (
               <button
-                onClick={() => setShowAddColumn(true)}
+                onClick={() => setShowAddSection(true)}
                 className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"
               >
-                <Plus size={15} /> Add column
+                <Plus size={15} /> Add section
               </button>
-            ) : null}
+            )}
           </div>
         </div>
       </SortableContext>
@@ -608,24 +616,24 @@ export function BoardView({ sections, tasks, projectId, memberMap, columns, onTa
         {activeDragType === 'task' && activeTask && (
           <TaskCardGhost task={activeTask} />
         )}
-        {activeDragType === 'column' && activeColStatus && (
+        {activeDragType === 'column' && activeColId && (
           <div className="w-64 bg-white/90 rounded-xl shadow-2xl border border-slate-200 p-3 flex items-center gap-2">
             <GripVertical size={14} className="text-slate-300" />
             <span className="text-sm font-semibold text-slate-600">
-              {localColumns.find(c => c.status === activeColStatus)?.name ?? 'Column'}
+              {localSections.find(s => s.id === activeColId)?.name ?? 'Section'}
             </span>
           </div>
         )}
       </DragOverlay>
 
-      {createStatus !== null && (
+      {createSectionId !== null && (
         <CreateTaskModal
           open={true}
-          onClose={() => setCreateStatus(null)}
-          onCreated={() => { setCreateStatus(null); onRefresh() }}
+          onClose={() => setCreateSectionId(null)}
+          onCreated={() => { setCreateSectionId(null); onRefresh() }}
           projectId={projectId}
           sections={sections}
-          defaultSectionId={sections[0]?.id ?? null}
+          defaultSectionId={createSectionId}
         />
       )}
     </DndContext>
