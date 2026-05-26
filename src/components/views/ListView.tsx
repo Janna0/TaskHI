@@ -47,9 +47,10 @@ function sectionNameToStatus(name: string): Task['status'] | null {
 
 // ── Inline add-task row ──────────────────────────────────────────────────
 
-function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
+function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActive, onActivate, onDone }: {
   projectId: string
   sectionId: string
+  sectionName: string
   position: number
   isActive: boolean
   onActivate: () => void
@@ -74,9 +75,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
     const trimmed = title.trim()
     if (trimmed) {
       setSaving(true)
-      const inferredStatus = sectionNameToStatus(
-        sections.find(() => true)?.name ?? ''
-      ) ?? 'todo'
+      const inferredStatus = sectionNameToStatus(sectionName) ?? 'todo'
       await supabase.from('tasks').insert({
         project_id: projectId,
         section_id: sectionId,
@@ -546,6 +545,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <AddTaskInlineRow
                     projectId={projectId}
                     sectionId={section.id}
+                    sectionName={section.name}
                     position={sectionTaskIds.length}
                     isActive={inlineAdding === section.id}
                     onActivate={() => setInlineAdding(section.id)}
