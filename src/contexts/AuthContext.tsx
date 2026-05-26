@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
+import { applyTheme } from '../lib/theme'
 import { Profile } from '../types'
 
 interface AuthContextType {
@@ -51,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data } = await supabase.from('profiles').select('*').eq('id', authUser.id).single()
     if (data) {
       setProfile(data)
+      if (data.avatar_color) applyTheme(data.avatar_color)
       setLoading(false)
       return
     }

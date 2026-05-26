@@ -4,6 +4,7 @@ import { Check, ArrowLeft, AlertCircle } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { getInitials, PROJECT_COLORS } from '../lib/utils'
+import { applyTheme } from '../lib/theme'
 
 export function ProfilePage() {
   const { user, profile, updateProfile } = useAuth()
@@ -81,7 +82,7 @@ export function ProfilePage() {
             {PROJECT_COLORS.map(c => (
               <button
                 key={c}
-                onClick={() => setColor(c)}
+                onClick={() => { setColor(c); applyTheme(c) }}
                 className="w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110"
                 style={{ background: c }}
                 title={c}
