@@ -78,6 +78,8 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const [renameValue, setRenameValue] = useState('')
   const [unreadCount, setUnreadCount] = useState(0)
   const [showArchived, setShowArchived] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
 
@@ -131,6 +133,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   function closeMenu() {
     setContextMenu(null)
     setShowColorPanel(false)
+    setUploadError(null)
   }
 
   async function handleRename() {
@@ -159,11 +162,18 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
     const file = e.target.files[0]
     const ext = file.name.split('.').pop() ?? 'png'
     const path = `${contextMenu.project.id}/${Date.now()}.${ext}`
+    setUploading(true)
+    setUploadError(null)
     const { error } = await supabase.storage.from('project-icons').upload(path, file)
-    if (error) return
+    if (error) {
+      setUploadError(error.message)
+      setUploading(false)
+      return
+    }
     const { data } = supabase.storage.from('project-icons').getPublicUrl(path)
     await supabase.from('projects').update({ icon: data.publicUrl }).eq('id', contextMenu.project.id)
     window.dispatchEvent(new Event('taskhi:projects-changed'))
+    setUploading(false)
     closeMenu()
   }
 
@@ -389,11 +399,19 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
                 ))}
               </div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Icon</p>
-              <label className="flex items-center gap-2 w-full px-2 py-1.5 mb-1 rounded-md border border-dashed border-slate-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer transition-colors text-slate-500 hover:text-primary-600">
+              <label className={cn(
+                'flex items-center gap-2 w-full px-2 py-1.5 mb-1 rounded-md border border-dashed transition-colors',
+                uploading
+                  ? 'border-slate-200 text-slate-400 cursor-wait'
+                  : 'border-slate-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer text-slate-500 hover:text-primary-600'
+              )}>
                 <Upload size={13} className="shrink-0" />
-                <span className="text-xs">Upload image…</span>
-                <input type="file" accept="image/*" className="hidden" onChange={handleIconUpload} />
+                <span className="text-xs">{uploading ? 'Uploading…' : 'Upload image…'}</span>
+                <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={handleIconUpload} />
               </label>
+              {uploadError && (
+                <p className="text-[10px] text-red-500 mb-1 px-1 leading-snug">{uploadError}</p>
+              )}
               <div className="grid grid-cols-4 gap-0.5">
                 {PROJECT_ICON_NAMES.map(name => {
                   const Icon = ICON_MAP[name]
