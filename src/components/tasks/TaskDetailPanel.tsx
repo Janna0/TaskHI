@@ -321,10 +321,14 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
           )}
         />
       ) : (
-        <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity shrink-0" title="Set due date">
-          <Calendar size={13} className="text-slate-300 hover:text-slate-500" />
-          <input type="date" className="sr-only" onChange={e => setDueDate(e.target.value)} />
-        </label>
+        <div className="relative shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" title="Set due date">
+          <Calendar size={13} className="text-slate-300" />
+          <input
+            type="date"
+            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+            onChange={e => setDueDate(e.target.value)}
+          />
+        </div>
       )}
 
       {/* Assignee */}
