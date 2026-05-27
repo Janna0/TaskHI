@@ -7,18 +7,20 @@ import { Project, Profile, Section, Task, ProjectMember } from '../types'
 import { Button } from '../components/ui/Button'
 import { ListView } from '../components/views/ListView'
 import { BoardView } from '../components/views/BoardView'
+import { TimelineView } from '../components/views/TimelineView'
 import { TaskDetailPanel } from '../components/tasks/TaskDetailPanel'
 import { CreateTaskModal } from '../components/tasks/CreateTaskModal'
 import { cn, isOverdue, getInitials } from '../lib/utils'
 import { loadFavoriteIds, setFavorite } from '../lib/favorites'
 import { ProjectIconBadge } from '../components/ui/ProjectIconBadge'
 
-type View = 'overview' | 'list' | 'board'
+type View = 'overview' | 'list' | 'board' | 'timeline'
 
 const TABS: { id: View; label: string }[] = [
   { id: 'overview', label: 'Overview' },
   { id: 'list',     label: 'List' },
   { id: 'board',    label: 'Board' },
+  { id: 'timeline', label: 'Timeline' },
 ]
 
 export function ProjectView() {
@@ -287,6 +289,9 @@ export function ProjectView() {
               onTaskClick={openTask}
               onRefresh={() => loadAll(false)} />
           )}
+          {view === 'timeline' && (
+            <TimelineView sections={sections} tasks={tasks} onTaskClick={openTask} />
+          )}
         </div>
         {selectedTask && (
           <TaskDetailPanel task={selectedTask} sections={sections} memberMap={memberMap}
@@ -305,7 +310,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────
+// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -450,7 +455,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ────────────────────────────────────────────────────────────────────
+// ── Overview Tab ───────────────────────────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 
