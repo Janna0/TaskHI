@@ -200,8 +200,13 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
     navigate('/login')
   }
 
-  const menuX = contextMenu ? Math.min(contextMenu.x, window.innerWidth - 224) : 0
-  const menuY = contextMenu ? Math.min(contextMenu.y, window.innerHeight - 520) : 0
+  const MENU_H = showColorPanel ? 480 : 148
+  const menuX = contextMenu ? Math.min(contextMenu.x, window.innerWidth - 232) : 0
+  const menuY = contextMenu
+    ? (contextMenu.y + MENU_H > window.innerHeight - 8
+        ? Math.max(8, contextMenu.y - MENU_H)
+        : contextMenu.y)
+    : 0
 
   const isArchived = contextMenu?.project.status === 'archived'
 
