@@ -5,13 +5,14 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { Task, Project } from '../types'
 import { StatusBadge, PriorityBadge } from '../components/ui/Badge'
-import { formatDate, isOverdue, cn } from '../lib/utils'
+import { formatDate, isOverdue, cn, getInitials } from '../lib/utils'
 import { withFavorites } from '../lib/favorites'
 
 export function DashboardPage() {
   const { user, profile } = useAuth()
   const [tasks, setTasks] = useState<Task[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [memberMap, setMemberMap] = useState<Record<string, { name: string; color: string }>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -36,7 +37,16 @@ export function DashboardPage() {
         .order('created_at', { ascending: false })
         .limit(6),
     ])
-    if (t) setTasks(t)
+    if (t) {
+      setTasks(t)
+      const allIds = [...new Set(t.flatMap((task: Task) => task.assignee_ids ?? []))]
+      if (allIds.length > 0) {
+        const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_color').in('id', allIds)
+        const map: Record<string, { name: string; color: string }> = {}
+        for (const pr of profiles ?? []) map[pr.id] = { name: pr.name ?? pr.id, color: pr.avatar_color ?? '#94a3b8' }
+        setMemberMap(map)
+      }
+    }
     if (p) setProjects(await withFavorites(p, user!.id))
     setLoading(false)
   }
@@ -76,7 +86,7 @@ export function DashboardPage() {
             <AlertCircle size={14} /> Overdue tasks
           </h2>
           <div className="space-y-1">
-            {overdueTasks.map(task => <TaskRow key={task.id} task={task} />)}
+            {overdueTasks.map(task => <TaskRow key={task.id} task={task} memberMap={memberMap} />)}
           </div>
         </section>
       )}
@@ -91,7 +101,7 @@ export function DashboardPage() {
         ) : (
           <div className="space-y-1">
             {tasks.filter(t => !(t.due_date && isOverdue(t.due_date))).slice(0, 8).map(task => (
-              <TaskRow key={task.id} task={task} />
+              <TaskRow key={task.id} task={task} memberMap={memberMap} />
             ))}
           </div>
         )}
@@ -146,14 +156,31 @@ function StatCard({ icon, label, value, color }: { icon: React.ReactNode; label:
   )
 }
 
-function TaskRow({ task }: { task: Task }) {
+function TaskRow({ task, memberMap }: { task: Task; memberMap: Record<string, { name: string; color: string }> }) {
   const overdue = task.due_date && isOverdue(task.due_date)
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
   return (
     <Link
-      to={`/projects/${task.project_id}`}
+      to={`/projects/${task.project_id}?task=${task.id}`}
       className="flex items-center gap-3 px-4 py-2.5 bg-white rounded-lg border border-slate-100 hover:border-primary-200 hover:shadow-sm transition-all"
     >
       <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
+      {assignees.length > 0 && (
+        <div className="flex -space-x-1.5 shrink-0">
+          {assignees.slice(0, 3).map((a, i) => (
+            <div key={i} title={a.name}
+              className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-semibold"
+              style={{ background: a.color }}>
+              {getInitials(a.name)}
+            </div>
+          ))}
+          {assignees.length > 3 && (
+            <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">
+              +{assignees.length - 3}
+            </div>
+          )}
+        </div>
+      )}
       <StatusBadge status={task.status} />
       <PriorityBadge priority={task.priority} />
       {task.due_date && (
