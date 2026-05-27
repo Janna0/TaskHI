@@ -21,7 +21,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2 } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil, Check, CheckCircle2, UserCircle, CalendarDays } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
@@ -37,52 +37,60 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Assignee avatars (shared) ──────────────────────────────────────────────────────────
+interface Member { id: string; name: string; color: string }
 
-function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<string, { name: string; color: string }> }) {
-  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
-  return (
-    <div className="flex -space-x-1.5">
-      {assignees.slice(0, 2).map((a, i) => (
-        <div
-          key={i}
-          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
-          style={{ background: a.color }}
-          title={a.name}
-        >
-          {getInitials(a.name)}
-        </div>
-      ))}
-      {assignees.length > 2 && (
-        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
-          +{assignees.length - 2}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Sortable task row ───────────────────────────────────────────────────────────────────
+// ── Sortable task row ──────────────────────────────────────────────────────────────────
 
 function TaskRow({
-  task,
-  memberMap,
-  onClick,
-  hasSubtasks,
-  isExpanded,
-  onToggleExpand,
-  onAddSubtask,
+  task, memberMap, members, completionSectionId, onClick, onUpdate,
+  hasSubtasks, isExpanded, onToggleExpand, onAddSubtask,
 }: {
   task: Task
   memberMap: Record<string, { name: string; color: string }>
+  members: Member[]
+  completionSectionId: string
   onClick: () => void
+  onUpdate: () => void
   hasSubtasks: boolean
   isExpanded: boolean
   onToggleExpand: () => void
   onAddSubtask: () => void
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const isDone = task.status === 'done'
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  const [showAssignee, setShowAssignee] = useState(false)
+  const assigneeRef = useRef<HTMLDivElement>(null)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+
+  useEffect(() => {
+    if (!showAssignee) return
+    function handler(e: MouseEvent) {
+      if (assigneeRef.current && !assigneeRef.current.contains(e.target as Node)) setShowAssignee(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAssignee])
+
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation()
+    const upd: Record<string, unknown> = { status: isDone ? 'todo' : 'done' }
+    if (!isDone && completionSectionId) upd.section_id = completionSectionId
+    await supabase.from('tasks').update(upd).eq('id', task.id)
+    onUpdate()
+  }
+
+  async function toggleAssignee(memberId: string) {
+    const current = task.assignee_ids ?? []
+    const next = current.includes(memberId) ? current.filter(id => id !== memberId) : [...current, memberId]
+    await supabase.from('tasks').update({ assignee_ids: next }).eq('id', task.id)
+    onUpdate()
+  }
+
+  async function handleDateChange(date: string) {
+    await supabase.from('tasks').update({ due_date: date || null }).eq('id', task.id)
+    onUpdate()
+  }
 
   return (
     <div
@@ -94,6 +102,7 @@ function TaskRow({
         isDragging && 'opacity-30'
       )}
     >
+      {/* Drag handle */}
       <div
         {...listeners}
         {...attributes}
@@ -103,6 +112,23 @@ function TaskRow({
         <GripVertical size={14} />
       </div>
 
+      {/* Completion toggle */}
+      <div
+        onPointerDown={e => e.stopPropagation()}
+        onClick={toggleComplete}
+        title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
+        className="shrink-0 cursor-pointer group/check"
+      >
+        {isDone ? (
+          <CheckCircle2 size={15} className="text-emerald-500" />
+        ) : (
+          <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover/check:border-emerald-400 transition-colors flex items-center justify-center">
+            <Check size={9} className="text-slate-300 group-hover/check:text-emerald-400 transition-colors" />
+          </div>
+        )}
+      </div>
+
+      {/* Title */}
       <span className="flex-1 flex items-center gap-1 min-w-0">
         <button
           onClick={e => { e.stopPropagation(); onToggleExpand() }}
@@ -111,24 +137,74 @@ function TaskRow({
             !hasSubtasks && 'invisible pointer-events-none'
           )}
         >
-          {isExpanded
-            ? <ChevronDown size={13} />
-            : <ChevronRight size={13} />}
+          {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
-        <span className={cn('text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
+        <span className={cn('text-sm truncate', isDone ? 'line-through text-slate-400' : 'text-slate-700')}>
           {task.title}
         </span>
       </span>
 
-      <div className="w-20 flex justify-center">
-        <AssigneeAvatars task={task} memberMap={memberMap} />
+      {/* Assignee */}
+      <div ref={assigneeRef} className="w-20 flex justify-center relative" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+        <button onClick={() => setShowAssignee(v => !v)} title={assignees.length ? 'Change assignees' : 'Assign task'} className="flex items-center justify-center w-full">
+          {assignees.length === 0 ? (
+            <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+              <UserCircle size={12} className="text-slate-300" />
+            </div>
+          ) : (
+            <div className="flex -space-x-1.5">
+              {assignees.slice(0, 2).map((a, i) => (
+                <div key={i} className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white" style={{ background: a.color }} title={a.name}>
+                  {getInitials(a.name)}
+                </div>
+              ))}
+              {assignees.length > 2 && (
+                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">+{assignees.length - 2}</div>
+              )}
+            </div>
+          )}
+        </button>
+        {showAssignee && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
+            {members.length === 0
+              ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
+              : members.map(m => {
+                  const selected = (task.assignee_ids ?? []).includes(m.id)
+                  return (
+                    <button key={m.id} onClick={() => toggleAssignee(m.id)} className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
+                      <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                      {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
+                    </button>
+                  )
+                })
+            }
+          </div>
+        )}
       </div>
+
+      {/* Priority */}
       <div className="w-24 flex justify-center">
         <PriorityBadge priority={task.priority} />
       </div>
-      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-        {task.due_date ? formatDate(task.due_date) : '—'}
+
+      {/* Due date */}
+      <div className="w-24 flex justify-center relative" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+        <div className="relative flex items-center justify-center w-full cursor-pointer">
+          {task.due_date ? (
+            <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+              {formatDate(task.due_date)}
+            </span>
+          ) : (
+            <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+              <CalendarDays size={11} className="text-slate-300" />
+            </div>
+          )}
+          <input type="date" value={task.due_date ?? ''} onChange={e => handleDateChange(e.target.value)} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+        </div>
       </div>
+
+      {/* Add subtask button */}
       <button
         onClick={e => { e.stopPropagation(); onAddSubtask() }}
         title="Add subtask"
@@ -140,38 +216,136 @@ function TaskRow({
   )
 }
 
-// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────
+// ── Subtask row ────────────────────────────────────────────────────────────────────────
 
 function SubtaskRow({
-  task,
-  memberMap,
-  onClick,
+  task, memberMap, members, onClick, onUpdate,
 }: {
   task: Task
   memberMap: Record<string, { name: string; color: string }>
+  members: Member[]
   onClick: () => void
+  onUpdate: () => void
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
   const isDone = task.status === 'done'
+  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  const [showAssignee, setShowAssignee] = useState(false)
+  const assigneeRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!showAssignee) return
+    function handler(e: MouseEvent) {
+      if (assigneeRef.current && !assigneeRef.current.contains(e.target as Node)) setShowAssignee(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAssignee])
+
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation()
+    await supabase.from('tasks').update({ status: isDone ? 'todo' : 'done' }).eq('id', task.id)
+    onUpdate()
+  }
+
+  async function toggleAssignee(memberId: string) {
+    const current = task.assignee_ids ?? []
+    const next = current.includes(memberId) ? current.filter(id => id !== memberId) : [...current, memberId]
+    await supabase.from('tasks').update({ assignee_ids: next }).eq('id', task.id)
+    onUpdate()
+  }
+
+  async function handleDateChange(date: string) {
+    await supabase.from('tasks').update({ due_date: date || null }).eq('id', task.id)
+    onUpdate()
+  }
 
   return (
     <div
       onClick={onClick}
-      className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 cursor-pointer border-b border-slate-50 group"
+      className="flex items-center gap-3 px-4 py-1.5 pl-[60px] hover:bg-slate-50 cursor-pointer border-b border-slate-50 group"
     >
-      <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+      {/* Completion toggle */}
+      <div
+        onPointerDown={e => e.stopPropagation()}
+        onClick={toggleComplete}
+        title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
+        className="shrink-0 cursor-pointer group/check"
+      >
+        {isDone ? (
+          <CheckCircle2 size={15} className="text-emerald-500" />
+        ) : (
+          <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover/check:border-emerald-400 transition-colors flex items-center justify-center">
+            <Check size={9} className="text-slate-300 group-hover/check:text-emerald-400 transition-colors" />
+          </div>
+        )}
+      </div>
+
+      {/* Title */}
       <span className={cn('flex-1 text-sm truncate', isDone ? 'line-through text-slate-400' : 'text-slate-600')}>
         {task.title}
       </span>
-      <div className="w-20 flex justify-center">
-        <AssigneeAvatars task={task} memberMap={memberMap} />
+
+      {/* Assignee */}
+      <div ref={assigneeRef} className="w-20 flex justify-center relative" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+        <button onClick={() => setShowAssignee(v => !v)} title={assignees.length ? 'Change assignees' : 'Assign task'} className="flex items-center justify-center w-full">
+          {assignees.length === 0 ? (
+            <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+              <UserCircle size={12} className="text-slate-300" />
+            </div>
+          ) : (
+            <div className="flex -space-x-1.5">
+              {assignees.slice(0, 2).map((a, i) => (
+                <div key={i} className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white" style={{ background: a.color }} title={a.name}>
+                  {getInitials(a.name)}
+                </div>
+              ))}
+              {assignees.length > 2 && (
+                <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">+{assignees.length - 2}</div>
+              )}
+            </div>
+          )}
+        </button>
+        {showAssignee && (
+          <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
+            {members.length === 0
+              ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
+              : members.map(m => {
+                  const selected = (task.assignee_ids ?? []).includes(m.id)
+                  return (
+                    <button key={m.id} onClick={() => toggleAssignee(m.id)} className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
+                      <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                      {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
+                    </button>
+                  )
+                })
+            }
+          </div>
+        )}
       </div>
+
+      {/* Priority */}
       <div className="w-24 flex justify-center">
         <PriorityBadge priority={task.priority} />
       </div>
-      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-        {task.due_date ? formatDate(task.due_date) : '—'}
+
+      {/* Due date */}
+      <div className="w-24 flex justify-center relative" onClick={e => e.stopPropagation()} onPointerDown={e => e.stopPropagation()}>
+        <div className="relative flex items-center justify-center w-full cursor-pointer">
+          {task.due_date ? (
+            <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+              {formatDate(task.due_date)}
+            </span>
+          ) : (
+            <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+              <CalendarDays size={11} className="text-slate-300" />
+            </div>
+          )}
+          <input type="date" value={task.due_date ?? ''} onChange={e => handleDateChange(e.target.value)} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
+        </div>
       </div>
+
       <div className="w-[22px] shrink-0" />
     </div>
   )
@@ -188,7 +362,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Add task inline ────────────────────────────────────────────────────────────────────
+// ── Add task inline ───────────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -272,7 +446,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Add subtask inline ────────────────────────────────────────────────────────────────────
+// ── Add subtask inline ─────────────────────────────────────────────────────────────────
 
 function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   projectId: string
@@ -333,7 +507,7 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   )
 }
 
-// ── Section action menu ────────────────────────────────────────────────────────────────────
+// ── Section action menu ─────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
@@ -360,31 +534,19 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   }, [])
 
   return (
-    <div
-      ref={ref}
-      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-52 z-50"
-    >
-      <button
-        onMouseDown={e => { e.stopPropagation(); onRename() }}
-        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
-      >
+    <div ref={ref} className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-52 z-50">
+      <button onMouseDown={e => { e.stopPropagation(); onRename() }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
         <Pencil size={13} className="text-slate-400 shrink-0" />
         Rename section
       </button>
-      <button
-        onMouseDown={e => { e.stopPropagation(); onToggleCompletion() }}
-        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
-      >
+      <button onMouseDown={e => { e.stopPropagation(); onToggleCompletion() }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-slate-50 transition-colors">
         <CheckCircle2 size={13} className={isCompletion ? 'text-emerald-500 shrink-0' : 'text-slate-400 shrink-0'} />
         <span className={isCompletion ? 'text-emerald-600' : 'text-slate-700'}>
           {isCompletion ? 'Remove completion mark' : 'Mark as completion'}
         </span>
       </button>
       <div className="border-t border-slate-100 my-1" />
-      <button
-        onMouseDown={e => { e.stopPropagation(); onDelete() }}
-        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors"
-      >
+      <button onMouseDown={e => { e.stopPropagation(); onDelete() }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-red-500 hover:bg-red-50 transition-colors">
         <Trash2 size={13} className="shrink-0" />
         Delete section
       </button>
@@ -392,7 +554,7 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   )
 }
 
-// ── Section drop zone ────────────────────────────────────────────────────────────────────────
+// ── Section drop zone ─────────────────────────────────────────────────────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -403,7 +565,7 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-// ── Main component ──────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -424,6 +586,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const completionKey = `taskhi:completion-section:${projectId}`
   const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
 
+  const members: Member[] = Object.entries(memberMap).map(([id, m]) => ({ id, name: m.name, color: m.color }))
+
   function toggleCompletionSection(sectionId: string) {
     const next = completionSectionId === sectionId ? '' : sectionId
     setCompletionSectionId(next)
@@ -432,7 +596,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     setOpenMenuSection(null)
   }
 
-  // Only top-level tasks participate in section drag-and-drop
   const rootTasks = tasks.filter(t => !t.parent_task_id)
   const subtasksByParent: Record<string, Task[]> = {}
   for (const t of tasks) {
@@ -640,7 +803,10 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         <TaskRow
           task={task}
           memberMap={memberMap}
+          members={members}
+          completionSectionId={completionSectionId}
           onClick={() => onTaskClick(task)}
+          onUpdate={onRefresh}
           hasSubtasks={taskSubtasks.length > 0 || isAddingSubtask}
           isExpanded={isExpanded || isAddingSubtask}
           onToggleExpand={() => toggleTask(task.id)}
@@ -656,7 +822,9 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                 key={sub.id}
                 task={sub}
                 memberMap={memberMap}
+                members={members}
                 onClick={() => onTaskClick(sub)}
+                onUpdate={onRefresh}
               />
             ))}
             {isAddingSubtask && (
@@ -696,6 +864,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         {/* Column headers */}
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
           <span className="w-3.5 shrink-0" />
+          <span className="w-[15px] shrink-0" />
           <span className="flex-1">Task</span>
           <span className="w-20 text-center">Assignee</span>
           <span className="w-24 text-center">Priority</span>
@@ -705,9 +874,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
         {sections.map(section => {
           const sectionTaskIds = localOrder[section.id] ?? []
-          const sectionTasks = sectionTaskIds
-            .map(id => taskById[id])
-            .filter(Boolean)
+          const sectionTasks = sectionTaskIds.map(id => taskById[id]).filter(Boolean)
           const isCollapsed = collapsed[section.id]
           const isHovered = hoveredSection === section.id
           const menuOpen = openMenuSection === section.id
