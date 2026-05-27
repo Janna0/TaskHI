@@ -24,7 +24,7 @@ export function MyTasksPage() {
     const { data } = await supabase
       .from('tasks')
       .select('*')
-      .eq('created_by', user!.id)
+      .contains('assignee_ids', [user!.id])
       .order('due_date', { ascending: true, nullsFirst: false })
     const taskList = (data ?? []) as Task[]
     setTasks(taskList)
