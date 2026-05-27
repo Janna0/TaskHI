@@ -3,7 +3,7 @@ import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
-import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
+import { PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
 
 interface Comment {
   id: string
@@ -310,18 +310,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                 <AssigneePicker task={task} memberMap={memberMap} projectId={task.project_id} onUpdated={onUpdated} />
               </PropRow>
 
-              <PropRow icon={<span className="text-xs font-bold">S</span>} label="Status">
-                <select
-                  value={status}
-                  onChange={e => { setStatus(e.target.value as typeof status); setTimeout(save, 0) }}
-                  className="text-sm text-slate-700 bg-transparent outline-none cursor-pointer hover:bg-slate-100 rounded px-1 py-0.5 -mx-1"
-                >
-                  {Object.entries(STATUS_LABELS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
-              </PropRow>
-
               <PropRow icon={<Flag size={14} />} label="Priority">
                 <select
                   value={priority}
@@ -346,7 +334,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                 />
               </PropRow>
 
-              <PropRow icon={<Layers size={14} />} label="Section">
+              <PropRow icon={<Layers size={14} />} label="Status">
                 <select
                   value={sectionId}
                   onChange={e => {
