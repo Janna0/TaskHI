@@ -138,8 +138,6 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
 
   function handleCardBlur(e: React.FocusEvent) {
     if (cardRef.current?.contains(e.relatedTarget as Node)) return
-    // datePickerActiveRef stays true during the synchronous blur bubble,
-    // so this correctly skips save when the browser date picker closes
     if (datePickerActiveRef.current) return
     save()
   }
@@ -149,17 +147,12 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   }
 
   const selectedMembers = members.filter(m => assigneeIds.includes(m.id))
-
   const displayDate = dueDate
     ? new Date(dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null
 
   return (
-    <div
-      ref={cardRef}
-      onBlur={handleCardBlur}
-      className="bg-white rounded-lg p-3 border-2 border-primary-300 shadow-sm"
-    >
+    <div ref={cardRef} onBlur={handleCardBlur} className="bg-white rounded-lg p-3 border-2 border-primary-300 shadow-sm">
       <input
         ref={inputRef}
         value={title}
@@ -172,7 +165,6 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
         disabled={saving}
         className="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent font-medium leading-snug"
       />
-
       <div className="flex items-center gap-2 mt-2.5">
         {/* Assignee picker */}
         <div className="relative">
@@ -181,7 +173,7 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
             onMouseDown={e => e.preventDefault()}
             onClick={() => setShowAssignee(v => !v)}
             title="Assign this task"
-            className="flex items-center justify-center w-7 h-7 rounded-full border-2 border-dashed transition-colors hover:border-primary-400"
+            className="flex items-center justify-center w-7 h-7 rounded-full border-2 border-dashed transition-colors"
             style={{ borderColor: assigneeIds.length ? 'transparent' : undefined }}
           >
             {selectedMembers.length === 0 ? (
@@ -189,21 +181,16 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
             ) : (
               <div className="flex -space-x-1.5">
                 {selectedMembers.slice(0, 2).map((m, i) => (
-                  <div key={i}
-                    className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold"
-                    style={{ background: m.color }}>
+                  <div key={i} className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold" style={{ background: m.color }}>
                     {getInitials(m.name)}
                   </div>
                 ))}
                 {selectedMembers.length > 2 && (
-                  <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">
-                    +{selectedMembers.length - 2}
-                  </div>
+                  <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">+{selectedMembers.length - 2}</div>
                 )}
               </div>
             )}
           </button>
-
           {showAssignee && (
             <div className="absolute bottom-full mb-1.5 left-0 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[170px]">
               {members.length === 0 ? (
@@ -211,16 +198,9 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
               ) : members.map(m => {
                 const selected = assigneeIds.includes(m.id)
                 return (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onMouseDown={e => e.preventDefault()}
-                    onClick={() => toggleAssignee(m.id)}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left"
-                  >
-                    <div
-                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
-                      style={{ background: m.color }}>
+                  <button key={m.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => toggleAssignee(m.id)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>
                       {getInitials(m.name)}
                     </div>
                     <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
@@ -231,28 +211,18 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
             </div>
           )}
         </div>
-
         {/* Due date picker */}
         <div className="relative flex items-center gap-1.5">
           <div className="relative w-7 h-7" title="Add due date">
-            <div className={cn(
-              'w-7 h-7 rounded-full border-2 border-dashed flex items-center justify-center transition-colors',
-              dueDate ? 'border-primary-400' : 'border-slate-300 hover:border-primary-400'
-            )}>
+            <div className={cn('w-7 h-7 rounded-full border-2 border-dashed flex items-center justify-center transition-colors', dueDate ? 'border-primary-400' : 'border-slate-300 hover:border-primary-400')}>
               <CalendarDays size={13} className={dueDate ? 'text-primary-500' : 'text-slate-300'} />
             </div>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={e => setDueDate(e.target.value)}
+            <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
               onFocus={() => { datePickerActiveRef.current = true }}
               onBlur={() => { setTimeout(() => { datePickerActiveRef.current = false }, 150) }}
-              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-            />
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
           </div>
-          {displayDate && (
-            <span className="text-xs text-slate-500">{displayDate}</span>
-          )}
+          {displayDate && <span className="text-xs text-slate-500">{displayDate}</span>}
         </div>
       </div>
     </div>
@@ -261,17 +231,43 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
 
 // ── Sortable task card ───────────────────────────────────────────────────────────────────
 
-function SortableTaskCard({ task, memberMap, onClick }: {
+function SortableTaskCard({ task, memberMap, members, onClick, onUpdate }: {
   task: Task
   memberMap: Record<string, { name: string; color: string }>
+  members: Member[]
   onClick: () => void
+  onUpdate: () => void
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
+  const [showAssignee, setShowAssignee] = useState(false)
+  const assigneeRef = useRef<HTMLDivElement>(null)
+
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
     data: { type: 'task' },
   })
+
+  useEffect(() => {
+    if (!showAssignee) return
+    function handler(e: MouseEvent) {
+      if (assigneeRef.current && !assigneeRef.current.contains(e.target as Node)) setShowAssignee(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAssignee])
+
+  async function toggleAssignee(memberId: string) {
+    const current = task.assignee_ids ?? []
+    const next = current.includes(memberId) ? current.filter(id => id !== memberId) : [...current, memberId]
+    await supabase.from('tasks').update({ assignee_ids: next }).eq('id', task.id)
+    onUpdate()
+  }
+
+  async function handleDateChange(date: string) {
+    await supabase.from('tasks').update({ due_date: date || null }).eq('id', task.id)
+    onUpdate()
+  }
 
   return (
     <div
@@ -285,35 +281,94 @@ function SortableTaskCard({ task, memberMap, onClick }: {
         isDragging ? 'opacity-40 shadow-none scale-95' : 'shadow-sm hover:shadow-md hover:border-primary-200'
       )}
     >
-      <p className={cn(
-        'text-sm font-medium mb-2.5 leading-snug',
-        task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'
-      )}>
+      <p className={cn('text-sm font-medium mb-2.5 leading-snug', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
         {task.title}
       </p>
-      <div className="flex items-center justify-between gap-1 flex-wrap">
+      <div className="flex items-center justify-between gap-1">
         <PriorityBadge priority={task.priority} />
         <div className="flex items-center gap-1.5">
-          {task.due_date && (
-            <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-              {formatDate(task.due_date)}
-            </span>
-          )}
-          {assignees.length > 0 && (
-            <div className="flex -space-x-1">
-              {assignees.slice(0, 2).map((a, i) => (
-                <div key={i} className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white"
-                  style={{ background: a.color }} title={a.name}>
-                  {getInitials(a.name)}
-                </div>
-              ))}
-              {assignees.length > 2 && (
-                <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">
-                  +{assignees.length - 2}
-                </div>
+
+          {/* Due date */}
+          <div
+            className="relative"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+            title={task.due_date ? 'Change due date' : 'Add due date'}
+          >
+            <div className={cn(
+              'flex items-center justify-center rounded-full transition-colors cursor-pointer',
+              task.due_date
+                ? 'gap-1'
+                : 'w-6 h-6 border-2 border-dashed border-slate-200 hover:border-primary-300'
+            )}>
+              {task.due_date ? (
+                <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
+                  {formatDate(task.due_date)}
+                </span>
+              ) : (
+                <CalendarDays size={11} className="text-slate-300" />
               )}
             </div>
-          )}
+            <input
+              type="date"
+              value={task.due_date ?? ''}
+              onChange={e => handleDateChange(e.target.value)}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+            />
+          </div>
+
+          {/* Assignee */}
+          <div
+            ref={assigneeRef}
+            className="relative"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={e => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowAssignee(v => !v)}
+              title={assignees.length ? 'Change assignees' : 'Assign task'}
+              className="flex items-center"
+            >
+              {assignees.length === 0 ? (
+                <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+                  <UserCircle size={11} className="text-slate-300" />
+                </div>
+              ) : (
+                <div className="flex -space-x-1">
+                  {assignees.slice(0, 2).map((a, i) => (
+                    <div key={i} className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white"
+                      style={{ background: a.color }} title={a.name}>
+                      {getInitials(a.name)}
+                    </div>
+                  ))}
+                  {assignees.length > 2 && (
+                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">
+                      +{assignees.length - 2}
+                    </div>
+                  )}
+                </div>
+              )}
+            </button>
+            {showAssignee && (
+              <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
+                {members.length === 0 ? (
+                  <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
+                ) : members.map(m => {
+                  const selected = (task.assignee_ids ?? []).includes(m.id)
+                  return (
+                    <button key={m.id} onClick={() => toggleAssignee(m.id)}
+                      className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>
+                        {getInitials(m.name)}
+                      </div>
+                      <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                      {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -332,12 +387,13 @@ function TaskCardGhost({ task }: { task: Task }) {
 
 // ── Sortable column ────────────────────────────────────────────────────────────────────
 
-function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh }: {
+function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh }: {
   section: Section
   colIdx: number
   taskIds: string[]
   tasks: Task[]
   memberMap: Record<string, { name: string; color: string }>
+  members: Member[]
   onTaskClick: (task: Task) => void
   onRename: (name: string) => void
   onRemove: () => void
@@ -354,11 +410,6 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
   })
   const colTasks = taskIds.map(id => tasks.find(t => t.id === id)).filter((t): t is Task => !!t)
   const [isAddingTask, setIsAddingTask] = useState(false)
-
-  function handleAddDone() {
-    setIsAddingTask(false)
-    onRefresh()
-  }
 
   return (
     <div
@@ -378,13 +429,9 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
         isCompletion={isCompletion}
         onToggleCompletion={onToggleCompletion}
       />
-
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div
-          className={cn(
-            'flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors',
-            isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60'
-          )}
+          className={cn('flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors', isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60')}
           style={{ minHeight: '120px' }}
         >
           {colTasks.map(task => (
@@ -392,20 +439,20 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
               key={task.id}
               task={task}
               memberMap={memberMap}
+              members={members}
               onClick={() => onTaskClick(task)}
+              onUpdate={onRefresh}
             />
           ))}
           {colTasks.length === 0 && !isAddingTask && (
-            <div className="flex items-center justify-center h-16 text-xs text-slate-400">
-              Drop tasks here
-            </div>
+            <div className="flex items-center justify-center h-16 text-xs text-slate-400">Drop tasks here</div>
           )}
           {isAddingTask && (
             <InlineAddTaskCard
               sectionId={section.id}
               projectId={projectId}
               position={colTasks.length}
-              onDone={handleAddDone}
+              onDone={() => { setIsAddingTask(false); onRefresh() }}
             />
           )}
           <button
@@ -450,80 +497,37 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   return (
     <div className={cn('flex items-center justify-between px-2 py-2.5 rounded-t-xl', appearance.header)}>
       <div className="flex items-center gap-1.5 min-w-0">
-        <div
-          {...dragListeners}
-          {...dragAttributes}
-          className="cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0 touch-none"
-          title="Drag to reorder column"
-        >
+        <div {...dragListeners} {...dragAttributes} className="cursor-grab active:cursor-grabbing p-0.5 text-slate-300 hover:text-slate-500 transition-colors shrink-0 touch-none" title="Drag to reorder column">
           <GripVertical size={14} />
         </div>
-
         <span className={cn('w-2 h-2 rounded-full shrink-0', appearance.dot)} />
-
         {editing ? (
-          <input
-            autoFocus
-            value={name}
-            onChange={e => setName(e.target.value)}
-            onBlur={commit}
-            onKeyDown={e => {
-              if (e.key === 'Enter') commit()
-              if (e.key === 'Escape') { setName(section.name); setEditing(false) }
-            }}
-            className="text-sm font-semibold text-slate-700 bg-transparent border-b border-slate-500 outline-none w-28"
-          />
+          <input autoFocus value={name} onChange={e => setName(e.target.value)} onBlur={commit}
+            onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setName(section.name); setEditing(false) } }}
+            className="text-sm font-semibold text-slate-700 bg-transparent border-b border-slate-500 outline-none w-28" />
         ) : (
           <>
-            <span
-              className="text-sm font-semibold text-slate-700 truncate cursor-default"
-              onDoubleClick={() => setEditing(true)}
-            >
-              {section.name}
-            </span>
+            <span className="text-sm font-semibold text-slate-700 truncate cursor-default" onDoubleClick={() => setEditing(true)}>{section.name}</span>
             {isCompletion && <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />}
           </>
         )}
-
-        <span className="text-xs font-medium text-slate-400 bg-white/70 rounded-full px-1.5 shrink-0">
-          {count}
-        </span>
+        <span className="text-xs font-medium text-slate-400 bg-white/70 rounded-full px-1.5 shrink-0">{count}</span>
       </div>
-
       <div className="flex items-center gap-0.5 shrink-0">
-        <button onClick={onAddTask} className="p-0.5 rounded hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-colors">
-          <Plus size={15} />
-        </button>
+        <button onClick={onAddTask} className="p-0.5 rounded hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-colors"><Plus size={15} /></button>
         <div className="relative">
-          <button onClick={() => setShowMenu(m => !m)} className="p-0.5 rounded hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-colors">
-            <MoreHorizontal size={15} />
-          </button>
+          <button onClick={() => setShowMenu(m => !m)} className="p-0.5 rounded hover:bg-white/60 text-slate-400 hover:text-slate-600 transition-colors"><MoreHorizontal size={15} /></button>
           {showMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
               <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-40">
-                <button
-                  onClick={() => { setShowMenu(false); setEditing(true) }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <Pencil size={13} /> Rename
-                </button>
-                <button
-                  onClick={() => { setShowMenu(false); onToggleCompletion() }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50"
-                >
+                <button onClick={() => { setShowMenu(false); setEditing(true) }} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><Pencil size={13} /> Rename</button>
+                <button onClick={() => { setShowMenu(false); onToggleCompletion() }} className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50">
                   <CheckCircle2 size={13} className={isCompletion ? 'text-emerald-500' : 'text-slate-400'} />
-                  <span className={isCompletion ? 'text-emerald-600' : 'text-slate-700'}>
-                    {isCompletion ? 'Remove completion mark' : 'Mark as completion'}
-                  </span>
+                  <span className={isCompletion ? 'text-emerald-600' : 'text-slate-700'}>{isCompletion ? 'Remove completion mark' : 'Mark as completion'}</span>
                 </button>
                 <div className="border-t border-slate-100 my-1" />
-                <button
-                  onClick={() => { setShowMenu(false); onRemove() }}
-                  className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                >
-                  <Trash2 size={13} /> Remove section
-                </button>
+                <button onClick={() => { setShowMenu(false); onRemove() }} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"><Trash2 size={13} /> Remove section</button>
               </div>
             </>
           )}
@@ -544,9 +548,7 @@ function AddSectionForm({ projectId, position, onDone }: {
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => {
-    requestAnimationFrame(() => inputRef.current?.focus())
-  }, [])
+  useEffect(() => { requestAnimationFrame(() => inputRef.current?.focus()) }, [])
 
   async function commit() {
     const trimmed = name.trim()
@@ -560,19 +562,10 @@ function AddSectionForm({ projectId, position, onDone }: {
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-3 w-56">
       <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">New section</p>
-      <input
-        ref={inputRef}
-        value={name}
-        onChange={e => setName(e.target.value)}
-        onBlur={commit}
-        onKeyDown={e => {
-          if (e.key === 'Enter') commit()
-          if (e.key === 'Escape') onDone()
-        }}
-        placeholder="Section name"
-        disabled={saving}
-        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-primary-400"
-      />
+      <input ref={inputRef} value={name} onChange={e => setName(e.target.value)} onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onDone() }}
+        placeholder="Section name" disabled={saving}
+        className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-primary-400" />
     </div>
   )
 }
@@ -582,8 +575,29 @@ function AddSectionForm({ projectId, position, onDone }: {
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
   const [showAddSection, setShowAddSection] = useState(false)
+  const [projectMembers, setProjectMembers] = useState<Member[]>([])
   const completionKey = `taskhi:completion-section:${projectId}`
   const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
+
+  useEffect(() => { loadProjectMembers() }, [projectId])
+
+  async function loadProjectMembers() {
+    try {
+      const { data } = await supabase
+        .from('project_members')
+        .select('user_id, profile:profiles(id, name, avatar_color)')
+        .eq('project_id', projectId)
+      if (data) {
+        setProjectMembers(
+          (data as any[]).map(r => ({
+            id: r.user_id,
+            name: (r.profile as any)?.name ?? r.user_id,
+            color: (r.profile as any)?.avatar_color ?? '#94a3b8',
+          }))
+        )
+      }
+    } catch {}
+  }
 
   function toggleCompletionSection(sectionId: string) {
     const next = completionSectionId === sectionId ? '' : sectionId
@@ -594,14 +608,10 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
 
   const [localSections, setLocalSections] = useState<Section[]>(sections)
   const localSectionsRef = useRef<Section[]>(sections)
-
-  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>(
-    () => buildTaskOrder(tasks, sections)
-  )
+  const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>(() => buildTaskOrder(tasks, sections))
   const taskOrderRef = useRef<Record<string, string[]>>(buildTaskOrder(tasks, sections))
   const isDraggingRef = useRef(false)
   const lastOverId = useRef<string | null>(null)
-
   const [activeDragType, setActiveDragType] = useState<'task' | 'column' | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [activeColId, setActiveColId] = useState<string | null>(null)
@@ -634,30 +644,16 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
   const collisionDetection = useCallback<CollisionDetection>((args) => {
     const activeType = args.active.data.current?.type as string | undefined
     if (activeType === 'column') {
-      return closestCenter({
-        ...args,
-        droppableContainers: args.droppableContainers.filter(
-          c => localSectionsRef.current.some(s => s.id === c.id)
-        ),
-      })
+      return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => localSectionsRef.current.some(s => s.id === c.id)) })
     }
     const within = pointerWithin(args)
     const candidates = within.length > 0 ? within : rectIntersection(args)
-    if (candidates.length === 0) {
-      return lastOverId.current ? [{ id: lastOverId.current }] : []
-    }
+    if (candidates.length === 0) return lastOverId.current ? [{ id: lastOverId.current }] : []
     let overId = candidates[0].id as string
     const colItems = taskOrderRef.current[overId]
-    if (colItems !== undefined) {
-      if (colItems.length > 0) {
-        const inner = closestCenter({
-          ...args,
-          droppableContainers: args.droppableContainers.filter(
-            c => colItems.includes(c.id as string)
-          ),
-        })
-        if (inner.length > 0) overId = inner[0].id as string
-      }
+    if (colItems !== undefined && colItems.length > 0) {
+      const inner = closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => colItems.includes(c.id as string)) })
+      if (inner.length > 0) overId = inner[0].id as string
     }
     lastOverId.current = overId
     return [{ id: overId }]
@@ -674,20 +670,14 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
   function handleDragOver(event: DragOverEvent) {
     const { active, over } = event
     if (!over || active.id === over.id) return
-
     const type = active.data.current?.type
-
     if (type === 'task') {
       const activeId = active.id as string
       const overId = over.id as string
       const activeSec = findSectionForTask(activeId)
       const overType = over.data.current?.type
-
       const targetSec = overType === 'column' ? overId : findSectionForTask(overId)
-      if (!targetSec) return
-
-      if (activeSec === targetSec) return
-
+      if (!targetSec || activeSec === targetSec) return
       const cur = taskOrderRef.current
       const newOrder = { ...cur }
       newOrder[activeSec] = (newOrder[activeSec] ?? []).filter(id => id !== activeId)
@@ -714,15 +704,11 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
     isDraggingRef.current = false
     lastOverId.current = null
     const type = event.active.data.current?.type
-    setActiveDragType(null)
-    setActiveTaskId(null)
-    setActiveColId(null)
-
+    setActiveDragType(null); setActiveTaskId(null); setActiveColId(null)
     if (type === 'task') {
       const taskId = event.active.id as string
       const originalTask = tasks.find(t => t.id === taskId)
       if (!originalTask) return
-
       if (event.over && event.over.id !== taskId) {
         const overId = event.over.id as string
         const overType = event.over.data.current?.type
@@ -742,33 +728,24 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
           }
         }
       }
-
       const finalSec = findSectionForTask(taskId)
       const finalIds = taskOrderRef.current[finalSec] ?? []
       const crossSection = finalSec !== originalTask.section_id
       const movedToCompletion = !!finalSec && finalSec === completionSectionId
       const movedFromCompletion = crossSection && originalTask.section_id === completionSectionId && !movedToCompletion
-
-      await Promise.all(
-        finalIds.map((id, idx) => {
-          const upd: Record<string, unknown> = { position: idx }
-          if (id === taskId) {
-            if (crossSection) upd.section_id = finalSec
-            if (movedToCompletion) upd.status = 'done'
-            else if (movedFromCompletion && originalTask.status === 'done') upd.status = 'todo'
-          }
-          return supabase.from('tasks').update(upd).eq('id', id)
-        })
-      )
-
+      await Promise.all(finalIds.map((id, idx) => {
+        const upd: Record<string, unknown> = { position: idx }
+        if (id === taskId) {
+          if (crossSection) upd.section_id = finalSec
+          if (movedToCompletion) upd.status = 'done'
+          else if (movedFromCompletion && originalTask.status === 'done') upd.status = 'todo'
+        }
+        return supabase.from('tasks').update(upd).eq('id', id)
+      }))
       if (crossSection || movedToCompletion) onRefresh()
     } else if (type === 'column') {
       const newSecs = localSectionsRef.current
-      await Promise.all(
-        newSecs.map((sec, idx) =>
-          supabase.from('sections').update({ position: idx }).eq('id', sec.id)
-        )
-      )
+      await Promise.all(newSecs.map((sec, idx) => supabase.from('sections').update({ position: idx }).eq('id', sec.id)))
       onRefresh()
     }
   }
@@ -776,9 +753,7 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
   function handleDragCancel() {
     isDraggingRef.current = false
     lastOverId.current = null
-    setActiveDragType(null)
-    setActiveTaskId(null)
-    setActiveColId(null)
+    setActiveDragType(null); setActiveTaskId(null); setActiveColId(null)
     const order = buildTaskOrder(tasks, sections)
     taskOrderRef.current = order
     setTaskOrder(order)
@@ -802,14 +777,8 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
   const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) ?? null : null
 
   return (
-    <DndContext
-      sensors={sensors}
-      collisionDetection={collisionDetection}
-      onDragStart={handleDragStart}
-      onDragOver={handleDragOver}
-      onDragEnd={handleDragEnd}
-      onDragCancel={handleDragCancel}
-    >
+    <DndContext sensors={sensors} collisionDetection={collisionDetection}
+      onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
         <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
           {localSections.map((section, idx) => (
@@ -820,6 +789,7 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
               taskIds={taskOrder[section.id] ?? []}
               tasks={tasks}
               memberMap={memberMap}
+              members={projectMembers}
               onTaskClick={onTaskClick}
               onRename={name => renameSection(section.id, name)}
               onRemove={() => removeSection(section.id)}
@@ -830,36 +800,23 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
               onRefresh={onRefresh}
             />
           ))}
-
           <div className="shrink-0 w-56">
             {showAddSection ? (
-              <AddSectionForm
-                projectId={projectId}
-                position={localSections.length}
-                onDone={() => { setShowAddSection(false); onRefresh() }}
-              />
+              <AddSectionForm projectId={projectId} position={localSections.length} onDone={() => { setShowAddSection(false); onRefresh() }} />
             ) : (
-              <button
-                onClick={() => setShowAddSection(true)}
-                className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"
-              >
+              <button onClick={() => setShowAddSection(true)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full">
                 <Plus size={15} /> Add section
               </button>
             )}
           </div>
         </div>
       </SortableContext>
-
       <DragOverlay dropAnimation={null}>
-        {activeDragType === 'task' && activeTask && (
-          <TaskCardGhost task={activeTask} />
-        )}
+        {activeDragType === 'task' && activeTask && <TaskCardGhost task={activeTask} />}
         {activeDragType === 'column' && activeColId && (
           <div className="w-64 bg-white/90 rounded-xl shadow-2xl border border-slate-200 p-3 flex items-center gap-2">
             <GripVertical size={14} className="text-slate-300" />
-            <span className="text-sm font-semibold text-slate-600">
-              {localSections.find(s => s.id === activeColId)?.name ?? 'Section'}
-            </span>
+            <span className="text-sm font-semibold text-slate-600">{localSections.find(s => s.id === activeColId)?.name ?? 'Section'}</span>
           </div>
         )}
       </DragOverlay>
