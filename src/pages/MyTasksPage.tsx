@@ -99,7 +99,6 @@ export function MyTasksPage() {
     ])
 
     const assignedList = (assigned ?? []) as Task[]
-    const assignedIds = new Set(assignedList.map(t => t.id))
     const ownedProjectIds = (ownedProjects ?? []).map(p => p.id)
     const nameMap: Record<string, string> = {}
     for (const p of ownedProjects ?? []) nameMap[p.id] = p.name
@@ -110,7 +109,7 @@ export function MyTasksPage() {
         .from('tasks').select('*')
         .in('project_id', ownedProjectIds)
         .order('due_date', { ascending: true, nullsFirst: false })
-      projectList = ((projTasks ?? []) as Task[]).filter(t => !assignedIds.has(t.id))
+      projectList = (projTasks ?? []) as Task[]
     }
 
     setAssignedTasks(assignedList)
@@ -195,7 +194,7 @@ export function MyTasksPage() {
               <div className="flex flex-col items-center py-10 bg-slate-50 rounded-xl border border-slate-100">
                 <Briefcase size={28} className="text-slate-300 mb-2" />
                 <p className="text-sm text-slate-400">
-                  {projectTasks.length === 0 ? 'No other tasks in your projects' : 'No tasks match the current filters'}
+                  {projectTasks.length === 0 ? 'No tasks in your projects' : 'No tasks match the current filters'}
                 </p>
               </div>
             ) : (
