@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, CheckSquare, Plus, BookOpen, FileText, ExternalLink } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Flag, Layers, CheckSquare, Plus, BookOpen, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -384,6 +384,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [howToDocs, setHowToDocs] = useState<string[]>(task.how_to_attachments ?? [])
   const [availableDocs, setAvailableDocs] = useState<{ id: string; name: string }[]>([])
   const [showDocPicker, setShowDocPicker] = useState(false)
+  const [docSearch, setDocSearch] = useState('')
   const [deleting, setDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -406,6 +407,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setHowToDocs(task.how_to_attachments ?? [])
     setSaved(false)
     setShowDocPicker(false)
+    setDocSearch('')
     loadSubtasks()
   }, [task.id])
 
@@ -628,6 +630,68 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
               </select>
             </PropRow>
           )}
+
+          <PropRow icon={<BookOpen size={14} />} label="How To">
+            <div className="relative" ref={docPickerRef}>
+              <button
+                onClick={() => { setShowDocPicker(v => !v); if (!showDocPicker) { loadAvailableDocs(); setDocSearch('') } }}
+                className="flex items-center gap-1.5 text-sm text-left hover:bg-slate-100 rounded-md px-1.5 py-0.5 -ml-1.5 transition-colors min-w-0"
+              >
+                {howToDocs.length === 0 ? (
+                  <span className="text-slate-400">Attach document</span>
+                ) : (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {howToDocs.map(name => (
+                      <span key={name} className="flex items-center gap-1 bg-primary-50 text-primary-700 text-xs rounded-md px-1.5 py-0.5">
+                        <FileText size={10} />
+                        <span className="max-w-[120px] truncate">{name}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); setHowToDocs(prev => prev.filter(n => n !== name)) }}
+                          className="text-primary-400 hover:text-red-400 ml-0.5 leading-none"
+                        >×</button>
+                      </span>
+                    ))}
+                    <span className="text-slate-400 text-xs">+</span>
+                  </div>
+                )}
+              </button>
+              {showDocPicker && (
+                <div className="absolute left-0 top-full mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden">
+                  <div className="px-3 pt-2.5 pb-2 border-b border-slate-100">
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Search documents…"
+                      value={docSearch}
+                      onChange={e => setDocSearch(e.target.value)}
+                      className="w-full text-sm outline-none bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 placeholder-slate-400"
+                    />
+                  </div>
+                  {(() => {
+                    const filtered = availableDocs
+                      .filter(d => !howToDocs.includes(d.name))
+                      .filter(d => d.name.toLowerCase().includes(docSearch.toLowerCase()))
+                    return filtered.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-slate-400">
+                        {availableDocs.length === 0 ? 'No How To documents available' : docSearch ? 'No matching documents' : 'All documents already attached'}
+                      </p>
+                    ) : (
+                      <div className="py-1 max-h-48 overflow-y-auto">
+                        {filtered.map(doc => (
+                          <button key={doc.id}
+                            onClick={() => { setHowToDocs(prev => [...prev, doc.name]); setShowDocPicker(false); setDocSearch('') }}
+                            className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
+                            <FileText size={13} className="text-primary-400 shrink-0" />
+                            <span className="text-sm text-slate-700 truncate">{doc.name}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
+          </PropRow>
         </div>
 
         {/* Description */}
@@ -640,65 +704,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             onChange={e => setNotes(e.target.value)}
             rows={4}
           />
-        </div>
-
-        {/* How To docs */}
-        <div className="px-6 py-4 border-b border-slate-100">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
-              <BookOpen size={14} className="text-slate-400" /> How To
-            </h3>
-            <div className="relative" ref={docPickerRef}>
-              <button
-                onClick={() => { setShowDocPicker(v => !v); loadAvailableDocs() }}
-                className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Attach How To document"
-              >
-                <Plus size={15} />
-              </button>
-              {showDocPicker && (
-                <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden">
-                  {availableDocs.filter(d => !howToDocs.includes(d.name)).length === 0 ? (
-                    <p className="px-4 py-3 text-xs text-slate-400">
-                      {availableDocs.length === 0 ? 'No How To documents available' : 'All documents already attached'}
-                    </p>
-                  ) : (
-                    <div className="py-1 max-h-48 overflow-y-auto">
-                      {availableDocs.filter(d => !howToDocs.includes(d.name)).map(doc => (
-                        <button key={doc.id}
-                          onClick={() => { setHowToDocs(prev => [...prev, doc.name]); setShowDocPicker(false) }}
-                          className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
-                          <FileText size={13} className="text-primary-400 shrink-0" />
-                          <span className="text-sm text-slate-700 truncate">{doc.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          {howToDocs.length === 0 ? (
-            <p className="text-xs text-slate-400">No documents attached</p>
-          ) : (
-            <div className="space-y-0.5">
-              {howToDocs.map(docName => (
-                <div key={docName} className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-lg hover:bg-slate-50 group">
-                  <FileText size={13} className="text-primary-400 shrink-0" />
-                  <span className="flex-1 text-sm text-slate-700 truncate">{docName}</span>
-                  <button onClick={() => openDoc(docName)}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-primary-500 transition-all" title="Open">
-                    <ExternalLink size={12} />
-                  </button>
-                  <button onClick={() => setHowToDocs(prev => prev.filter(n => n !== docName))}
-                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-red-400 transition-all" title="Remove">
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {/* Subtasks */}
