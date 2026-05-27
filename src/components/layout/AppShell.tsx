@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="h-screen">
       <Sidebar projects={projects} onNewProject={() => setShowCreate(true)} />
       <div className="ml-64 h-screen flex flex-col">
-        <header className="h-12 bg-white border-b border-slate-200 flex items-center justify-center px-6 shrink-0">
+        <header className="h-9 bg-[#1e1f21] flex items-center justify-center px-6 shrink-0">
           <GlobalSearch />
         </header>
         <main className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain bg-slate-50">

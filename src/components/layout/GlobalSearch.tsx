@@ -21,7 +21,6 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // Cmd/Ctrl+K to focus
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -77,7 +76,7 @@ export function GlobalSearch() {
   return (
     <div ref={containerRef} className="relative w-full max-w-xl">
       <div className="relative">
-        <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
         <input
           ref={inputRef}
           type="text"
@@ -85,17 +84,17 @@ export function GlobalSearch() {
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
-          className="w-full pl-9 pr-8 py-1.5 text-sm bg-slate-100 border border-transparent rounded-lg focus:outline-none focus:bg-white focus:border-primary-300 focus:ring-1 focus:ring-primary-300 transition-all placeholder-slate-400"
+          className="w-full pl-8 pr-8 py-1 text-sm bg-white/10 border border-white/10 rounded-md text-white placeholder-white/35 focus:outline-none focus:bg-white/15 focus:border-white/20 transition-all"
         />
         {query ? (
           <button
             onClick={() => { setQuery(''); setResults([]) }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
           >
-            <X size={13} />
+            <X size={12} />
           </button>
         ) : (
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-300 font-medium hidden sm:block">
+          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-white/25 font-medium hidden sm:block">
             ⌘K
           </span>
         )}
