@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell,
-  RotateCcw, Upload, type LucideIcon,
+  RotateCcw, Upload, BookOpen, type LucideIcon,
   Briefcase, Target, Rocket, Calendar,
   Mountain, Compass, Globe, Leaf,
   Music, Camera, Sparkles,
@@ -252,6 +252,9 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
+        </NavLink>
+        <NavLink to="/how-to" className={navClass}>
+          <BookOpen size={15} /> How To
         </NavLink>
         <NavLink to="/projects" end className={navClass}>
           <FolderOpen size={15} /> Projects
