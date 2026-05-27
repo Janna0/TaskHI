@@ -311,7 +311,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               <Home size={15} /> Home
             </NavLink>
             <NavLink to="/my-tasks" className={navClass}>
-              <CheckSquare size={15} /> My Tasks
+              <CheckSquare size={15} /> Tasks
             </NavLink>
             <NavLink to="/inbox" className={navClass}>
               <Bell size={15} />
