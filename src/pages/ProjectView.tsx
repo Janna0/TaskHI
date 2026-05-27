@@ -49,6 +49,13 @@ export function ProjectView() {
     if (task) setSelectedTask(task)
   }, [autoOpenTaskId, tasks])
 
+  // Keep detail panel in sync when tasks refresh (e.g. after drag changes section)
+  useEffect(() => {
+    if (!selectedTask) return
+    const updated = tasks.find(t => t.id === selectedTask.id)
+    if (updated) setSelectedTask(updated)
+  }, [tasks])
+
   function setAsDefault(v: View) {
     if (!id) return
     localStorage.setItem(`taskhi:default-view:${id}`, v)
