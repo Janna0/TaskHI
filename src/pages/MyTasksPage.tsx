@@ -1,11 +1,93 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CheckSquare, Filter, UserCheck, Briefcase } from 'lucide-react'
+import { CheckSquare, Filter, UserCheck, Briefcase, ChevronDown } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { Task } from '../types'
 import { StatusBadge, PriorityBadge } from '../components/ui/Badge'
 import { formatDate, isOverdue, cn, getInitials, STATUS_LABELS, PRIORITY_LABELS } from '../lib/utils'
+
+function MultiSelect({ label, options, value, onChange }: {
+  label: string
+  options: { value: string; label: string }[]
+  value: string[]
+  onChange: (v: string[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [])
+
+  function toggle(v: string) {
+    onChange(value.includes(v) ? value.filter(x => x !== v) : [...value, v])
+  }
+
+  const displayLabel = value.length === 0 || value.length === options.length
+    ? label
+    : value.length === 1
+    ? options.find(o => o.value === value[0])?.label ?? label
+    : `${value.length} selected`
+
+  return (
+    <div className="relative" ref={ref}>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className={cn(
+          'h-8 px-3 text-xs rounded-md border bg-white flex items-center gap-1.5 transition-colors',
+          value.length > 0 && value.length < options.length
+            ? 'border-primary-300 text-primary-600 font-medium'
+            : 'border-slate-200 text-slate-600 hover:border-slate-300'
+        )}
+      >
+        {displayLabel}
+        <ChevronDown size={12} className={cn('text-slate-400 transition-transform', open && 'rotate-180')} />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg z-30 py-1 min-w-[160px]">
+          {options.map(opt => {
+            const selected = value.includes(opt.value)
+            return (
+              <button
+                key={opt.value}
+                onClick={() => toggle(opt.value)}
+                className="flex items-center gap-2.5 w-full px-3 py-1.5 text-sm text-left hover:bg-slate-50 transition-colors"
+              >
+                <div className={cn(
+                  'w-4 h-4 rounded border-2 flex items-center justify-center shrink-0 transition-colors',
+                  selected ? 'border-primary-500 bg-primary-500' : 'border-slate-300'
+                )}>
+                  {selected && (
+                    <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
+                      <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  )}
+                </div>
+                <span className={selected ? 'text-slate-800 font-medium' : 'text-slate-600'}>{opt.label}</span>
+              </button>
+            )
+          })}
+          {value.length > 0 && (
+            <>
+              <div className="border-t border-slate-100 my-1" />
+              <button
+                onClick={() => onChange([])}
+                className="w-full px-3 py-1.5 text-xs text-slate-400 hover:text-slate-600 text-left hover:bg-slate-50 transition-colors"
+              >
+                Clear
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 function TaskRow({ task, memberMap, projectName }: {
   task: Task
@@ -72,17 +154,20 @@ function TableHeader({ showProject }: { showProject: boolean }) {
   )
 }
 
+const STATUS_OPTIONS = Object.entries(STATUS_LABELS).map(([value, label]) => ({ value, label }))
+const PRIORITY_OPTIONS = Object.entries(PRIORITY_LABELS).map(([value, label]) => ({ value, label }))
+
 export function MyTasksPage() {
   const { user } = useAuth()
   const [searchParams] = useSearchParams()
-  const view = searchParams.get('view') // 'assigned' | 'projects'
+  const view = searchParams.get('view')
   const [assignedTasks, setAssignedTasks] = useState<Task[]>([])
   const [projectTasks, setProjectTasks] = useState<Task[]>([])
   const [memberMap, setMemberMap] = useState<Record<string, { name: string; color: string }>>({})
   const [projectNames, setProjectNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [priorityFilter, setPriorityFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState<string[]>([])
+  const [priorityFilter, setPriorityFilter] = useState<string[]>([])
 
   useEffect(() => {
     if (user) load()
@@ -128,15 +213,14 @@ export function MyTasksPage() {
 
   function applyFilters(tasks: Task[]) {
     return tasks.filter(t => {
-      if (statusFilter !== 'all' && t.status !== statusFilter) return false
-      if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false
+      if (statusFilter.length > 0 && !statusFilter.includes(t.status)) return false
+      if (priorityFilter.length > 0 && !priorityFilter.includes(t.priority)) return false
       return true
     })
   }
 
   const filteredAssigned = applyFilters(assignedTasks)
   const filteredProject = applyFilters(projectTasks)
-  const selectClass = 'h-8 px-2 text-xs rounded-md border border-slate-200 bg-white text-slate-600 focus:outline-none'
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 pb-20">
@@ -146,14 +230,18 @@ export function MyTasksPage() {
         </h1>
         <div className="flex items-center gap-2">
           <Filter size={14} className="text-slate-400" />
-          <select className={selectClass} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
-            <option value="all">All statuses</option>
-            {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
-          <select className={selectClass} value={priorityFilter} onChange={e => setPriorityFilter(e.target.value)}>
-            <option value="all">All priorities</option>
-            {Object.entries(PRIORITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-          </select>
+          <MultiSelect
+            label="All statuses"
+            options={STATUS_OPTIONS}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+          <MultiSelect
+            label="All priorities"
+            options={PRIORITY_OPTIONS}
+            value={priorityFilter}
+            onChange={setPriorityFilter}
+          />
         </div>
       </div>
 
