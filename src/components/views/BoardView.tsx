@@ -237,13 +237,15 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
           onPointerDown={e => e.stopPropagation()}
           onClick={toggleComplete}
           title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
-          className="shrink-0 mt-0.5 cursor-pointer group"
+          className="shrink-0 mt-0.5 cursor-pointer group/check"
         >
           {isDone ? (
-            <CheckCircle2 size={15} className="text-emerald-500" />
+            <div className="w-[15px] h-[15px] rounded-full bg-emerald-500 flex items-center justify-center">
+              <Check size={9} className="text-white" strokeWidth={3} />
+            </div>
           ) : (
-            <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover:border-emerald-400 transition-colors flex items-center justify-center">
-              <Check size={9} className="text-slate-300 group-hover:text-emerald-400 transition-colors" />
+            <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover/check:border-emerald-400 transition-colors flex items-center justify-center">
+              <Check size={9} className="text-slate-300 group-hover/check:text-emerald-400 transition-colors" />
             </div>
           )}
         </div>

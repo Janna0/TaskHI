@@ -39,6 +39,29 @@ interface Props {
 
 interface Member { id: string; name: string; color: string }
 
+// ── Completion circle ─────────────────────────────────────────────────────────────────
+
+function CompletionCircle({ isDone, onToggle }: { isDone: boolean; onToggle: (e: React.MouseEvent) => void }) {
+  return (
+    <div
+      onPointerDown={e => e.stopPropagation()}
+      onClick={onToggle}
+      title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
+      className="shrink-0 cursor-pointer group/check"
+    >
+      {isDone ? (
+        <div className="w-[15px] h-[15px] rounded-full bg-emerald-500 flex items-center justify-center">
+          <Check size={9} className="text-white" strokeWidth={3} />
+        </div>
+      ) : (
+        <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover/check:border-emerald-400 transition-colors flex items-center justify-center">
+          <Check size={9} className="text-slate-300 group-hover/check:text-emerald-400 transition-colors" />
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Sortable task row ──────────────────────────────────────────────────────────────────
 
 function TaskRow({
@@ -112,21 +135,7 @@ function TaskRow({
         <GripVertical size={14} />
       </div>
 
-      {/* Completion toggle */}
-      <div
-        onPointerDown={e => e.stopPropagation()}
-        onClick={toggleComplete}
-        title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
-        className="shrink-0 cursor-pointer group/check"
-      >
-        {isDone ? (
-          <CheckCircle2 size={15} className="text-emerald-500" />
-        ) : (
-          <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover/check:border-emerald-400 transition-colors flex items-center justify-center">
-            <Check size={9} className="text-slate-300 group-hover/check:text-emerald-400 transition-colors" />
-          </div>
-        )}
-      </div>
+      <CompletionCircle isDone={isDone} onToggle={toggleComplete} />
 
       {/* Title */}
       <span className="flex-1 flex items-center gap-1 min-w-0">
@@ -265,21 +274,7 @@ function SubtaskRow({
       onClick={onClick}
       className="flex items-center gap-3 px-4 py-1.5 pl-[60px] hover:bg-slate-50 cursor-pointer border-b border-slate-50 group"
     >
-      {/* Completion toggle */}
-      <div
-        onPointerDown={e => e.stopPropagation()}
-        onClick={toggleComplete}
-        title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
-        className="shrink-0 cursor-pointer group/check"
-      >
-        {isDone ? (
-          <CheckCircle2 size={15} className="text-emerald-500" />
-        ) : (
-          <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover/check:border-emerald-400 transition-colors flex items-center justify-center">
-            <Check size={9} className="text-slate-300 group-hover/check:text-emerald-400 transition-colors" />
-          </div>
-        )}
-      </div>
+      <CompletionCircle isDone={isDone} onToggle={toggleComplete} />
 
       {/* Title */}
       <span className={cn('flex-1 text-sm truncate', isDone ? 'line-through text-slate-400' : 'text-slate-600')}>
@@ -351,7 +346,7 @@ function SubtaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
