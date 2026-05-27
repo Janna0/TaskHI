@@ -38,7 +38,7 @@ export function MyTasksPage() {
   const selectClass = 'h-8 px-2 text-xs rounded-md border border-slate-200 bg-white text-slate-600 focus:outline-none'
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-8">
+    <div className="max-w-3xl mx-auto px-6 py-8 pb-20">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">My Tasks</h1>
         <div className="flex items-center gap-2">

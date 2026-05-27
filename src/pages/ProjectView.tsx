@@ -249,7 +249,7 @@ export function ProjectView() {
 
       {/* Content */}
       <div className="flex flex-1 min-h-0">
-        <div className="flex-1 overflow-y-auto bg-white">
+        <div className="flex-1 overflow-y-auto overscroll-y-contain bg-white pb-20">
           {view === 'overview' && (
             <OverviewTab
               project={project}

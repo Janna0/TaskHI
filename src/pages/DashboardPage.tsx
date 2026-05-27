@@ -53,7 +53,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+    <div className="max-w-4xl mx-auto px-6 py-8 pb-20 space-y-8">
       {/* Greeting */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">

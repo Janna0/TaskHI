@@ -54,7 +54,7 @@ export function InboxPage() {
   const hasUnread = notifications.some(n => !n.is_read)
 
   return (
-    <div className="max-w-2xl mx-auto px-6 py-8">
+    <div className="max-w-2xl mx-auto px-6 py-8 pb-20">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-xl font-semibold text-slate-800">Inbox</h1>
         {hasUnread && (
