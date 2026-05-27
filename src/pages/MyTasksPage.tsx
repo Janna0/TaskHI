@@ -169,6 +169,25 @@ export function MyTasksPage() {
   const [statusFilter, setStatusFilter] = useState<string[]>([])
   const [priorityFilter, setPriorityFilter] = useState<string[]>([])
 
+  const storageKey = user ? `taskhi:task-filters:${user.id}` : null
+
+  useEffect(() => {
+    if (!storageKey) return
+    try {
+      const saved = localStorage.getItem(storageKey)
+      if (saved) {
+        const { status, priority } = JSON.parse(saved)
+        if (status) setStatusFilter(status)
+        if (priority) setPriorityFilter(priority)
+      }
+    } catch {}
+  }, [storageKey])
+
+  useEffect(() => {
+    if (!storageKey) return
+    localStorage.setItem(storageKey, JSON.stringify({ status: statusFilter, priority: priorityFilter }))
+  }, [storageKey, statusFilter, priorityFilter])
+
   useEffect(() => {
     if (user) load()
   }, [user])
