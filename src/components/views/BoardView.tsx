@@ -31,6 +31,8 @@ import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
 
+const PRIORITY_OPTIONS: Task['priority'][] = ['urgent', 'high', 'medium', 'low']
+
 const COL_COLORS = [
   { header: 'bg-slate-100',  dot: 'bg-slate-400'  },
   { header: 'bg-blue-50',    dot: 'bg-blue-500'   },
@@ -182,7 +184,9 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
   const [showAssignee, setShowAssignee] = useState(false)
+  const [showPriority, setShowPriority] = useState(false)
   const assigneeRef = useRef<HTMLDivElement>(null)
+  const priorityRef = useRef<HTMLDivElement>(null)
   const isDone = task.status === 'done'
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -198,6 +202,15 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [showAssignee])
+
+  useEffect(() => {
+    if (!showPriority) return
+    function handler(e: MouseEvent) {
+      if (priorityRef.current && !priorityRef.current.contains(e.target as Node)) setShowPriority(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showPriority])
 
   async function toggleComplete(e: React.MouseEvent) {
     e.stopPropagation()
@@ -216,6 +229,11 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
 
   async function handleDateChange(date: string) {
     await supabase.from('tasks').update({ due_date: date || null }).eq('id', task.id)
+    onUpdate()
+  }
+
+  async function handlePriorityChange(p: Task['priority']) {
+    await supabase.from('tasks').update({ priority: p }).eq('id', task.id)
     onUpdate()
   }
 
@@ -256,7 +274,24 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
 
       {/* Bottom row: priority + date + assignee */}
       <div className="flex items-center justify-between gap-1">
-        <PriorityBadge priority={task.priority} />
+        {/* Priority */}
+        <div ref={priorityRef} className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+          <button onClick={() => setShowPriority(v => !v)} className="cursor-pointer">
+            <PriorityBadge priority={task.priority} />
+          </button>
+          {showPriority && (
+            <div className="absolute bottom-full left-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50">
+              {PRIORITY_OPTIONS.map(p => (
+                <button key={p} onClick={() => { handlePriorityChange(p); setShowPriority(false) }}
+                  className={cn('flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors', p === task.priority && 'bg-slate-50')}>
+                  <PriorityBadge priority={p} />
+                  {p === task.priority && <Check size={11} className="text-primary-500 ml-auto shrink-0" />}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-1.5">
           {/* Due date */}
           <div className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} title={task.due_date ? 'Change due date' : 'Add due date'}>
