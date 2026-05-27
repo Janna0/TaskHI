@@ -42,9 +42,7 @@ const COL_COLORS = [
   { header: 'bg-orange-50',  dot: 'bg-orange-500' },
 ]
 
-function getColColor(idx: number) {
-  return COL_COLORS[idx % COL_COLORS.length]
-}
+function getColColor(idx: number) { return COL_COLORS[idx % COL_COLORS.length] }
 
 function buildTaskOrder(tasks: Task[], sections: Section[]): Record<string, string[]> {
   const order: Record<string, string[]> = {}
@@ -66,19 +64,12 @@ interface Props {
   onRefresh: () => void
 }
 
-interface Member {
-  id: string
-  name: string
-  color: string
-}
+interface Member { id: string; name: string; color: string }
 
 // ── Inline add task card ──────────────────────────────────────────────────────────
 
 function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
-  sectionId: string
-  projectId: string
-  position: number
-  onDone: () => void
+  sectionId: string; projectId: string; position: number; onDone: () => void
 }) {
   const { user } = useAuth()
   const [title, setTitle] = useState('')
@@ -87,7 +78,6 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   const [dueDate, setDueDate] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [showAssignee, setShowAssignee] = useState(false)
-
   const cardRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const committingRef = useRef(false)
@@ -100,19 +90,8 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
 
   async function loadMembers() {
     try {
-      const { data } = await supabase
-        .from('project_members')
-        .select('user_id, profile:profiles(id, name, avatar_color)')
-        .eq('project_id', projectId)
-      if (data) {
-        setMembers(
-          (data as any[]).map(r => ({
-            id: r.user_id,
-            name: (r.profile as any)?.name ?? r.user_id,
-            color: (r.profile as any)?.avatar_color ?? '#94a3b8',
-          }))
-        )
-      }
+      const { data } = await supabase.from('project_members').select('user_id, profile:profiles(id, name, avatar_color)').eq('project_id', projectId)
+      if (data) setMembers((data as any[]).map(r => ({ id: r.user_id, name: (r.profile as any)?.name ?? r.user_id, color: (r.profile as any)?.avatar_color ?? '#94a3b8' })))
     } catch {}
   }
 
@@ -122,17 +101,7 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
     const trimmed = title.trim()
     if (!trimmed || !user) { onDone(); return }
     setSaving(true)
-    await supabase.from('tasks').insert({
-      project_id: projectId,
-      section_id: sectionId,
-      title: trimmed,
-      status: 'todo',
-      priority: 'medium',
-      position,
-      created_by: user.id,
-      assignee_ids: assigneeIds,
-      due_date: dueDate || null,
-    })
+    await supabase.from('tasks').insert({ project_id: projectId, section_id: sectionId, title: trimmed, status: 'todo', priority: 'medium', position, created_by: user.id, assignee_ids: assigneeIds, due_date: dueDate || null })
     onDone()
   }
 
@@ -147,62 +116,34 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   }
 
   const selectedMembers = members.filter(m => assigneeIds.includes(m.id))
-  const displayDate = dueDate
-    ? new Date(dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-    : null
+  const displayDate = dueDate ? new Date(dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null
 
   return (
     <div ref={cardRef} onBlur={handleCardBlur} className="bg-white rounded-lg p-3 border-2 border-primary-300 shadow-sm">
-      <input
-        ref={inputRef}
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); save() }
-          if (e.key === 'Escape') { committingRef.current = true; onDone() }
-        }}
-        placeholder="Write a task name"
-        disabled={saving}
-        className="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent font-medium leading-snug"
-      />
+      <input ref={inputRef} value={title} onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); save() } if (e.key === 'Escape') { committingRef.current = true; onDone() } }}
+        placeholder="Write a task name" disabled={saving}
+        className="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent font-medium leading-snug" />
       <div className="flex items-center gap-2 mt-2.5">
-        {/* Assignee picker */}
         <div className="relative">
-          <button
-            type="button"
-            onMouseDown={e => e.preventDefault()}
-            onClick={() => setShowAssignee(v => !v)}
-            title="Assign this task"
+          <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setShowAssignee(v => !v)} title="Assign this task"
             className="flex items-center justify-center w-7 h-7 rounded-full border-2 border-dashed transition-colors"
-            style={{ borderColor: assigneeIds.length ? 'transparent' : undefined }}
-          >
-            {selectedMembers.length === 0 ? (
-              <UserCircle size={16} className="text-slate-300" />
-            ) : (
+            style={{ borderColor: assigneeIds.length ? 'transparent' : undefined }}>
+            {selectedMembers.length === 0 ? <UserCircle size={16} className="text-slate-300" /> : (
               <div className="flex -space-x-1.5">
-                {selectedMembers.slice(0, 2).map((m, i) => (
-                  <div key={i} className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold" style={{ background: m.color }}>
-                    {getInitials(m.name)}
-                  </div>
-                ))}
-                {selectedMembers.length > 2 && (
-                  <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">+{selectedMembers.length - 2}</div>
-                )}
+                {selectedMembers.slice(0, 2).map((m, i) => <div key={i} className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold" style={{ background: m.color }}>{getInitials(m.name)}</div>)}
+                {selectedMembers.length > 2 && <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">+{selectedMembers.length - 2}</div>}
               </div>
             )}
           </button>
           {showAssignee && (
             <div className="absolute bottom-full mb-1.5 left-0 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[170px]">
-              {members.length === 0 ? (
-                <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
-              ) : members.map(m => {
+              {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
                 const selected = assigneeIds.includes(m.id)
                 return (
                   <button key={m.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => toggleAssignee(m.id)}
                     className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>
-                      {getInitials(m.name)}
-                    </div>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
                     <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
                     {selected && <CheckCircle2 size={14} className="text-primary-500 shrink-0" />}
                   </button>
@@ -211,7 +152,6 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
             </div>
           )}
         </div>
-        {/* Due date picker */}
         <div className="relative flex items-center gap-1.5">
           <div className="relative w-7 h-7" title="Add due date">
             <div className={cn('w-7 h-7 rounded-full border-2 border-dashed flex items-center justify-center transition-colors', dueDate ? 'border-primary-400' : 'border-slate-300 hover:border-primary-400')}>
@@ -231,10 +171,11 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
 
 // ── Sortable task card ───────────────────────────────────────────────────────────────────
 
-function SortableTaskCard({ task, memberMap, members, onClick, onUpdate }: {
+function SortableTaskCard({ task, memberMap, members, completionSectionId, onClick, onUpdate }: {
   task: Task
   memberMap: Record<string, { name: string; color: string }>
   members: Member[]
+  completionSectionId: string
   onClick: () => void
   onUpdate: () => void
 }) {
@@ -242,6 +183,7 @@ function SortableTaskCard({ task, memberMap, members, onClick, onUpdate }: {
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
   const [showAssignee, setShowAssignee] = useState(false)
   const assigneeRef = useRef<HTMLDivElement>(null)
+  const isDone = task.status === 'done'
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: task.id,
@@ -256,6 +198,14 @@ function SortableTaskCard({ task, memberMap, members, onClick, onUpdate }: {
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [showAssignee])
+
+  async function toggleComplete(e: React.MouseEvent) {
+    e.stopPropagation()
+    const upd: Record<string, unknown> = { status: isDone ? 'todo' : 'done' }
+    if (!isDone && completionSectionId) upd.section_id = completionSectionId
+    await supabase.from('tasks').update(upd).eq('id', task.id)
+    onUpdate()
+  }
 
   async function toggleAssignee(memberId: string) {
     const current = task.assignee_ids ?? []
@@ -281,54 +231,44 @@ function SortableTaskCard({ task, memberMap, members, onClick, onUpdate }: {
         isDragging ? 'opacity-40 shadow-none scale-95' : 'shadow-sm hover:shadow-md hover:border-primary-200'
       )}
     >
-      <p className={cn('text-sm font-medium mb-2.5 leading-snug', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
-        {task.title}
-      </p>
+      {/* Title row with completion toggle */}
+      <div className="flex items-start gap-2 mb-2.5">
+        <div
+          onPointerDown={e => e.stopPropagation()}
+          onClick={toggleComplete}
+          title={isDone ? 'Mark as incomplete' : 'Mark task complete'}
+          className="shrink-0 mt-0.5 cursor-pointer group"
+        >
+          {isDone ? (
+            <CheckCircle2 size={15} className="text-emerald-500" />
+          ) : (
+            <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover:border-emerald-400 transition-colors" />
+          )}
+        </div>
+        <p className={cn('text-sm font-medium leading-snug flex-1', isDone ? 'line-through text-slate-400' : 'text-slate-700')}>
+          {task.title}
+        </p>
+      </div>
+
+      {/* Bottom row: priority + date + assignee */}
       <div className="flex items-center justify-between gap-1">
         <PriorityBadge priority={task.priority} />
         <div className="flex items-center gap-1.5">
-
           {/* Due date */}
-          <div
-            className="relative"
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-            title={task.due_date ? 'Change due date' : 'Add due date'}
-          >
-            <div className={cn(
-              'flex items-center justify-center rounded-full transition-colors cursor-pointer',
-              task.due_date
-                ? 'gap-1'
-                : 'w-6 h-6 border-2 border-dashed border-slate-200 hover:border-primary-300'
-            )}>
+          <div className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} title={task.due_date ? 'Change due date' : 'Add due date'}>
+            <div className={cn('flex items-center justify-center rounded-full transition-colors cursor-pointer', task.due_date ? 'gap-1' : 'w-6 h-6 border-2 border-dashed border-slate-200 hover:border-primary-300')}>
               {task.due_date ? (
-                <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-                  {formatDate(task.due_date)}
-                </span>
+                <span className={cn('text-xs', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>{formatDate(task.due_date)}</span>
               ) : (
                 <CalendarDays size={11} className="text-slate-300" />
               )}
             </div>
-            <input
-              type="date"
-              value={task.due_date ?? ''}
-              onChange={e => handleDateChange(e.target.value)}
-              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-            />
+            <input type="date" value={task.due_date ?? ''} onChange={e => handleDateChange(e.target.value)} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
           </div>
 
           {/* Assignee */}
-          <div
-            ref={assigneeRef}
-            className="relative"
-            onPointerDown={e => e.stopPropagation()}
-            onClick={e => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowAssignee(v => !v)}
-              title={assignees.length ? 'Change assignees' : 'Assign task'}
-              className="flex items-center"
-            >
+          <div ref={assigneeRef} className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+            <button onClick={() => setShowAssignee(v => !v)} title={assignees.length ? 'Change assignees' : 'Assign task'} className="flex items-center">
               {assignees.length === 0 ? (
                 <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
                   <UserCircle size={11} className="text-slate-300" />
@@ -336,31 +276,21 @@ function SortableTaskCard({ task, memberMap, members, onClick, onUpdate }: {
               ) : (
                 <div className="flex -space-x-1">
                   {assignees.slice(0, 2).map((a, i) => (
-                    <div key={i} className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white"
-                      style={{ background: a.color }} title={a.name}>
+                    <div key={i} className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-semibold shrink-0 border border-white" style={{ background: a.color }} title={a.name}>
                       {getInitials(a.name)}
                     </div>
                   ))}
-                  {assignees.length > 2 && (
-                    <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">
-                      +{assignees.length - 2}
-                    </div>
-                  )}
+                  {assignees.length > 2 && <div className="w-5 h-5 rounded-full bg-slate-200 flex items-center justify-center text-[8px] font-medium text-slate-600 border border-white">+{assignees.length - 2}</div>}
                 </div>
               )}
             </button>
             {showAssignee && (
               <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
-                {members.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
-                ) : members.map(m => {
+                {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
                   const selected = (task.assignee_ids ?? []).includes(m.id)
                   return (
-                    <button key={m.id} onClick={() => toggleAssignee(m.id)}
-                      className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>
-                        {getInitials(m.name)}
-                      </div>
+                    <button key={m.id} onClick={() => toggleAssignee(m.id)} className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
                       <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
                       {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
                     </button>
@@ -387,78 +317,29 @@ function TaskCardGhost({ task }: { task: Task }) {
 
 // ── Sortable column ────────────────────────────────────────────────────────────────────
 
-function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh }: {
-  section: Section
-  colIdx: number
-  taskIds: string[]
-  tasks: Task[]
-  memberMap: Record<string, { name: string; color: string }>
-  members: Member[]
-  onTaskClick: (task: Task) => void
-  onRename: (name: string) => void
-  onRemove: () => void
-  isTaskDragActive: boolean
-  isCompletion: boolean
-  onToggleCompletion: () => void
-  projectId: string
-  onRefresh: () => void
+function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, completionSectionId, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh }: {
+  section: Section; colIdx: number; taskIds: string[]; tasks: Task[]
+  memberMap: Record<string, { name: string; color: string }>; members: Member[]; completionSectionId: string
+  onTaskClick: (task: Task) => void; onRename: (name: string) => void; onRemove: () => void
+  isTaskDragActive: boolean; isCompletion: boolean; onToggleCompletion: () => void
+  projectId: string; onRefresh: () => void
 }) {
   const appearance = getColColor(colIdx)
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: section.id,
-    data: { type: 'column' },
-  })
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: section.id, data: { type: 'column' } })
   const colTasks = taskIds.map(id => tasks.find(t => t.id === id)).filter((t): t is Task => !!t)
   const [isAddingTask, setIsAddingTask] = useState(false)
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}
-    >
-      <ColumnHeader
-        section={section}
-        count={colTasks.length}
-        appearance={appearance}
-        onRename={onRename}
-        onRemove={onRemove}
-        onAddTask={() => setIsAddingTask(true)}
-        dragListeners={listeners}
-        dragAttributes={attributes}
-        isCompletion={isCompletion}
-        onToggleCompletion={onToggleCompletion}
-      />
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}>
+      <ColumnHeader section={section} count={colTasks.length} appearance={appearance} onRename={onRename} onRemove={onRemove} onAddTask={() => setIsAddingTask(true)} dragListeners={listeners} dragAttributes={attributes} isCompletion={isCompletion} onToggleCompletion={onToggleCompletion} />
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-        <div
-          className={cn('flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors', isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60')}
-          style={{ minHeight: '120px' }}
-        >
+        <div className={cn('flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors', isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60')} style={{ minHeight: '120px' }}>
           {colTasks.map(task => (
-            <SortableTaskCard
-              key={task.id}
-              task={task}
-              memberMap={memberMap}
-              members={members}
-              onClick={() => onTaskClick(task)}
-              onUpdate={onRefresh}
-            />
+            <SortableTaskCard key={task.id} task={task} memberMap={memberMap} members={members} completionSectionId={completionSectionId} onClick={() => onTaskClick(task)} onUpdate={onRefresh} />
           ))}
-          {colTasks.length === 0 && !isAddingTask && (
-            <div className="flex items-center justify-center h-16 text-xs text-slate-400">Drop tasks here</div>
-          )}
-          {isAddingTask && (
-            <InlineAddTaskCard
-              sectionId={section.id}
-              projectId={projectId}
-              position={colTasks.length}
-              onDone={() => { setIsAddingTask(false); onRefresh() }}
-            />
-          )}
-          <button
-            onClick={() => setIsAddingTask(true)}
-            className="flex items-center gap-1.5 w-full px-1 py-1 text-xs text-slate-400 hover:text-slate-600 transition-colors rounded-md hover:bg-white/60"
-          >
+          {colTasks.length === 0 && !isAddingTask && <div className="flex items-center justify-center h-16 text-xs text-slate-400">Drop tasks here</div>}
+          {isAddingTask && <InlineAddTaskCard sectionId={section.id} projectId={projectId} position={colTasks.length} onDone={() => { setIsAddingTask(false); onRefresh() }} />}
+          <button onClick={() => setIsAddingTask(true)} className="flex items-center gap-1.5 w-full px-1 py-1 text-xs text-slate-400 hover:text-slate-600 transition-colors rounded-md hover:bg-white/60">
             <Plus size={13} /> Add task
           </button>
         </div>
@@ -470,16 +351,10 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, o
 // ── Column header ───────────────────────────────────────────────────────────────────
 
 function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes, isCompletion, onToggleCompletion }: {
-  section: Section
-  count: number
-  appearance: { header: string; dot: string }
-  onRename: (name: string) => void
-  onRemove: () => void
-  onAddTask: () => void
-  dragListeners: DraggableSyntheticListeners
-  dragAttributes: DraggableAttributes
-  isCompletion: boolean
-  onToggleCompletion: () => void
+  section: Section; count: number; appearance: { header: string; dot: string }
+  onRename: (name: string) => void; onRemove: () => void; onAddTask: () => void
+  dragListeners: DraggableSyntheticListeners; dragAttributes: DraggableAttributes
+  isCompletion: boolean; onToggleCompletion: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(section.name)
@@ -520,7 +395,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
           {showMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-40">
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-44">
                 <button onClick={() => { setShowMenu(false); setEditing(true) }} className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"><Pencil size={13} /> Rename</button>
                 <button onClick={() => { setShowMenu(false); onToggleCompletion() }} className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50">
                   <CheckCircle2 size={13} className={isCompletion ? 'text-emerald-500' : 'text-slate-400'} />
@@ -539,26 +414,18 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
 
 // ── Add section form ──────────────────────────────────────────────────────────────────
 
-function AddSectionForm({ projectId, position, onDone }: {
-  projectId: string
-  position: number
-  onDone: () => void
-}) {
+function AddSectionForm({ projectId, position, onDone }: { projectId: string; position: number; onDone: () => void }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
-
   useEffect(() => { requestAnimationFrame(() => inputRef.current?.focus()) }, [])
-
   async function commit() {
     const trimmed = name.trim()
     if (!trimmed) { onDone(); return }
     setSaving(true)
     await supabase.from('sections').insert({ project_id: projectId, name: trimmed, position })
-    setSaving(false)
-    onDone()
+    setSaving(false); onDone()
   }
-
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-lg p-3 w-56">
       <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-2">New section</p>
@@ -583,19 +450,8 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
 
   async function loadProjectMembers() {
     try {
-      const { data } = await supabase
-        .from('project_members')
-        .select('user_id, profile:profiles(id, name, avatar_color)')
-        .eq('project_id', projectId)
-      if (data) {
-        setProjectMembers(
-          (data as any[]).map(r => ({
-            id: r.user_id,
-            name: (r.profile as any)?.name ?? r.user_id,
-            color: (r.profile as any)?.avatar_color ?? '#94a3b8',
-          }))
-        )
-      }
+      const { data } = await supabase.from('project_members').select('user_id, profile:profiles(id, name, avatar_color)').eq('project_id', projectId)
+      if (data) setProjectMembers((data as any[]).map(r => ({ id: r.user_id, name: (r.profile as any)?.name ?? r.user_id, color: (r.profile as any)?.avatar_color ?? '#94a3b8' })))
     } catch {}
   }
 
@@ -621,31 +477,17 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   )
 
-  useEffect(() => {
-    if (isDraggingRef.current) return
-    setLocalSections(sections)
-    localSectionsRef.current = sections
-  }, [sections])
-
-  useEffect(() => {
-    if (isDraggingRef.current) return
-    const order = buildTaskOrder(tasks, sections)
-    setTaskOrder(order)
-    taskOrderRef.current = order
-  }, [tasks, sections])
+  useEffect(() => { if (!isDraggingRef.current) { setLocalSections(sections); localSectionsRef.current = sections } }, [sections])
+  useEffect(() => { if (!isDraggingRef.current) { const o = buildTaskOrder(tasks, sections); setTaskOrder(o); taskOrderRef.current = o } }, [tasks, sections])
 
   function findSectionForTask(taskId: string): string {
-    for (const [secId, ids] of Object.entries(taskOrderRef.current)) {
-      if (ids.includes(taskId)) return secId
-    }
+    for (const [secId, ids] of Object.entries(taskOrderRef.current)) { if (ids.includes(taskId)) return secId }
     return ''
   }
 
   const collisionDetection = useCallback<CollisionDetection>((args) => {
     const activeType = args.active.data.current?.type as string | undefined
-    if (activeType === 'column') {
-      return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => localSectionsRef.current.some(s => s.id === c.id)) })
-    }
+    if (activeType === 'column') return closestCenter({ ...args, droppableContainers: args.droppableContainers.filter(c => localSectionsRef.current.some(s => s.id === c.id)) })
     const within = pointerWithin(args)
     const candidates = within.length > 0 ? within : rectIntersection(args)
     if (candidates.length === 0) return lastOverId.current ? [{ id: lastOverId.current }] : []
@@ -672,60 +514,39 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
     if (!over || active.id === over.id) return
     const type = active.data.current?.type
     if (type === 'task') {
-      const activeId = active.id as string
-      const overId = over.id as string
+      const activeId = active.id as string; const overId = over.id as string
       const activeSec = findSectionForTask(activeId)
-      const overType = over.data.current?.type
-      const targetSec = overType === 'column' ? overId : findSectionForTask(overId)
+      const targetSec = over.data.current?.type === 'column' ? overId : findSectionForTask(overId)
       if (!targetSec || activeSec === targetSec) return
-      const cur = taskOrderRef.current
-      const newOrder = { ...cur }
+      const newOrder = { ...taskOrderRef.current }
       newOrder[activeSec] = (newOrder[activeSec] ?? []).filter(id => id !== activeId)
       const targetIds = [...(newOrder[targetSec] ?? [])]
       const overIdx = targetIds.indexOf(overId)
       targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, activeId)
       newOrder[targetSec] = targetIds
-      taskOrderRef.current = newOrder
-      setTaskOrder(newOrder)
+      taskOrderRef.current = newOrder; setTaskOrder(newOrder)
     } else if (type === 'column') {
       if (over.data.current?.type !== 'column') return
       const secs = localSectionsRef.current
-      const from = secs.findIndex(s => s.id === active.id)
-      const to = secs.findIndex(s => s.id === over.id)
-      if (from !== -1 && to !== -1 && from !== to) {
-        const newSecs = arrayMove(secs, from, to)
-        localSectionsRef.current = newSecs
-        setLocalSections(newSecs)
-      }
+      const from = secs.findIndex(s => s.id === active.id); const to = secs.findIndex(s => s.id === over.id)
+      if (from !== -1 && to !== -1 && from !== to) { const newSecs = arrayMove(secs, from, to); localSectionsRef.current = newSecs; setLocalSections(newSecs) }
     }
   }
 
   async function handleDragEnd(event: DragEndEvent) {
-    isDraggingRef.current = false
-    lastOverId.current = null
+    isDraggingRef.current = false; lastOverId.current = null
     const type = event.active.data.current?.type
     setActiveDragType(null); setActiveTaskId(null); setActiveColId(null)
     if (type === 'task') {
       const taskId = event.active.id as string
       const originalTask = tasks.find(t => t.id === taskId)
       if (!originalTask) return
-      if (event.over && event.over.id !== taskId) {
-        const overId = event.over.id as string
-        const overType = event.over.data.current?.type
-        if (overType === 'task') {
-          const activeSec = findSectionForTask(taskId)
-          const overSec = findSectionForTask(overId)
-          if (activeSec === overSec) {
-            const ids = taskOrderRef.current[activeSec] ?? []
-            const from = ids.indexOf(taskId)
-            const to = ids.indexOf(overId)
-            if (from !== -1 && to !== -1 && from !== to) {
-              const newIds = arrayMove(ids, from, to)
-              const newOrder = { ...taskOrderRef.current, [activeSec]: newIds }
-              taskOrderRef.current = newOrder
-              setTaskOrder(newOrder)
-            }
-          }
+      if (event.over && event.over.id !== taskId && event.over.data.current?.type === 'task') {
+        const activeSec = findSectionForTask(taskId); const overSec = findSectionForTask(event.over.id as string)
+        if (activeSec === overSec) {
+          const ids = taskOrderRef.current[activeSec] ?? []
+          const from = ids.indexOf(taskId); const to = ids.indexOf(event.over.id as string)
+          if (from !== -1 && to !== -1 && from !== to) { const newIds = arrayMove(ids, from, to); const newOrder = { ...taskOrderRef.current, [activeSec]: newIds }; taskOrderRef.current = newOrder; setTaskOrder(newOrder) }
         }
       }
       const finalSec = findSectionForTask(taskId)
@@ -744,70 +565,54 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
       }))
       if (crossSection || movedToCompletion) onRefresh()
     } else if (type === 'column') {
-      const newSecs = localSectionsRef.current
-      await Promise.all(newSecs.map((sec, idx) => supabase.from('sections').update({ position: idx }).eq('id', sec.id)))
+      await Promise.all(localSectionsRef.current.map((sec, idx) => supabase.from('sections').update({ position: idx }).eq('id', sec.id)))
       onRefresh()
     }
   }
 
   function handleDragCancel() {
-    isDraggingRef.current = false
-    lastOverId.current = null
+    isDraggingRef.current = false; lastOverId.current = null
     setActiveDragType(null); setActiveTaskId(null); setActiveColId(null)
-    const order = buildTaskOrder(tasks, sections)
-    taskOrderRef.current = order
-    setTaskOrder(order)
-    localSectionsRef.current = sections
-    setLocalSections(sections)
+    const order = buildTaskOrder(tasks, sections); taskOrderRef.current = order; setTaskOrder(order)
+    localSectionsRef.current = sections; setLocalSections(sections)
   }
 
   async function renameSection(id: string, newName: string) {
     setLocalSections(prev => prev.map(s => s.id === id ? { ...s, name: newName } : s))
-    await supabase.from('sections').update({ name: newName }).eq('id', id)
-    onRefresh()
+    await supabase.from('sections').update({ name: newName }).eq('id', id); onRefresh()
   }
 
   async function removeSection(id: string) {
     setLocalSections(prev => prev.filter(s => s.id !== id))
-    await supabase.from('sections').delete().eq('id', id)
-    onRefresh()
+    await supabase.from('sections').delete().eq('id', id); onRefresh()
   }
 
   const columnIds = localSections.map(s => s.id)
   const activeTask = activeTaskId ? tasks.find(t => t.id === activeTaskId) ?? null : null
 
   return (
-    <DndContext sensors={sensors} collisionDetection={collisionDetection}
-      onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
+    <DndContext sensors={sensors} collisionDetection={collisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onDragCancel={handleDragCancel}>
       <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
         <div className="flex gap-4 p-5 overflow-x-auto h-full items-start">
           {localSections.map((section, idx) => (
             <SortableColumn
-              key={section.id}
-              section={section}
-              colIdx={idx}
-              taskIds={taskOrder[section.id] ?? []}
-              tasks={tasks}
-              memberMap={memberMap}
-              members={projectMembers}
+              key={section.id} section={section} colIdx={idx}
+              taskIds={taskOrder[section.id] ?? []} tasks={tasks}
+              memberMap={memberMap} members={projectMembers} completionSectionId={completionSectionId}
               onTaskClick={onTaskClick}
               onRename={name => renameSection(section.id, name)}
               onRemove={() => removeSection(section.id)}
               isTaskDragActive={activeDragType === 'task'}
               isCompletion={completionSectionId === section.id}
               onToggleCompletion={() => toggleCompletionSection(section.id)}
-              projectId={projectId}
-              onRefresh={onRefresh}
+              projectId={projectId} onRefresh={onRefresh}
             />
           ))}
           <div className="shrink-0 w-56">
-            {showAddSection ? (
-              <AddSectionForm projectId={projectId} position={localSections.length} onDone={() => { setShowAddSection(false); onRefresh() }} />
-            ) : (
-              <button onClick={() => setShowAddSection(true)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full">
-                <Plus size={15} /> Add section
-              </button>
-            )}
+            {showAddSection
+              ? <AddSectionForm projectId={projectId} position={localSections.length} onDone={() => { setShowAddSection(false); onRefresh() }} />
+              : <button onClick={() => setShowAddSection(true)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"><Plus size={15} /> Add section</button>
+            }
           </div>
         </div>
       </SortableContext>
