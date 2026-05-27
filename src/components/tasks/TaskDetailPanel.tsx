@@ -596,13 +596,17 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
 
           <PropRow icon={<Calendar size={14} />} label="Due date">
             {dueDate ? (
-              <input type="date"
-                className={cn('text-sm bg-transparent outline-none cursor-pointer', isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700')}
-                value={dueDate} onChange={e => setDueDate(e.target.value)} />
+              <div className="flex items-center gap-1.5">
+                <input type="date"
+                  className={cn('text-sm bg-transparent outline-none cursor-pointer', isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700')}
+                  value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                <button onClick={() => setDueDate('')} className="text-slate-300 hover:text-slate-500 transition-colors text-xs leading-none" title="Clear due date">×</button>
+              </div>
             ) : (
-              <label className="flex items-center gap-1 cursor-pointer">
-                <span className="text-sm text-slate-400">No due date</span>
-                <input type="date" className="sr-only" value="" onChange={e => setDueDate(e.target.value)} />
+              <label className="relative flex items-center cursor-pointer">
+                <span className="text-sm text-slate-400 hover:text-slate-600 transition-colors">No due date</span>
+                <input type="date" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                  onChange={e => { if (e.target.value) setDueDate(e.target.value) }} />
               </label>
             )}
           </PropRow>
