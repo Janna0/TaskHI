@@ -24,12 +24,12 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, CheckCircle2 } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, CheckCircle2, UserCircle, Calendar } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
-import { CreateTaskModal } from '../tasks/CreateTaskModal'
 
 const COL_COLORS = [
   { header: 'bg-slate-100',  dot: 'bg-slate-400'  },
@@ -64,6 +64,66 @@ interface Props {
   memberMap: Record<string, { name: string; color: string }>
   onTaskClick: (task: Task) => void
   onRefresh: () => void
+}
+
+// ── Inline add task card ──────────────────────────────────────────────────────────────
+
+function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
+  sectionId: string
+  projectId: string
+  position: number
+  onDone: () => void
+}) {
+  const { user } = useAuth()
+  const [title, setTitle] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committingRef = useRef(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [])
+
+  async function save() {
+    if (committingRef.current) return
+    committingRef.current = true
+    const trimmed = title.trim()
+    if (!trimmed || !user) { onDone(); return }
+    setSaving(true)
+    await supabase.from('tasks').insert({
+      project_id: projectId,
+      section_id: sectionId,
+      title: trimmed,
+      status: 'todo',
+      priority: 'medium',
+      position,
+      created_by: user.id,
+      assignee_ids: [],
+    })
+    onDone()
+  }
+
+  return (
+    <div className="bg-white rounded-lg p-3 border-2 border-primary-300 shadow-sm">
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onBlur={save}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); save() }
+          if (e.key === 'Escape') { committingRef.current = true; onDone() }
+        }}
+        placeholder="Write a task name"
+        disabled={saving}
+        className="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent font-medium leading-snug"
+      />
+      <div className="flex items-center gap-2 mt-2.5">
+        <UserCircle size={18} className="text-slate-300" />
+        <Calendar size={16} className="text-slate-300" />
+      </div>
+    </div>
+  )
 }
 
 // ── Sortable task card ───────────────────────────────────────────────────────────────────
@@ -139,7 +199,7 @@ function TaskCardGhost({ task }: { task: Task }) {
 
 // ── Sortable column ────────────────────────────────────────────────────────────────────
 
-function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive, isCompletion, onToggleCompletion }: {
+function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh }: {
   section: Section
   colIdx: number
   taskIds: string[]
@@ -148,10 +208,11 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
   onTaskClick: (task: Task) => void
   onRename: (name: string) => void
   onRemove: () => void
-  onAddTask: () => void
   isTaskDragActive: boolean
   isCompletion: boolean
   onToggleCompletion: () => void
+  projectId: string
+  onRefresh: () => void
 }) {
   const appearance = getColColor(colIdx)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -159,6 +220,12 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
     data: { type: 'column' },
   })
   const colTasks = taskIds.map(id => tasks.find(t => t.id === id)).filter((t): t is Task => !!t)
+  const [isAddingTask, setIsAddingTask] = useState(false)
+
+  function handleAddDone() {
+    setIsAddingTask(false)
+    onRefresh()
+  }
 
   return (
     <div
@@ -172,7 +239,7 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
         appearance={appearance}
         onRename={onRename}
         onRemove={onRemove}
-        onAddTask={onAddTask}
+        onAddTask={() => setIsAddingTask(true)}
         dragListeners={listeners}
         dragAttributes={attributes}
         isCompletion={isCompletion}
@@ -195,11 +262,25 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
               onClick={() => onTaskClick(task)}
             />
           ))}
-          {colTasks.length === 0 && (
+          {colTasks.length === 0 && !isAddingTask && (
             <div className="flex items-center justify-center h-16 text-xs text-slate-400">
               Drop tasks here
             </div>
           )}
+          {isAddingTask && (
+            <InlineAddTaskCard
+              sectionId={section.id}
+              projectId={projectId}
+              position={colTasks.length}
+              onDone={handleAddDone}
+            />
+          )}
+          <button
+            onClick={() => setIsAddingTask(true)}
+            className="flex items-center gap-1.5 w-full px-1 py-1 text-xs text-slate-400 hover:text-slate-600 transition-colors rounded-md hover:bg-white/60"
+          >
+            <Plus size={13} /> Add task
+          </button>
         </div>
       </SortableContext>
     </div>
@@ -367,7 +448,6 @@ function AddSectionForm({ projectId, position, onDone }: {
 
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
-  const [createSectionId, setCreateSectionId] = useState<string | null>(null)
   const [showAddSection, setShowAddSection] = useState(false)
   const completionKey = `taskhi:completion-section:${projectId}`
   const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
@@ -622,10 +702,11 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
               onTaskClick={onTaskClick}
               onRename={name => renameSection(section.id, name)}
               onRemove={() => removeSection(section.id)}
-              onAddTask={() => setCreateSectionId(section.id)}
               isTaskDragActive={activeDragType === 'task'}
               isCompletion={completionSectionId === section.id}
               onToggleCompletion={() => toggleCompletionSection(section.id)}
+              projectId={projectId}
+              onRefresh={onRefresh}
             />
           ))}
 
@@ -662,17 +743,6 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
           </div>
         )}
       </DragOverlay>
-
-      {createSectionId !== null && (
-        <CreateTaskModal
-          open={true}
-          onClose={() => setCreateSectionId(null)}
-          onCreated={() => { setCreateSectionId(null); onRefresh() }}
-          projectId={projectId}
-          sections={sections}
-          defaultSectionId={createSectionId}
-        />
-      )}
     </DndContext>
   )
 }
