@@ -74,7 +74,7 @@ export function GlobalSearch() {
   const showDropdown = open && query.trim().length > 0
 
   return (
-    <div ref={containerRef} className="relative w-64">
+    <div ref={containerRef} className="relative w-96">
       <div className="relative">
         <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
         <input
