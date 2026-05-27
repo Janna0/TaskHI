@@ -34,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         projects={projects}
         onNewProject={() => setShowCreate(true)}
       />
-      <main className="flex-1 overflow-y-auto bg-slate-50">
+      <main className="flex-1 overflow-y-auto min-h-0 bg-slate-50">
         {children}
       </main>
       <CreateProjectModal

@@ -211,7 +211,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const isArchived = contextMenu?.project.status === 'archived'
 
   return (
-    <aside className="w-64 shrink-0 h-screen bg-[#1e1f21] flex flex-col">
+    <aside className="w-64 shrink-0 bg-[#1e1f21] flex flex-col">
       {/* User row */}
       <div className="px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
@@ -237,7 +237,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
         <NavLink to="/dashboard" className={navClass}>
           <Home size={15} /> Home
         </NavLink>
