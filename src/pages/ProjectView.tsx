@@ -23,7 +23,7 @@ const TABS: { id: View; label: string }[] = [
 
 export function ProjectView() {
   const { id } = useParams<{ id: string }>()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { user } = useAuth()
   const [project, setProject] = useState<Project | null>(null)
   const [projectOwner, setProjectOwner] = useState<Profile | null>(null)
@@ -43,12 +43,22 @@ export function ProjectView() {
   const ownerDisplayName = projectOwner?.name || projectOwner?.email?.split('@')[0] || '?'
   const ownerAvatarColor = projectOwner?.avatar_color ?? '#6366f1'
 
-  // Auto-open task from inbox notification
+  // Auto-open task from URL param (e.g. inbox link or shared link)
   useEffect(() => {
     if (!autoOpenTaskId || tasks.length === 0 || selectedTask) return
     const task = tasks.find(t => t.id === autoOpenTaskId)
     if (task) setSelectedTask(task)
   }, [autoOpenTaskId, tasks])
+
+  function openTask(task: Task) {
+    setSelectedTask(task)
+    setSearchParams({ task: task.id }, { replace: true })
+  }
+
+  function closeTask() {
+    setSelectedTask(null)
+    setSearchParams({}, { replace: true })
+  }
 
   function setAsDefault(v: View) {
     if (!id) return
@@ -269,20 +279,20 @@ export function ProjectView() {
           )}
           {view === 'list' && (
             <ListView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} onTaskClick={task => setSelectedTask(task)} onRefresh={() => loadAll(false)} />
+              memberMap={memberMap} onTaskClick={openTask} onRefresh={() => loadAll(false)} />
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
               memberMap={memberMap}
-              onTaskClick={task => setSelectedTask(task)}
+              onTaskClick={openTask}
               onRefresh={() => loadAll(false)} />
           )}
         </div>
         {selectedTask && (
           <TaskDetailPanel task={selectedTask} sections={sections} memberMap={memberMap}
-            onClose={() => setSelectedTask(null)}
+            onClose={closeTask}
             onUpdated={handleTaskUpdated}
-            onDeleted={() => { setSelectedTask(null); loadAll(false) }} />
+            onDeleted={() => { closeTask(); loadAll(false) }} />
         )}
       </div>
 
@@ -295,7 +305,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────────────────────────
+// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -440,7 +450,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ───────────────────────────────────────────────────────────────────────────────────
+// ── Overview Tab ────────────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 

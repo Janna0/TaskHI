@@ -95,7 +95,7 @@ export function MyTasksPage() {
             return (
               <Link
                 key={task.id}
-                to={`/projects/${task.project_id}`}
+                to={`/projects/${task.project_id}?task=${task.id}`}
                 className="flex items-center gap-3 px-4 py-2.5 bg-white rounded-lg border border-slate-100 hover:border-primary-200 hover:shadow-sm transition-all"
               >
                 <span className={cn('flex-1 text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
