@@ -427,7 +427,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
 
   async function loadAvailableDocs() {
     const { data } = await supabase.storage.from('how-to-docs').list('', { sortBy: { column: 'name', order: 'asc' } })
-    if (data) setAvailableDocs(data.map(d => ({ id: d.id, name: d.name })))
+    if (data) setAvailableDocs(data.map(d => ({ id: d.id ?? '', name: d.name })))
   }
 
   async function openDoc(docName: string) {
