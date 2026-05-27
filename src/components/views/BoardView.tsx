@@ -24,7 +24,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, CheckCircle2, UserCircle, CalendarDays } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, Check, CheckCircle2, UserCircle, CalendarDays } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -242,7 +242,9 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
           {isDone ? (
             <CheckCircle2 size={15} className="text-emerald-500" />
           ) : (
-            <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover:border-emerald-400 transition-colors" />
+            <div className="w-[15px] h-[15px] rounded-full border-2 border-slate-300 group-hover:border-emerald-400 transition-colors flex items-center justify-center">
+              <Check size={9} className="text-slate-300 group-hover:text-emerald-400 transition-colors" />
+            </div>
           )}
         </div>
         <p className={cn('text-sm font-medium leading-snug flex-1', isDone ? 'line-through text-slate-400' : 'text-slate-700')}>
