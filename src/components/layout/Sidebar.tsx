@@ -211,7 +211,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const isArchived = contextMenu?.project.status === 'archived'
 
   return (
-    <aside className="w-64 shrink-0 bg-[#1e1f21] flex flex-col">
+    <aside className="fixed inset-y-0 left-0 w-64 bg-[#1e1f21] flex flex-col z-10">
       {/* User row */}
       <div className="px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">

@@ -29,12 +29,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="h-screen">
       <Sidebar
         projects={projects}
         onNewProject={() => setShowCreate(true)}
       />
-      <main className="flex-1 overflow-y-auto min-h-0 bg-slate-50">
+      <main className="ml-64 h-screen overflow-y-auto bg-slate-50">
         {children}
       </main>
       <CreateProjectModal
