@@ -294,7 +294,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -439,7 +439,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ──────────────────────────────────────────────────────────────────────────────────
+// ── Overview Tab ────────────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 
@@ -476,7 +476,8 @@ function OverviewTab({ project, tasks, members, ownerProfile, ownerDisplayName, 
     setResTitle(''); setResUrl(''); setAddingResource(false)
   }
 
-  const mainTasks = tasks.filter(t => !t.parent_task_id)
+  const taskIds = new Set(tasks.map(t => t.id))
+  const mainTasks = tasks.filter(t => !t.parent_task_id || !taskIds.has(t.parent_task_id))
   const total = mainTasks.length
   const done = mainTasks.filter(t => t.status === 'done').length
   const percent = total > 0 ? Math.round((done / total) * 100) : 0
