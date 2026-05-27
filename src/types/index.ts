@@ -57,6 +57,7 @@ export interface Task {
   due_date: string | null
   created_by: string
   assignee_ids: string[]
+  how_to_attachments: string[] | null
   position: number
   depth: number
   created_at: string

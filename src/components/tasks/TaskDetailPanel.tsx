@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, CheckSquare, Plus } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Flag, Layers, CheckSquare, Plus, BookOpen, FileText, ExternalLink } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -381,6 +381,9 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [sectionId, setSectionId] = useState(task.section_id ?? '')
   const [notes, setNotes] = useState(task.notes ?? '')
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignee_ids ?? [])
+  const [howToDocs, setHowToDocs] = useState<string[]>(task.how_to_attachments ?? [])
+  const [availableDocs, setAvailableDocs] = useState<{ id: string; name: string }[]>([])
+  const [showDocPicker, setShowDocPicker] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -388,6 +391,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [subtaskInput, setSubtaskInput] = useState('')
   const [showAssigneePicker, setShowAssigneePicker] = useState(false)
   const assigneePickerRef = useRef<HTMLDivElement>(null)
+  const docPickerRef = useRef<HTMLDivElement>(null)
 
   const memberEntries = Object.entries(memberMap)
 
@@ -399,27 +403,34 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setSectionId(task.section_id ?? '')
     setNotes(task.notes ?? '')
     setAssigneeIds(task.assignee_ids ?? [])
+    setHowToDocs(task.how_to_attachments ?? [])
     setSaved(false)
+    setShowDocPicker(false)
     loadSubtasks()
   }, [task.id])
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
-      if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) {
-        setShowAssigneePicker(false)
-      }
+      if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) setShowAssigneePicker(false)
+      if (docPickerRef.current && !docPickerRef.current.contains(e.target as Node)) setShowDocPicker(false)
     }
     document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
   async function loadSubtasks() {
-    const { data } = await supabase
-      .from('tasks')
-      .select('*')
-      .eq('parent_task_id', task.id)
-      .order('position')
+    const { data } = await supabase.from('tasks').select('*').eq('parent_task_id', task.id).order('position')
     if (data) setSubtasks(data as Task[])
+  }
+
+  async function loadAvailableDocs() {
+    const { data } = await supabase.storage.from('how-to-docs').list('', { sortBy: { column: 'name', order: 'asc' } })
+    if (data) setAvailableDocs(data.map(d => ({ id: d.id, name: d.name })))
+  }
+
+  async function openDoc(docName: string) {
+    const { data } = await supabase.storage.from('how-to-docs').createSignedUrl(docName, 300)
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
 
   async function handleSave() {
@@ -435,6 +446,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       section_id: sectionId || null,
       notes: notes || null,
       assignee_ids: assigneeIds,
+      how_to_attachments: howToDocs,
     }).eq('id', task.id)
 
     const added = assigneeIds.filter(id => !(task.assignee_ids ?? []).includes(id) && id !== user?.id)
@@ -501,12 +513,8 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-            title="Delete task"
-          >
+          <button onClick={handleDelete} disabled={deleting}
+            className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete task">
             <Trash2 size={14} />
           </button>
         </div>
@@ -517,11 +525,8 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
               Saved
             </span>
           ) : (
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="text-xs font-medium bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors"
-            >
+            <button onClick={handleSave} disabled={saving}
+              className="text-xs font-medium bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors">
               {saving ? 'Saving…' : 'Save'}
             </button>
           )}
@@ -557,11 +562,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                   <div className="flex items-center gap-1.5">
                     <div className="flex -space-x-1">
                       {assigneeIds.slice(0, 3).map(id => memberMap[id] && (
-                        <div
-                          key={id}
-                          className="w-5 h-5 rounded-full border border-white flex items-center justify-center text-white text-[9px] font-semibold"
-                          style={{ background: memberMap[id].color }}
-                        >
+                        <div key={id} className="w-5 h-5 rounded-full border border-white flex items-center justify-center text-white text-[9px] font-semibold" style={{ background: memberMap[id].color }}>
                           {getInitials(memberMap[id].name)}
                         </div>
                       ))}
@@ -575,22 +576,10 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                   {memberEntries.map(([uid, m]) => {
                     const selected = assigneeIds.includes(uid)
                     return (
-                      <button
-                        key={uid}
-                        onClick={() => {
-                          setAssigneeIds(prev =>
-                            prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid]
-                          )
-                        }}
-                        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left"
-                      >
-                        <div
-                          className={cn(
-                            'w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold border-2',
-                            selected ? 'border-primary-500' : 'border-transparent'
-                          )}
-                          style={{ background: m.color }}
-                        >
+                      <button key={uid}
+                        onClick={() => setAssigneeIds(prev => prev.includes(uid) ? prev.filter(id => id !== uid) : [...prev, uid])}
+                        className="flex items-center gap-2.5 w-full px-2 py-1.5 rounded-lg hover:bg-slate-50 text-left">
+                        <div className={cn('w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold border-2', selected ? 'border-primary-500' : 'border-transparent')} style={{ background: m.color }}>
                           {getInitials(m.name)}
                         </div>
                         <span className="text-sm text-slate-700">{m.name}</span>
@@ -605,55 +594,35 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
 
           <PropRow icon={<Calendar size={14} />} label="Due date">
             {dueDate ? (
-              <input
-                type="date"
-                className={cn(
-                  'text-sm bg-transparent outline-none cursor-pointer',
-                  isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700'
-                )}
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-              />
+              <input type="date"
+                className={cn('text-sm bg-transparent outline-none cursor-pointer', isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700')}
+                value={dueDate} onChange={e => setDueDate(e.target.value)} />
             ) : (
               <label className="flex items-center gap-1 cursor-pointer">
                 <span className="text-sm text-slate-400">No due date</span>
-                <input
-                  type="date"
-                  className="sr-only"
-                  value=""
-                  onChange={e => setDueDate(e.target.value)}
-                />
+                <input type="date" className="sr-only" value="" onChange={e => setDueDate(e.target.value)} />
               </label>
             )}
           </PropRow>
 
           <PropRow icon={<Flag size={14} />} label="Priority">
-            <select
-              className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
-              value={priority}
-              onChange={e => setPriority(e.target.value)}
-            >
+            <select className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
+              value={priority} onChange={e => setPriority(e.target.value)}>
               {Object.entries(PRIORITY_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </PropRow>
 
           <PropRow icon={<CheckSquare size={14} />} label="Status">
-            <select
-              className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
-              value={status}
-              onChange={e => setStatus(e.target.value)}
-            >
+            <select className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
+              value={status} onChange={e => setStatus(e.target.value)}>
               {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
           </PropRow>
 
           {sections.length > 0 && (
             <PropRow icon={<Layers size={14} />} label="Section">
-              <select
-                className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
-                value={sectionId}
-                onChange={e => setSectionId(e.target.value)}
-              >
+              <select className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
+                value={sectionId} onChange={e => setSectionId(e.target.value)}>
                 <option value="">No section</option>
                 {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -673,28 +642,82 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           />
         </div>
 
+        {/* How To docs */}
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+              <BookOpen size={14} className="text-slate-400" /> How To
+            </h3>
+            <div className="relative" ref={docPickerRef}>
+              <button
+                onClick={() => { setShowDocPicker(v => !v); loadAvailableDocs() }}
+                className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Attach How To document"
+              >
+                <Plus size={15} />
+              </button>
+              {showDocPicker && (
+                <div className="absolute right-0 top-full mt-1 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-30 overflow-hidden">
+                  {availableDocs.filter(d => !howToDocs.includes(d.name)).length === 0 ? (
+                    <p className="px-4 py-3 text-xs text-slate-400">
+                      {availableDocs.length === 0 ? 'No How To documents available' : 'All documents already attached'}
+                    </p>
+                  ) : (
+                    <div className="py-1 max-h-48 overflow-y-auto">
+                      {availableDocs.filter(d => !howToDocs.includes(d.name)).map(doc => (
+                        <button key={doc.id}
+                          onClick={() => { setHowToDocs(prev => [...prev, doc.name]); setShowDocPicker(false) }}
+                          className="flex items-center gap-2.5 w-full px-3 py-2 hover:bg-slate-50 text-left transition-colors">
+                          <FileText size={13} className="text-primary-400 shrink-0" />
+                          <span className="text-sm text-slate-700 truncate">{doc.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {howToDocs.length === 0 ? (
+            <p className="text-xs text-slate-400">No documents attached</p>
+          ) : (
+            <div className="space-y-0.5">
+              {howToDocs.map(docName => (
+                <div key={docName} className="flex items-center gap-2 py-1.5 px-2 -mx-2 rounded-lg hover:bg-slate-50 group">
+                  <FileText size={13} className="text-primary-400 shrink-0" />
+                  <span className="flex-1 text-sm text-slate-700 truncate">{docName}</span>
+                  <button onClick={() => openDoc(docName)}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-primary-500 transition-all" title="Open">
+                    <ExternalLink size={12} />
+                  </button>
+                  <button onClick={() => setHowToDocs(prev => prev.filter(n => n !== docName))}
+                    className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-red-400 transition-all" title="Remove">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Subtasks */}
         <div className="px-6 py-4 border-b border-slate-100">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-slate-700">Subtasks</h3>
-            <button
-              onClick={() => document.getElementById('subtask-input')?.focus()}
-              className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
-            >
+            <button onClick={() => document.getElementById('subtask-input')?.focus()}
+              className="p-1 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
               <Plus size={15} />
             </button>
           </div>
-
           <div className="space-y-0.5 mb-2">
             {subtasks.map(sub => (
               <SubtaskRow key={sub.id} sub={sub} memberMap={memberMap} onUpdate={loadSubtasks} />
             ))}
           </div>
-
           <div className="flex items-center gap-3 py-1 px-2 -mx-2 rounded-lg border border-dashed border-slate-200 hover:border-slate-300 transition-colors focus-within:border-primary-300 focus-within:bg-primary-50/20">
             <div className="w-4 h-4 rounded-full border-2 border-slate-200 shrink-0" />
-            <input
-              id="subtask-input"
+            <input id="subtask-input"
               className="flex-1 text-sm text-slate-700 bg-transparent outline-none placeholder-slate-400 py-1.5"
               placeholder="Type to add a subtask…"
               value={subtaskInput}
