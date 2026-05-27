@@ -403,7 +403,7 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-// ── Main component ──────────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -613,6 +613,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
     const sectionChanged = newSectionId !== originalTask.section_id
     const movedToCompletion = !!newSectionId && newSectionId === completionSectionId
+    const movedFromCompletion = sectionChanged && originalTask.section_id === completionSectionId && !movedToCompletion
 
     await Promise.all(
       finalSectionIds.map((id, idx) => {
@@ -620,12 +621,13 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         if (id === taskId) {
           if (sectionChanged) update.section_id = newSectionId
           if (movedToCompletion) update.status = 'done'
+          else if (movedFromCompletion && originalTask.status === 'done') update.status = 'todo'
         }
         return supabase.from('tasks').update(update).eq('id', id)
       })
     )
 
-    if (sectionChanged || movedToCompletion) onRefresh()
+    if (sectionChanged || movedToCompletion || movedFromCompletion) onRefresh()
   }
 
   function renderTaskWithSubtasks(task: Task) {

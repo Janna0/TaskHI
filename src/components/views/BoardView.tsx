@@ -66,7 +66,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Sortable task card ───────────────────────────────────────────────────────────────────────
+// ── Sortable task card ───────────────────────────────────────────────────────────────────
 
 function SortableTaskCard({ task, memberMap, onClick }: {
   task: Task
@@ -127,7 +127,7 @@ function SortableTaskCard({ task, memberMap, onClick }: {
   )
 }
 
-// ── Task ghost for DragOverlay ──────────────────────────────────────────────────────────────────────
+// ── Task ghost for DragOverlay ────────────────────────────────────────────────────────
 
 function TaskCardGhost({ task }: { task: Task }) {
   return (
@@ -137,7 +137,7 @@ function TaskCardGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Sortable column ──────────────────────────────────────────────────────────────────────────
+// ── Sortable column ────────────────────────────────────────────────────────────────────
 
 function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive, isCompletion, onToggleCompletion }: {
   section: Section
@@ -206,7 +206,7 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
   )
 }
 
-// ── Column header ─────────────────────────────────────────────────────────────────────────
+// ── Column header ───────────────────────────────────────────────────────────────────
 
 function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes, isCompletion, onToggleCompletion }: {
   section: Section
@@ -287,7 +287,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
           {showMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-48">
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-40">
                 <button
                   onClick={() => { setShowMenu(false); setEditing(true) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
@@ -319,7 +319,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   )
 }
 
-// ── Add section form ──────────────────────────────────────────────────────────────────────────
+// ── Add section form ──────────────────────────────────────────────────────────────────
 
 function AddSectionForm({ projectId, position, onDone }: {
   projectId: string
@@ -363,7 +363,7 @@ function AddSectionForm({ projectId, position, onDone }: {
   )
 }
 
-// ── Main BoardView ───────────────────────────────────────────────────────────────────────────
+// ── Main BoardView ────────────────────────────────────────────────────────────────────
 
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
@@ -545,6 +545,7 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
       const finalIds = taskOrderRef.current[finalSec] ?? []
       const crossSection = finalSec !== originalTask.section_id
       const movedToCompletion = !!finalSec && finalSec === completionSectionId
+      const movedFromCompletion = crossSection && originalTask.section_id === completionSectionId && !movedToCompletion
 
       await Promise.all(
         finalIds.map((id, idx) => {
@@ -552,6 +553,7 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
           if (id === taskId) {
             if (crossSection) upd.section_id = finalSec
             if (movedToCompletion) upd.status = 'done'
+            else if (movedFromCompletion && originalTask.status === 'done') upd.status = 'todo'
           }
           return supabase.from('tasks').update(upd).eq('id', id)
         })

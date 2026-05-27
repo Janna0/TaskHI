@@ -3,7 +3,7 @@ import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
-import { PRIORITY_LABELS, isOverdue, getInitials, cn } from '../../lib/utils'
+import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
 
 interface Comment {
   id: string
@@ -412,10 +412,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   }, [task.id])
 
   useEffect(() => {
-    setSectionId(task.section_id ?? '')
-  }, [task.section_id])
-
-  useEffect(() => {
     function onClickOutside(e: MouseEvent) {
       if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) setShowAssigneePicker(false)
       if (docPickerRef.current && !docPickerRef.current.contains(e.target as Node)) setShowDocPicker(false)
@@ -626,6 +622,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                   setSectionId(newId)
                   const completionSectionId = localStorage.getItem(`taskhi:completion-section:${task.project_id}`) ?? ''
                   if (newId && newId === completionSectionId) setStatus('done')
+                  else if (sectionId === completionSectionId && status === 'done') setStatus('todo')
                 }}>
                 <option value="">No section</option>
                 {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
