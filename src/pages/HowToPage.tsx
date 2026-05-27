@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BookOpen, Upload, FileText, Trash2, ExternalLink } from 'lucide-react'
+import { BookOpen, Upload, FileText, Trash2, ExternalLink, Search } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { cn } from '../lib/utils'
 
@@ -21,6 +21,7 @@ export function HowToPage() {
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => { load() }, [])
 
@@ -62,6 +63,10 @@ export function HowToPage() {
     setDocs(prev => prev.filter(d => d.id !== doc.id))
   }
 
+  const filtered = docs.filter(d =>
+    d.name.toLowerCase().includes(search.toLowerCase())
+  )
+
   return (
     <div className="max-w-3xl mx-auto px-6 py-8 pb-20">
       <div className="flex items-center justify-between mb-6">
@@ -93,6 +98,19 @@ export function HowToPage() {
         </div>
       )}
 
+      {!loading && docs.length > 0 && (
+        <div className="relative mb-4">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Search documents…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-transparent"
+          />
+        </div>
+      )}
+
       {loading ? (
         <p className="text-slate-400 text-sm">Loading...</p>
       ) : docs.length === 0 ? (
@@ -101,9 +119,15 @@ export function HowToPage() {
           <p className="text-slate-500 font-medium">No documents yet</p>
           <p className="text-slate-400 text-sm mt-1">Upload how-to documents to share with everyone.</p>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16">
+          <Search size={32} className="mx-auto text-slate-300 mb-3" />
+          <p className="text-slate-500 font-medium">No results for &ldquo;{search}&rdquo;</p>
+          <button onClick={() => setSearch('')} className="text-sm text-primary-600 hover:underline mt-1">Clear search</button>
+        </div>
       ) : (
         <div className="space-y-2">
-          {docs.map(doc => (
+          {filtered.map(doc => (
             <div
               key={doc.id}
               className="flex items-center gap-4 px-4 py-3 bg-white rounded-lg border border-slate-100 hover:border-slate-200 transition-all group"
