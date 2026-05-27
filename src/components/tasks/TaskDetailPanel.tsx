@@ -644,7 +644,10 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
                     {howToDocs.map(name => (
                       <span key={name} className="flex items-center gap-1 bg-primary-50 text-primary-700 text-xs rounded-md px-1.5 py-0.5">
                         <FileText size={10} />
-                        <span className="max-w-[120px] truncate">{name}</span>
+                        <button
+                          onClick={e => { e.stopPropagation(); openDoc(name) }}
+                          className="max-w-[120px] truncate hover:underline"
+                        >{name}</button>
                         <button
                           onClick={e => { e.stopPropagation(); setHowToDocs(prev => prev.filter(n => n !== name)) }}
                           className="text-primary-400 hover:text-red-400 ml-0.5 leading-none"
