@@ -57,6 +57,8 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const location = useLocation()
   const favorites = projects.filter(p => p.is_favorite)
   const activeProjects = projects.filter(p => p.status === 'active')
+  const ownedProjects = activeProjects.filter(p => p.owner_id === user?.id)
+  const memberProjects = activeProjects.filter(p => p.owner_id !== user?.id)
   const archivedProjects = projects.filter(p => p.status === 'archived')
 
   const [showTasks, setShowTasks] = useState(location.pathname === '/my-tasks')
@@ -417,27 +419,41 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               ))}
             </div>
 
-            {/* All active projects */}
+            {/* My projects (owned) */}
             <div className="pt-5">
               <div className="flex items-center justify-between px-3 mb-1">
-                <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">Projects</p>
+                <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">My Projects</p>
                 <button onClick={onNewProject} className="p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors" title="New project">
                   <Plus size={14} />
                 </button>
               </div>
-              {activeProjects.map(p => (
+              {ownedProjects.map(p => (
                 <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
                   <ProjectIconBadge project={p} size="sm" />
                   <span className="truncate">{p.name}</span>
                   {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
                 </NavLink>
               ))}
-              {activeProjects.length === 0 && (
+              {ownedProjects.length === 0 && (
                 <button onClick={onNewProject} className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/40 hover:text-white/70 w-full transition-colors">
                   <Plus size={14} /> New project
                 </button>
               )}
             </div>
+
+            {/* Member of (not owned) */}
+            {memberProjects.length > 0 && (
+              <div className="pt-5">
+                <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">Member Of</p>
+                {memberProjects.map(p => (
+                  <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
+                    <ProjectIconBadge project={p} size="sm" />
+                    <span className="truncate">{p.name}</span>
+                    {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
+                  </NavLink>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </nav>
