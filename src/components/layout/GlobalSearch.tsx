@@ -74,27 +74,27 @@ export function GlobalSearch() {
   const showDropdown = open && query.trim().length > 0
 
   return (
-    <div ref={containerRef} className="relative w-full max-w-xl">
+    <div ref={containerRef} className="relative w-64">
       <div className="relative">
-        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
+        <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/40 pointer-events-none" />
         <input
           ref={inputRef}
           type="text"
-          placeholder="Search tasks and projects…"
+          placeholder="Search…"
           value={query}
           onChange={e => { setQuery(e.target.value); setOpen(true) }}
           onFocus={() => setOpen(true)}
-          className="w-full pl-8 pr-8 py-1 text-sm bg-white/10 border border-white/10 rounded-md text-white placeholder-white/35 focus:outline-none focus:bg-white/15 focus:border-white/20 transition-all"
+          className="w-full pl-7 pr-7 py-1 text-xs bg-white/10 border border-white/10 rounded-md text-white placeholder-white/35 focus:outline-none focus:bg-white/15 focus:border-white/20 transition-all"
         />
         {query ? (
           <button
             onClick={() => { setQuery(''); setResults([]) }}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70"
           >
             <X size={12} />
           </button>
         ) : (
-          <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-white/25 font-medium hidden sm:block">
+          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-white/25 font-medium hidden sm:block">
             ⌘K
           </span>
         )}
