@@ -3,7 +3,7 @@ import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
-import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
+import { STATUS_LABELS, PRIORITY_LABELS, isOverdue, getInitials, cn } from '../../lib/utils'
 
 interface Comment {
   id: string
@@ -595,20 +595,21 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           </PropRow>
 
           <PropRow icon={<Calendar size={14} />} label="Due date">
-            {dueDate ? (
-              <div className="flex items-center gap-1.5">
-                <input type="date"
-                  className={cn('text-sm bg-transparent outline-none cursor-pointer', isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700')}
-                  value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                <button onClick={() => setDueDate('')} className="text-slate-300 hover:text-slate-500 transition-colors text-xs leading-none" title="Clear due date">×</button>
-              </div>
-            ) : (
-              <label className="relative flex items-center cursor-pointer">
-                <span className="text-sm text-slate-400 hover:text-slate-600 transition-colors">No due date</span>
-                <input type="date" className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                  onChange={e => { if (e.target.value) setDueDate(e.target.value) }} />
-              </label>
-            )}
+            <div className="flex items-center gap-1.5">
+              <input
+                type="date"
+                className={cn('text-sm bg-transparent outline-none cursor-pointer',
+                  dueDate
+                    ? (isOverdue(dueDate) && status !== 'done' ? 'text-red-500' : 'text-slate-700')
+                    : 'text-slate-400'
+                )}
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
+              />
+              {dueDate && (
+                <button onClick={() => setDueDate('')} className="text-slate-300 hover:text-slate-500 transition-colors leading-none" title="Clear">×</button>
+              )}
+            </div>
           </PropRow>
 
           <PropRow icon={<Flag size={14} />} label="Priority">
