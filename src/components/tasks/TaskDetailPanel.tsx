@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, CheckSquare, Plus, BookOpen, FileText } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -614,15 +614,8 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
             </select>
           </PropRow>
 
-          <PropRow icon={<CheckSquare size={14} />} label="Status">
-            <select className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
-              value={status} onChange={e => setStatus(e.target.value)}>
-              {Object.entries(STATUS_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </PropRow>
-
           {sections.length > 0 && (
-            <PropRow icon={<Layers size={14} />} label="Section">
+            <PropRow icon={<Layers size={14} />} label="Status">
               <select className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
                 value={sectionId} onChange={e => setSectionId(e.target.value)}>
                 <option value="">No section</option>
