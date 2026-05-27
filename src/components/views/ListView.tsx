@@ -21,7 +21,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
@@ -335,10 +335,12 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
 
 // ── Section action menu ────────────────────────────────────────────────────────────────────
 
-function SectionMenu({ onRename, onDelete, onClose }: {
+function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
   onDelete: () => void
   onClose: () => void
+  isCompletion: boolean
+  onToggleCompletion: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -360,7 +362,7 @@ function SectionMenu({ onRename, onDelete, onClose }: {
   return (
     <div
       ref={ref}
-      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-44 z-50"
+      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-52 z-50"
     >
       <button
         onMouseDown={e => { e.stopPropagation(); onRename() }}
@@ -368,6 +370,15 @@ function SectionMenu({ onRename, onDelete, onClose }: {
       >
         <Pencil size={13} className="text-slate-400 shrink-0" />
         Rename section
+      </button>
+      <button
+        onMouseDown={e => { e.stopPropagation(); onToggleCompletion() }}
+        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
+      >
+        <CheckCircle2 size={13} className={isCompletion ? 'text-emerald-500 shrink-0' : 'text-slate-400 shrink-0'} />
+        <span className={isCompletion ? 'text-emerald-600' : 'text-slate-700'}>
+          {isCompletion ? 'Remove completion mark' : 'Mark as completion'}
+        </span>
       </button>
       <div className="border-t border-slate-100 my-1" />
       <button
@@ -410,6 +421,16 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
+  const completionKey = `taskhi:completion-section:${projectId}`
+  const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
+
+  function toggleCompletionSection(sectionId: string) {
+    const next = completionSectionId === sectionId ? '' : sectionId
+    setCompletionSectionId(next)
+    if (next) localStorage.setItem(completionKey, next)
+    else localStorage.removeItem(completionKey)
+    setOpenMenuSection(null)
+  }
 
   // Only top-level tasks participate in section drag-and-drop
   const rootTasks = tasks.filter(t => !t.parent_task_id)
@@ -590,17 +611,21 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const finalSectionIds = localOrderRef.current[finalSid] ?? []
     const newSectionId = finalSid || null
 
+    const sectionChanged = newSectionId !== originalTask.section_id
+    const movedToCompletion = !!newSectionId && newSectionId === completionSectionId
+
     await Promise.all(
       finalSectionIds.map((id, idx) => {
         const update: Record<string, unknown> = { position: idx }
-        if (id === taskId && newSectionId !== originalTask.section_id) {
-          update.section_id = newSectionId
+        if (id === taskId) {
+          if (sectionChanged) update.section_id = newSectionId
+          if (movedToCompletion) update.status = 'done'
         }
         return supabase.from('tasks').update(update).eq('id', id)
       })
     )
 
-    if (newSectionId !== originalTask.section_id) onRefresh()
+    if (sectionChanged || movedToCompletion) onRefresh()
   }
 
   function renderTaskWithSubtasks(task: Task) {
@@ -715,6 +740,9 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <>
                     <span className="text-sm font-semibold text-slate-600">{section.name}</span>
                     <span className="text-xs text-slate-400">({sectionTasks.length})</span>
+                    {completionSectionId === section.id && (
+                      <span title="Completion section"><CheckCircle2 size={13} className="text-emerald-500 shrink-0" /></span>
+                    )}
                     {(isHovered || menuOpen) && (
                       <div className="relative" onClick={e => e.stopPropagation()}>
                         <button
@@ -733,6 +761,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                             }}
                             onDelete={() => handleDeleteSection(section.id, sectionTasks.length)}
                             onClose={() => setOpenMenuSection(null)}
+                            isCompletion={completionSectionId === section.id}
+                            onToggleCompletion={() => toggleCompletionSection(section.id)}
                           />
                         )}
                       </div>
