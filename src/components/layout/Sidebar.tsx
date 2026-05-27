@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { NavLink, useNavigate, Link } from 'react-router-dom'
+import { NavLink, useNavigate, useLocation, Link } from 'react-router-dom'
 import {
   FolderOpen, CheckSquare, Star, Plus, LogOut, Home, Pencil, Palette, Archive, ChevronRight, Bell,
   RotateCcw, Upload, BookOpen, Search, X, FileText, type LucideIcon,
@@ -54,10 +54,12 @@ const navClass = ({ isActive }: { isActive: boolean }) =>
 export function Sidebar({ projects, onNewProject }: SidebarProps) {
   const { profile, user, signOut } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
   const favorites = projects.filter(p => p.is_favorite)
   const activeProjects = projects.filter(p => p.status === 'active')
   const archivedProjects = projects.filter(p => p.status === 'archived')
 
+  const [showTasks, setShowTasks] = useState(location.pathname === '/my-tasks')
   const [contextMenu, setContextMenu] = useState<{ project: Project; x: number; y: number } | null>(null)
   const [showColorPanel, setShowColorPanel] = useState(false)
   const [renameProject, setRenameProject] = useState<Project | null>(null)
@@ -310,9 +312,43 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
             <NavLink to="/dashboard" className={navClass}>
               <Home size={15} /> Home
             </NavLink>
-            <NavLink to="/my-tasks" className={navClass}>
-              <CheckSquare size={15} /> Tasks
-            </NavLink>
+            <div>
+              <button
+                onClick={() => setShowTasks(v => !v)}
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left transition-colors',
+                  location.pathname === '/my-tasks'
+                    ? 'bg-white/15 text-white font-medium'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                )}
+              >
+                <CheckSquare size={15} />
+                Tasks
+                <ChevronRight size={12} className={cn('ml-auto text-white/30 transition-transform', showTasks && 'rotate-90')} />
+              </button>
+              {showTasks && (
+                <div className="mt-0.5 space-y-0.5">
+                  {[
+                    { view: 'assigned', label: 'Assigned to me' },
+                    { view: 'projects', label: 'My projects' },
+                  ].map(({ view, label }) => {
+                    const active = location.pathname === '/my-tasks' && new URLSearchParams(location.search).get('view') === view
+                    return (
+                      <Link
+                        key={view}
+                        to={`/my-tasks?view=${view}`}
+                        className={cn(
+                          'flex items-center pl-9 pr-3 py-1.5 rounded-md text-sm transition-colors',
+                          active ? 'bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                        )}
+                      >
+                        {label}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
             <NavLink to="/inbox" className={navClass}>
               <Bell size={15} />
               Inbox

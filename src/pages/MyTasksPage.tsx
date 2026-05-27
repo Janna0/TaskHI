@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CheckSquare, Filter, UserCheck, Briefcase } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
@@ -74,6 +74,8 @@ function TableHeader({ showProject }: { showProject: boolean }) {
 
 export function MyTasksPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const view = searchParams.get('view') // 'assigned' | 'projects'
   const [assignedTasks, setAssignedTasks] = useState<Task[]>([])
   const [projectTasks, setProjectTasks] = useState<Task[]>([])
   const [memberMap, setMemberMap] = useState<Record<string, { name: string; color: string }>>({})
@@ -140,7 +142,9 @@ export function MyTasksPage() {
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 pb-20">
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-slate-800">Tasks</h1>
+        <h1 className="text-2xl font-bold text-slate-800">
+          {view === 'assigned' ? 'Assigned to me' : view === 'projects' ? 'My projects' : 'Tasks'}
+        </h1>
         <div className="flex items-center gap-2">
           <Filter size={14} className="text-slate-400" />
           <select className={selectClass} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
@@ -158,8 +162,7 @@ export function MyTasksPage() {
         <p className="text-slate-400 text-sm">Loading…</p>
       ) : (
         <div className="space-y-10">
-          {/* Assigned to me */}
-          <section>
+          {(view === 'assigned' || !view) && <section>
             <div className="flex items-center gap-2 mb-3">
               <UserCheck size={16} className="text-primary-500" />
               <h2 className="text-base font-semibold text-slate-700">Assigned to me</h2>
@@ -180,10 +183,9 @@ export function MyTasksPage() {
                 ))}
               </div>
             )}
-          </section>
+          </section>}
 
-          {/* My projects */}
-          <section>
+          {(view === 'projects' || !view) && <section>
             <div className="flex items-center gap-2 mb-3">
               <Briefcase size={16} className="text-indigo-500" />
               <h2 className="text-base font-semibold text-slate-700">My projects</h2>
@@ -204,7 +206,7 @@ export function MyTasksPage() {
                 ))}
               </div>
             )}
-          </section>
+          </section>}
         </div>
       )}
     </div>
