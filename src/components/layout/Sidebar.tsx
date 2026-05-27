@@ -237,7 +237,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto scrollbar-thin">
+      <nav className="flex-1 min-h-0 px-3 py-3 space-y-0.5 overflow-y-auto overscroll-y-contain scrollbar-thin">
         <NavLink to="/dashboard" className={navClass}>
           <Home size={15} /> Home
         </NavLink>
