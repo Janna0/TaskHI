@@ -24,7 +24,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, CheckCircle2 } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
@@ -66,7 +66,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Sortable task card ───────────────────────────────────────────────────────────────────
+// ── Sortable task card ───────────────────────────────────────────────────────────────────────
 
 function SortableTaskCard({ task, memberMap, onClick }: {
   task: Task
@@ -127,7 +127,7 @@ function SortableTaskCard({ task, memberMap, onClick }: {
   )
 }
 
-// ── Task ghost for DragOverlay ────────────────────────────────────────────────────────
+// ── Task ghost for DragOverlay ──────────────────────────────────────────────────────────────────────
 
 function TaskCardGhost({ task }: { task: Task }) {
   return (
@@ -137,9 +137,9 @@ function TaskCardGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Sortable column ────────────────────────────────────────────────────────────────────
+// ── Sortable column ──────────────────────────────────────────────────────────────────────────
 
-function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive }: {
+function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClick, onRename, onRemove, onAddTask, isTaskDragActive, isCompletion, onToggleCompletion }: {
   section: Section
   colIdx: number
   taskIds: string[]
@@ -150,6 +150,8 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
   onRemove: () => void
   onAddTask: () => void
   isTaskDragActive: boolean
+  isCompletion: boolean
+  onToggleCompletion: () => void
 }) {
   const appearance = getColColor(colIdx)
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -173,6 +175,8 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
         onAddTask={onAddTask}
         dragListeners={listeners}
         dragAttributes={attributes}
+        isCompletion={isCompletion}
+        onToggleCompletion={onToggleCompletion}
       />
 
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
@@ -202,9 +206,9 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, onTaskClic
   )
 }
 
-// ── Column header ───────────────────────────────────────────────────────────────────
+// ── Column header ─────────────────────────────────────────────────────────────────────────
 
-function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes }: {
+function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes, isCompletion, onToggleCompletion }: {
   section: Section
   count: number
   appearance: { header: string; dot: string }
@@ -213,6 +217,8 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   onAddTask: () => void
   dragListeners: DraggableSyntheticListeners
   dragAttributes: DraggableAttributes
+  isCompletion: boolean
+  onToggleCompletion: () => void
 }) {
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(section.name)
@@ -254,12 +260,15 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
             className="text-sm font-semibold text-slate-700 bg-transparent border-b border-slate-500 outline-none w-28"
           />
         ) : (
-          <span
-            className="text-sm font-semibold text-slate-700 truncate cursor-default"
-            onDoubleClick={() => setEditing(true)}
-          >
-            {section.name}
-          </span>
+          <>
+            <span
+              className="text-sm font-semibold text-slate-700 truncate cursor-default"
+              onDoubleClick={() => setEditing(true)}
+            >
+              {section.name}
+            </span>
+            {isCompletion && <CheckCircle2 size={13} className="text-emerald-500 shrink-0" />}
+          </>
         )}
 
         <span className="text-xs font-medium text-slate-400 bg-white/70 rounded-full px-1.5 shrink-0">
@@ -278,13 +287,23 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
           {showMenu && (
             <>
               <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-40">
+              <div className="absolute right-0 top-full mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 z-20 w-48">
                 <button
                   onClick={() => { setShowMenu(false); setEditing(true) }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
                 >
                   <Pencil size={13} /> Rename
                 </button>
+                <button
+                  onClick={() => { setShowMenu(false); onToggleCompletion() }}
+                  className="flex items-center gap-2 w-full px-3 py-2 text-sm hover:bg-slate-50"
+                >
+                  <CheckCircle2 size={13} className={isCompletion ? 'text-emerald-500' : 'text-slate-400'} />
+                  <span className={isCompletion ? 'text-emerald-600' : 'text-slate-700'}>
+                    {isCompletion ? 'Remove completion mark' : 'Mark as completion'}
+                  </span>
+                </button>
+                <div className="border-t border-slate-100 my-1" />
                 <button
                   onClick={() => { setShowMenu(false); onRemove() }}
                   className="flex items-center gap-2 w-full px-3 py-2 text-sm text-red-600 hover:bg-red-50"
@@ -300,7 +319,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   )
 }
 
-// ── Add section form ──────────────────────────────────────────────────────────────────
+// ── Add section form ──────────────────────────────────────────────────────────────────────────
 
 function AddSectionForm({ projectId, position, onDone }: {
   projectId: string
@@ -344,12 +363,21 @@ function AddSectionForm({ projectId, position, onDone }: {
   )
 }
 
-// ── Main BoardView ────────────────────────────────────────────────────────────────────
+// ── Main BoardView ───────────────────────────────────────────────────────────────────────────
 
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
   const [createSectionId, setCreateSectionId] = useState<string | null>(null)
   const [showAddSection, setShowAddSection] = useState(false)
+  const completionKey = `taskhi:completion-section:${projectId}`
+  const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
+
+  function toggleCompletionSection(sectionId: string) {
+    const next = completionSectionId === sectionId ? '' : sectionId
+    setCompletionSectionId(next)
+    if (next) localStorage.setItem(completionKey, next)
+    else localStorage.removeItem(completionKey)
+  }
 
   // Local section order (optimistic during column drag)
   const [localSections, setLocalSections] = useState<Section[]>(sections)
@@ -516,16 +544,20 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
       const finalSec = findSectionForTask(taskId)
       const finalIds = taskOrderRef.current[finalSec] ?? []
       const crossSection = finalSec !== originalTask.section_id
+      const movedToCompletion = !!finalSec && finalSec === completionSectionId
 
       await Promise.all(
         finalIds.map((id, idx) => {
           const upd: Record<string, unknown> = { position: idx }
-          if (id === taskId && crossSection) upd.section_id = finalSec
+          if (id === taskId) {
+            if (crossSection) upd.section_id = finalSec
+            if (movedToCompletion) upd.status = 'done'
+          }
           return supabase.from('tasks').update(upd).eq('id', id)
         })
       )
 
-      if (crossSection) onRefresh()
+      if (crossSection || movedToCompletion) onRefresh()
     } else if (type === 'column') {
       // Persist new section positions
       const newSecs = localSectionsRef.current
@@ -590,6 +622,8 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
               onRemove={() => removeSection(section.id)}
               onAddTask={() => setCreateSectionId(section.id)}
               isTaskDragActive={activeDragType === 'task'}
+              isCompletion={completionSectionId === section.id}
+              onToggleCompletion={() => toggleCompletionSection(section.id)}
             />
           ))}
 
