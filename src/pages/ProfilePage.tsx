@@ -80,7 +80,7 @@ export function ProfilePage() {
   }
 
   return (
-    <div className="max-w-lg mx-auto px-8 py-10">
+    <div className="max-w-lg mx-auto px-8 py-10 pb-20">
       <button onClick={() => navigate(-1)}
         className="flex items-center gap-2 text-sm text-slate-500 hover:text-slate-700 mb-8 transition-colors">
         <ArrowLeft size={14} /> Back
@@ -88,7 +88,6 @@ export function ProfilePage() {
 
       <h1 className="text-xl font-bold text-slate-900 mb-8">My profile</h1>
 
-      {/* Avatar preview + color picker */}
       <div className="flex items-center gap-6 mb-8 p-4 bg-slate-50 rounded-xl">
         <div
           className="w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-bold shrink-0 transition-colors"
@@ -114,7 +113,6 @@ export function ProfilePage() {
         </div>
       </div>
 
-      {/* Display name */}
       <div className="mb-4">
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Display name</label>
         <input
@@ -126,7 +124,6 @@ export function ProfilePage() {
         />
       </div>
 
-      {/* Email (read-only) */}
       <div className="mb-8">
         <label className="block text-sm font-medium text-slate-700 mb-1.5">Email</label>
         <input
@@ -152,7 +149,6 @@ export function ProfilePage() {
         {saved ? <><Check size={14} /> Saved!</> : saving ? 'Saving…' : 'Save changes'}
       </button>
 
-      {/* Password reset */}
       <div className="border-t border-slate-100 pt-8 mb-8">
         <h2 className="text-base font-semibold text-slate-900 mb-1">Password</h2>
         <p className="text-sm text-slate-500 mb-4">We'll email you a link to reset your password.</p>
@@ -168,7 +164,6 @@ export function ProfilePage() {
         )}
       </div>
 
-      {/* Danger zone */}
       <div className="border-t border-red-100 pt-8">
         <h2 className="text-base font-semibold text-red-600 mb-1">Danger zone</h2>
         <p className="text-sm text-slate-500 mb-4">
