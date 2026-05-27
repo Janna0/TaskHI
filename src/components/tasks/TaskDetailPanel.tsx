@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Plus, ChevronDown } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
-import { PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
+import { PRIORITY_LABELS, isOverdue, getInitials, cn } from '../../lib/utils'
 
 interface Comment {
   id: string
@@ -41,13 +41,10 @@ function renderContent(content: string) {
   )
 }
 
-function PropRow({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+function PropRow({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center py-2.5 hover:bg-slate-50 rounded-lg px-2 -mx-2 group transition-colors">
-      <div className="flex items-center gap-2.5 w-32 shrink-0">
-        <span className="text-slate-400">{icon}</span>
-        <span className="text-sm text-slate-500">{label}</span>
-      </div>
+    <div className="flex items-center gap-4 py-2">
+      <span className="text-sm text-slate-500 w-28 shrink-0">{label}</span>
       <div className="flex-1 min-w-0">{children}</div>
     </div>
   )
@@ -63,7 +60,6 @@ function AssigneePicker({ task, memberMap, projectId, onUpdated }: {
   const [search, setSearch] = useState('')
   const [members, setMembers] = useState<{ id: string; name: string; color: string }[]>([])
   const ref = useRef<HTMLDivElement>(null)
-  const [copied, setCopied] = useState(false)
 
   async function openPicker() {
     setOpen(true)
@@ -92,26 +88,28 @@ function AssigneePicker({ task, memberMap, projectId, onUpdated }: {
     onUpdated()
   }
 
-  const filtered = members.filter(m =>
-    m.name.toLowerCase().includes(search.toLowerCase())
-  )
-
+  const filtered = members.filter(m => m.name.toLowerCase().includes(search.toLowerCase()))
   const assignees = assigneeIds.map(id => memberMap[id]).filter(Boolean)
 
   return (
     <div className="relative" ref={ref}>
       <button
         onClick={openPicker}
-        className="flex items-center gap-1.5 text-sm text-slate-700 hover:bg-slate-100 rounded px-2 py-1 -mx-2 -my-1 transition-colors"
+        className="flex items-center gap-2 text-sm hover:opacity-80 transition-opacity"
       >
         {assignees.length === 0 ? (
-          <span className="text-slate-400">Unassigned</span>
+          <>
+            <div className="w-7 h-7 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
+              <User size={12} className="text-slate-400" />
+            </div>
+            <span className="text-slate-400">No assignee</span>
+          </>
         ) : (
           <div className="flex -space-x-1.5">
             {assignees.slice(0, 3).map((a, i) => (
               <div
                 key={i}
-                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold border border-white"
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold border-2 border-white"
                 style={{ background: a.color }}
                 title={a.name}
               >
@@ -119,7 +117,7 @@ function AssigneePicker({ task, memberMap, projectId, onUpdated }: {
               </div>
             ))}
             {assignees.length > 3 && (
-              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
+              <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border-2 border-white">
                 +{assignees.length - 3}
               </div>
             )}
@@ -161,18 +159,39 @@ function AssigneePicker({ task, memberMap, projectId, onUpdated }: {
           }
         </div>
       )}
+    </div>
+  )
+}
+
+function SubtaskRow({ sub, memberMap, onUpdate }: {
+  sub: Task
+  memberMap: Record<string, { name: string; color: string }>
+  onUpdate: () => void
+}) {
+  async function toggleDone() {
+    const next = sub.status === 'done' ? 'todo' : 'done'
+    await supabase.from('tasks').update({ status: next }).eq('id', sub.id)
+    onUpdate()
+  }
+
+  return (
+    <div className="flex items-center gap-2.5 py-1.5 group">
       <button
-        onClick={async () => {
-          const url = `${window.location.origin}${window.location.pathname}?task=${task.id}`
-          await navigator.clipboard.writeText(url)
-          setCopied(true)
-          setTimeout(() => setCopied(false), 1500)
-        }}
-        className="ml-2 text-xs text-slate-400 hover:text-slate-600 transition-colors"
-        title="Copy link to task"
+        onClick={toggleDone}
+        className={cn(
+          'w-4 h-4 rounded-full border-2 shrink-0 transition-colors flex items-center justify-center',
+          sub.status === 'done' ? 'border-emerald-500 bg-emerald-500' : 'border-slate-300 hover:border-slate-400'
+        )}
       >
-        {copied ? '✓ Copied' : 'Copy link'}
+        {sub.status === 'done' && (
+          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 10 10">
+            <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        )}
       </button>
+      <span className={cn('flex-1 text-sm truncate', sub.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
+        {sub.title}
+      </span>
     </div>
   )
 }
@@ -189,16 +208,34 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
   const [comments, setComments] = useState<Comment[]>([])
   const [newComment, setNewComment] = useState('')
   const [postingComment, setPostingComment] = useState(false)
-  const [activeTab, setActiveTab] = useState<'details' | 'activity'>('details')
-  const [howTo, setHowTo] = useState(task.how_to ?? '')
-  const [howToAttachments, setHowToAttachments] = useState<string[]>(task.how_to_attachments ?? [])
-  const [uploadingHowTo, setUploadingHowTo] = useState(false)
-  const [showHowTo, setShowHowTo] = useState(false)
-  const howToFileRef = useRef<HTMLInputElement>(null)
-  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+  const [subtasks, setSubtasks] = useState<Task[]>([])
+  const [subtaskInput, setSubtaskInput] = useState('')
+  const [projectInfo, setProjectInfo] = useState<{ name: string; color: string } | null>(null)
+  const overdue = task.due_date && isOverdue(task.due_date) && status !== 'done'
   const titleInputRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { loadComments() }, [task.id])
+  // Reset all local state when switching to a different task
+  useEffect(() => {
+    setTitle(task.title)
+    setStatus(task.status)
+    setPriority(task.priority)
+    setDueDate(task.due_date ?? '')
+    setSectionId(task.section_id ?? '')
+    setDescription(task.description ?? '')
+    loadComments()
+    loadSubtasks()
+  }, [task.id])
+
+  // Sync sectionId when it changes externally (e.g. after a board drag)
+  useEffect(() => {
+    setSectionId(task.section_id ?? '')
+  }, [task.section_id])
+
+  // Fetch project name + color for the Projects section
+  useEffect(() => {
+    supabase.from('projects').select('name, color').eq('id', task.project_id).single()
+      .then(({ data }) => { if (data) setProjectInfo(data as { name: string; color: string }) })
+  }, [task.project_id])
 
   async function loadComments() {
     const { data } = await supabase
@@ -207,6 +244,11 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       .eq('task_id', task.id)
       .order('created_at', { ascending: true })
     setComments((data ?? []) as Comment[])
+  }
+
+  async function loadSubtasks() {
+    const { data } = await supabase.from('tasks').select('*').eq('parent_task_id', task.id).order('position')
+    if (data) setSubtasks(data as Task[])
   }
 
   async function save() {
@@ -218,8 +260,6 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       due_date: dueDate || null,
       section_id: sectionId || null,
       description: description || null,
-      how_to: howTo || null,
-      how_to_attachments: howToAttachments,
     }).eq('id', task.id)
     setSaving(false)
     onUpdated()
@@ -244,233 +284,243 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
     setPostingComment(false)
   }
 
-  async function uploadHowToFile(file: File) {
-    setUploadingHowTo(true)
-    const ext = file.name.split('.').pop()
-    const path = `how-to/${task.id}/${Date.now()}.${ext}`
-    const { error } = await supabase.storage.from('task-attachments').upload(path, file)
-    if (!error) {
-      const { data: urlData } = supabase.storage.from('task-attachments').getPublicUrl(path)
-      setHowToAttachments(prev => [...prev, urlData.publicUrl])
-    }
-    setUploadingHowTo(false)
+  async function addSubtask() {
+    const t = subtaskInput.trim()
+    if (!t) return
+    await supabase.from('tasks').insert({
+      project_id: task.project_id,
+      section_id: task.section_id,
+      parent_task_id: task.id,
+      title: t,
+      position: subtasks.length,
+      depth: (task.depth ?? 0) + 1,
+    })
+    setSubtaskInput('')
+    loadSubtasks()
+    onUpdated()
   }
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden bg-white">
-      {/* Header */}
-      <div className="flex items-start gap-3 px-5 pt-5 pb-3 border-b border-slate-100">
-        <input
-          ref={titleInputRef}
-          value={title}
-          onChange={e => setTitle(e.target.value)}
-          onBlur={save}
-          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); titleInputRef.current?.blur() } }}
-          className={cn(
-            'flex-1 text-lg font-semibold text-slate-800 bg-transparent outline-none resize-none leading-snug',
-            overdue && 'text-red-600'
-          )}
-          placeholder="Task title"
-        />
-        <div className="flex items-center gap-1 shrink-0">
-          <button onClick={handleDelete} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-            <Trash2 size={15} />
-          </button>
-          <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
-            <X size={15} />
-          </button>
-        </div>
-      </div>
+  const myColor = user ? (memberMap[user.id]?.color ?? '#6366f1') : '#6366f1'
+  const myName = user ? (memberMap[user.id]?.name ?? '') : ''
 
-      {/* Tabs */}
-      <div className="flex border-b border-slate-100 px-5">
-        {(['details', 'activity'] as const).map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={cn(
-              'py-2.5 px-1 mr-4 text-sm font-medium border-b-2 transition-colors',
-              activeTab === tab
-                ? 'border-primary-500 text-primary-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            )}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+  return (
+    <div className="flex flex-col h-full bg-white">
+      {/* Top action bar */}
+      <div className="flex items-center justify-end gap-1 px-4 pt-3 pb-1 shrink-0">
+        <button onClick={handleDelete} className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete task">
+          <Trash2 size={15} />
+        </button>
+        <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
+          <X size={15} />
+        </button>
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {activeTab === 'details' ? (
-          <div className="px-5 py-3">
-            {/* Properties */}
-            <div className="divide-y divide-slate-50">
+        {/* Title */}
+        <div className="px-6 pt-1 pb-5">
+          <input
+            ref={titleInputRef}
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            onBlur={save}
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); titleInputRef.current?.blur() } }}
+            className="w-full text-[22px] font-bold text-slate-900 bg-transparent outline-none placeholder-slate-300 leading-snug"
+            placeholder="Task title"
+          />
+        </div>
 
-              <PropRow icon={<User size={14} />} label="Assignee">
-                <AssigneePicker task={task} memberMap={memberMap} projectId={task.project_id} onUpdated={onUpdated} />
-              </PropRow>
+        {/* Properties */}
+        <div className="px-6 pb-3 border-b border-slate-100">
+          <PropRow label="Assignee">
+            <AssigneePicker task={task} memberMap={memberMap} projectId={task.project_id} onUpdated={onUpdated} />
+          </PropRow>
 
-              <PropRow icon={<Flag size={14} />} label="Priority">
-                <select
-                  value={priority}
-                  onChange={e => { setPriority(e.target.value as typeof priority); setTimeout(save, 0) }}
-                  className="text-sm text-slate-700 bg-transparent outline-none cursor-pointer hover:bg-slate-100 rounded px-1 py-0.5 -mx-1"
-                >
-                  {Object.entries(PRIORITY_LABELS).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
-              </PropRow>
-
-              <PropRow icon={<Calendar size={14} />} label="Due date">
+          <PropRow label="Due date">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center shrink-0">
+                <Calendar size={12} className="text-slate-400" />
+              </div>
+              {dueDate ? (
                 <input
                   type="date"
                   value={dueDate}
                   onChange={e => { setDueDate(e.target.value); setTimeout(save, 0) }}
-                  className={cn(
-                    'text-sm bg-transparent outline-none cursor-pointer hover:bg-slate-100 rounded px-1 py-0.5 -mx-1',
-                    overdue ? 'text-red-500' : 'text-slate-700'
-                  )}
+                  className={cn('text-sm bg-transparent outline-none cursor-pointer', overdue ? 'text-red-500' : 'text-slate-700')}
                 />
-              </PropRow>
-
-              <PropRow icon={<Layers size={14} />} label="Status">
-                <select
-                  value={sectionId}
-                  onChange={e => {
-                    const newId = e.target.value
-                    setSectionId(newId)
-                    const completionSectionId = localStorage.getItem(`taskhi:completion-section:${task.project_id}`) ?? ''
-                    if (newId && newId === completionSectionId) setStatus('done')
-                    setTimeout(save, 0)
-                  }}
-                  className="text-sm text-slate-700 bg-transparent outline-none cursor-pointer hover:bg-slate-100 rounded px-1 py-0.5 -mx-1"
-                >
-                  <option value="">No section</option>
-                  {sections.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
-                  ))}
-                </select>
-              </PropRow>
-
-            </div>
-
-            {/* Description */}
-            <div className="mt-4">
-              <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Description</label>
-              <textarea
-                value={description}
-                onChange={e => setDescription(e.target.value)}
-                onBlur={save}
-                placeholder="Add a description…"
-                rows={3}
-                className="w-full text-sm text-slate-700 bg-slate-50 rounded-lg p-3 outline-none resize-none focus:ring-2 focus:ring-primary-200 placeholder-slate-400"
-              />
-            </div>
-
-            {/* How To */}
-            <div className="mt-4">
-              <button
-                onClick={() => setShowHowTo(v => !v)}
-                className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5 hover:text-slate-600 transition-colors"
-              >
-                <BookOpen size={12} />
-                How To
-                <span className="ml-1 text-slate-300">{showHowTo ? '▲' : '▼'}</span>
-              </button>
-              {showHowTo && (
-                <div className="space-y-2">
-                  <textarea
-                    value={howTo}
-                    onChange={e => setHowTo(e.target.value)}
-                    onBlur={save}
-                    placeholder="Add how-to notes, instructions, or links…"
-                    rows={4}
-                    className="w-full text-sm text-slate-700 bg-slate-50 rounded-lg p-3 outline-none resize-none focus:ring-2 focus:ring-primary-200 placeholder-slate-400"
-                  />
-                  {/* Attachments */}
-                  <div className="space-y-1.5">
-                    {howToAttachments.map((url, i) => (
-                      <div key={i} className="flex items-center gap-2 text-xs">
-                        <FileText size={11} className="text-slate-400 shrink-0" />
-                        <a href={url} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline truncate flex-1">
-                          {url.split('/').pop()}
-                        </a>
-                        <button
-                          onClick={() => { setHowToAttachments(prev => prev.filter((_, j) => j !== i)); setTimeout(save, 0) }}
-                          className="text-slate-400 hover:text-red-500 transition-colors shrink-0"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      onClick={() => howToFileRef.current?.click()}
-                      disabled={uploadingHowTo}
-                      className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-primary-600 transition-colors"
-                    >
-                      <Plus size={11} />
-                      {uploadingHowTo ? 'Uploading…' : 'Attach file'}
-                    </button>
-                    <input
-                      ref={howToFileRef}
-                      type="file"
-                      className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadHowToFile(f) }}
-                    />
-                  </div>
-                </div>
+              ) : (
+                <label className="flex items-center cursor-pointer">
+                  <span className="text-sm text-slate-400">No due date</span>
+                  <input type="date" className="sr-only" onChange={e => { setDueDate(e.target.value); setTimeout(save, 0) }} />
+                </label>
               )}
             </div>
+          </PropRow>
+
+          <PropRow label="Priority">
+            <select
+              value={priority}
+              onChange={e => { setPriority(e.target.value as typeof priority); setTimeout(save, 0) }}
+              className="text-sm text-slate-700 bg-transparent outline-none cursor-pointer hover:text-slate-900"
+            >
+              {Object.entries(PRIORITY_LABELS).map(([v, l]) => (
+                <option key={v} value={v}>{l}</option>
+              ))}
+            </select>
+          </PropRow>
+        </div>
+
+        {/* Projects / Status */}
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2 mb-2">
+            <h3 className="text-sm font-semibold text-slate-800">Projects</h3>
+            <span className="text-xs bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5 font-medium">1</span>
           </div>
-        ) : (
-          <div className="px-5 py-3 space-y-4">
-            {comments.length === 0 && (
-              <p className="text-sm text-slate-400 text-center py-8">No activity yet</p>
-            )}
-            {comments.map(c => (
-              <div key={c.id} className="flex gap-3">
-                <div
-                  className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0"
-                  style={{ background: c.author?.avatar_color ?? '#6366f1' }}
-                >
-                  {getInitials(c.author?.name ?? '?')}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-xs font-semibold text-slate-700">{c.author?.name ?? 'Unknown'}</span>
-                    <span className="text-[10px] text-slate-400">{relativeTime(c.created_at)}</span>
-                  </div>
-                  <p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap break-words">{renderContent(c.content)}</p>
-                </div>
-              </div>
+          <div className="flex items-center gap-2 py-1.5 pl-1">
+            <ChevronDown size={13} className="text-slate-400 shrink-0" />
+            <div
+              className="w-4 h-4 rounded-sm shrink-0"
+              style={{ background: projectInfo?.color ?? '#94a3b8' }}
+            />
+            <span className="text-sm text-slate-700 flex-1 truncate min-w-0">
+              {projectInfo?.name ?? '…'}
+            </span>
+            <select
+              value={sectionId}
+              onChange={e => {
+                const newId = e.target.value
+                setSectionId(newId)
+                const completionSectionId = localStorage.getItem(`taskhi:completion-section:${task.project_id}`) ?? ''
+                if (newId && newId === completionSectionId) setStatus('done')
+                setTimeout(save, 0)
+              }}
+              className="text-sm text-slate-600 bg-slate-100 rounded-full px-3 py-0.5 outline-none cursor-pointer border-0 shrink-0 max-w-[140px]"
+            >
+              <option value="">No section</option>
+              {sections.map(s => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </div>
+          <p className="text-xs text-slate-400 pl-6 mt-1">No custom fields in this project</p>
+        </div>
+
+        {/* Description */}
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-800 mb-2">Description</h3>
+          <textarea
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            onBlur={save}
+            placeholder="What is this task about?"
+            rows={3}
+            className="w-full text-sm text-slate-600 bg-transparent outline-none resize-none placeholder-slate-400 leading-relaxed"
+          />
+        </div>
+
+        {/* Subtasks */}
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2 mb-3">
+            <h3 className="text-sm font-semibold text-slate-800">Subtasks</h3>
+            <button
+              onClick={() => document.getElementById('subtask-input')?.focus()}
+              className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          <div className="space-y-0.5 mb-1">
+            {subtasks.map(sub => (
+              <SubtaskRow key={sub.id} sub={sub} memberMap={memberMap} onUpdate={() => { loadSubtasks(); onUpdated() }} />
             ))}
+          </div>
+          <div className="flex items-center gap-2 py-2 border-t border-slate-50">
+            <input
+              id="subtask-input"
+              className="flex-1 text-sm text-slate-600 bg-transparent outline-none placeholder-slate-400"
+              placeholder="Type to add a subtask…"
+              value={subtaskInput}
+              onChange={e => setSubtaskInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') { e.preventDefault(); addSubtask() }
+                if (e.key === 'Escape') setSubtaskInput('')
+              }}
+            />
+            <div className="flex items-center gap-1 shrink-0">
+              <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center">
+                <Calendar size={10} className="text-slate-400" />
+              </div>
+              <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-300 flex items-center justify-center">
+                <User size={10} className="text-slate-400" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Attachments */}
+        <div className="px-6 py-4 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-slate-800">Attachments</h3>
+            <button className="p-0.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <Plus size={14} />
+            </button>
+          </div>
+        </div>
+
+        {/* Activity */}
+        {comments.length > 0 && (
+          <div className="px-6 py-4">
+            <div className="space-y-4">
+              {comments.map(c => (
+                <div key={c.id} className="flex gap-3">
+                  <div
+                    className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 mt-0.5"
+                    style={{ background: c.author?.avatar_color ?? '#6366f1' }}
+                  >
+                    {getInitials(c.author?.name ?? '?')}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-xs font-semibold text-slate-700">{c.author?.name ?? 'Unknown'}</span>
+                      <span className="text-[10px] text-slate-400">{relativeTime(c.created_at)}</span>
+                    </div>
+                    <p className="text-sm text-slate-600 mt-0.5 whitespace-pre-wrap break-words">{renderContent(c.content)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Comment box – always visible */}
+      {/* Comment input — always visible */}
       <div className="border-t border-slate-100 px-5 py-3 shrink-0">
-        <div className="flex gap-2 items-end">
-          <textarea
+        <div className="flex gap-3 items-center">
+          <div
+            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-semibold shrink-0"
+            style={{ background: myColor }}
+          >
+            {getInitials(myName)}
+          </div>
+          <input
             value={newComment}
             onChange={e => setNewComment(e.target.value)}
             onKeyDown={e => {
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); postComment() }
             }}
-            placeholder="Add a comment… (@mention to notify)"
-            rows={2}
-            className="flex-1 text-sm text-slate-700 bg-slate-50 rounded-lg px-3 py-2 outline-none resize-none focus:ring-2 focus:ring-primary-200 placeholder-slate-400"
+            placeholder="Add a comment…"
+            className="flex-1 text-sm text-slate-600 bg-transparent outline-none placeholder-slate-400"
           />
-          <button
-            onClick={postComment}
-            disabled={!newComment.trim() || postingComment}
-            className="p-2 rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors shrink-0"
-          >
-            <Send size={14} />
-          </button>
+          {newComment.trim() && (
+            <button
+              onClick={postComment}
+              disabled={postingComment}
+              className="p-1.5 rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-40 transition-colors shrink-0"
+            >
+              <Send size={13} />
+            </button>
+          )}
         </div>
-        {saving && <p className="text-[10px] text-slate-400 mt-1">Saving…</p>}
+        {saving && <p className="text-[10px] text-slate-400 mt-1 ml-11">Saving…</p>}
       </div>
     </div>
   )
