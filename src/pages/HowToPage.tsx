@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BookOpen, Upload, FileText, Trash2, ExternalLink } from 'lucide-react'
 import { supabase } from '../lib/supabase'
-import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
 
 interface Doc {
@@ -18,7 +17,6 @@ function formatSize(bytes: number) {
 }
 
 export function HowToPage() {
-  const { user } = useAuth()
   const [docs, setDocs] = useState<Doc[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -30,7 +28,7 @@ export function HowToPage() {
     setLoading(true)
     const { data } = await supabase.storage
       .from('how-to-docs')
-      .list(user!.id, { sortBy: { column: 'created_at', order: 'desc' } })
+      .list('', { sortBy: { column: 'created_at', order: 'desc' } })
     if (data) setDocs(data as Doc[])
     setLoading(false)
   }
@@ -41,10 +39,9 @@ export function HowToPage() {
     setUploading(true)
     setUploadError(null)
     for (const file of files) {
-      const path = `${user!.id}/${file.name}`
       const { error } = await supabase.storage
         .from('how-to-docs')
-        .upload(path, file, { upsert: true })
+        .upload(file.name, file, { upsert: true })
       if (error) { setUploadError(error.message); setUploading(false); return }
     }
     setUploading(false)
@@ -55,13 +52,13 @@ export function HowToPage() {
   async function handleOpen(doc: Doc) {
     const { data } = await supabase.storage
       .from('how-to-docs')
-      .createSignedUrl(`${user!.id}/${doc.name}`, 300)
+      .createSignedUrl(doc.name, 300)
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
   }
 
   async function handleDelete(doc: Doc) {
     if (!confirm(`Delete "${doc.name}"?`)) return
-    await supabase.storage.from('how-to-docs').remove([`${user!.id}/${doc.name}`])
+    await supabase.storage.from('how-to-docs').remove([doc.name])
     setDocs(prev => prev.filter(d => d.id !== doc.id))
   }
 
@@ -70,7 +67,7 @@ export function HowToPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">How To</h1>
-          <p className="text-slate-500 text-sm mt-1">Reference documents for common tasks.</p>
+          <p className="text-slate-500 text-sm mt-1">Shared reference documents for common tasks.</p>
         </div>
         <label className={cn(
           'flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors',
@@ -102,7 +99,7 @@ export function HowToPage() {
         <div className="text-center py-20">
           <BookOpen size={40} className="mx-auto text-slate-300 mb-3" />
           <p className="text-slate-500 font-medium">No documents yet</p>
-          <p className="text-slate-400 text-sm mt-1">Upload how-to documents to keep them handy.</p>
+          <p className="text-slate-400 text-sm mt-1">Upload how-to documents to share with everyone.</p>
         </div>
       ) : (
         <div className="space-y-2">
