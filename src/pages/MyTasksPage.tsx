@@ -5,11 +5,12 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { Task } from '../types'
 import { StatusBadge, PriorityBadge } from '../components/ui/Badge'
-import { formatDate, isOverdue, cn, STATUS_LABELS, PRIORITY_LABELS } from '../lib/utils'
+import { formatDate, isOverdue, cn, getInitials, STATUS_LABELS, PRIORITY_LABELS } from '../lib/utils'
 
 export function MyTasksPage() {
   const { user } = useAuth()
   const [tasks, setTasks] = useState<Task[]>([])
+  const [memberMap, setMemberMap] = useState<Record<string, { name: string; color: string }>>({})
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState('all')
   const [priorityFilter, setPriorityFilter] = useState('all')
@@ -25,7 +26,21 @@ export function MyTasksPage() {
       .select('*')
       .eq('created_by', user!.id)
       .order('due_date', { ascending: true, nullsFirst: false })
-    if (data) setTasks(data)
+    const taskList = (data ?? []) as Task[]
+    setTasks(taskList)
+
+    const allIds = [...new Set(taskList.flatMap(t => t.assignee_ids ?? []))]
+    if (allIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, name, avatar_color')
+        .in('id', allIds)
+      const map: Record<string, { name: string; color: string }> = {}
+      for (const p of profiles ?? []) {
+        map[p.id] = { name: p.name ?? p.id, color: p.avatar_color ?? '#94a3b8' }
+      }
+      setMemberMap(map)
+    }
     setLoading(false)
   }
 
@@ -38,7 +53,7 @@ export function MyTasksPage() {
   const selectClass = 'h-8 px-2 text-xs rounded-md border border-slate-200 bg-white text-slate-600 focus:outline-none'
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-8 pb-20">
+    <div className="max-w-4xl mx-auto px-6 py-8 pb-20">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-slate-800">My Tasks</h1>
         <div className="flex items-center gap-2">
@@ -69,12 +84,14 @@ export function MyTasksPage() {
           {/* Header */}
           <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
             <span className="flex-1">Task</span>
+            <span className="w-24 text-center">Assignee</span>
             <span className="w-28 text-center">Status</span>
             <span className="w-24 text-center">Priority</span>
             <span className="w-24 text-center">Due date</span>
           </div>
           {filtered.map(task => {
             const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
+            const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
             return (
               <Link
                 key={task.id}
@@ -84,6 +101,29 @@ export function MyTasksPage() {
                 <span className={cn('flex-1 text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
                   {task.title}
                 </span>
+                <div className="w-24 flex justify-center">
+                  {assignees.length === 0 ? (
+                    <span className="text-xs text-slate-300">—</span>
+                  ) : (
+                    <div className="flex -space-x-1.5">
+                      {assignees.slice(0, 3).map((a, i) => (
+                        <div
+                          key={i}
+                          title={a.name}
+                          className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-semibold shrink-0"
+                          style={{ background: a.color }}
+                        >
+                          {getInitials(a.name)}
+                        </div>
+                      ))}
+                      {assignees.length > 3 && (
+                        <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 shrink-0">
+                          +{assignees.length - 3}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="w-28 flex justify-center">
                   <StatusBadge status={task.status} />
                 </div>
