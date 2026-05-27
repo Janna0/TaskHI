@@ -24,7 +24,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, CheckCircle2, UserCircle, Calendar } from 'lucide-react'
+import { Plus, MoreHorizontal, Pencil, Trash2, GripVertical, CheckCircle2, UserCircle, CalendarDays } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -66,7 +66,13 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Inline add task card ──────────────────────────────────────────────────────────────
+interface Member {
+  id: string
+  name: string
+  color: string
+}
+
+// ── Inline add task card ──────────────────────────────────────────────────────────
 
 function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   sectionId: string
@@ -77,12 +83,38 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   const { user } = useAuth()
   const [title, setTitle] = useState('')
   const [saving, setSaving] = useState(false)
+  const [assigneeIds, setAssigneeIds] = useState<string[]>([])
+  const [dueDate, setDueDate] = useState('')
+  const [members, setMembers] = useState<Member[]>([])
+  const [showAssignee, setShowAssignee] = useState(false)
+
+  const cardRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const committingRef = useRef(false)
+  const datePickerActiveRef = useRef(false)
 
   useEffect(() => {
     requestAnimationFrame(() => inputRef.current?.focus())
-  }, [])
+    loadMembers()
+  }, [projectId])
+
+  async function loadMembers() {
+    try {
+      const { data } = await supabase
+        .from('project_members')
+        .select('user_id, profile:profiles(id, name, avatar_color)')
+        .eq('project_id', projectId)
+      if (data) {
+        setMembers(
+          (data as any[]).map(r => ({
+            id: r.user_id,
+            name: (r.profile as any)?.name ?? r.user_id,
+            color: (r.profile as any)?.avatar_color ?? '#94a3b8',
+          }))
+        )
+      }
+    } catch {}
+  }
 
   async function save() {
     if (committingRef.current) return
@@ -98,18 +130,40 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
       priority: 'medium',
       position,
       created_by: user.id,
-      assignee_ids: [],
+      assignee_ids: assigneeIds,
+      due_date: dueDate || null,
     })
     onDone()
   }
 
+  function handleCardBlur(e: React.FocusEvent) {
+    if (cardRef.current?.contains(e.relatedTarget as Node)) return
+    // datePickerActiveRef stays true during the synchronous blur bubble,
+    // so this correctly skips save when the browser date picker closes
+    if (datePickerActiveRef.current) return
+    save()
+  }
+
+  function toggleAssignee(id: string) {
+    setAssigneeIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  const selectedMembers = members.filter(m => assigneeIds.includes(m.id))
+
+  const displayDate = dueDate
+    ? new Date(dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+    : null
+
   return (
-    <div className="bg-white rounded-lg p-3 border-2 border-primary-300 shadow-sm">
+    <div
+      ref={cardRef}
+      onBlur={handleCardBlur}
+      className="bg-white rounded-lg p-3 border-2 border-primary-300 shadow-sm"
+    >
       <input
         ref={inputRef}
         value={title}
         onChange={e => setTitle(e.target.value)}
-        onBlur={save}
         onKeyDown={e => {
           if (e.key === 'Enter') { e.preventDefault(); save() }
           if (e.key === 'Escape') { committingRef.current = true; onDone() }
@@ -118,9 +172,88 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
         disabled={saving}
         className="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent font-medium leading-snug"
       />
+
       <div className="flex items-center gap-2 mt-2.5">
-        <UserCircle size={18} className="text-slate-300" />
-        <Calendar size={16} className="text-slate-300" />
+        {/* Assignee picker */}
+        <div className="relative">
+          <button
+            type="button"
+            onMouseDown={e => e.preventDefault()}
+            onClick={() => setShowAssignee(v => !v)}
+            title="Assign this task"
+            className="flex items-center justify-center w-7 h-7 rounded-full border-2 border-dashed transition-colors hover:border-primary-400"
+            style={{ borderColor: assigneeIds.length ? 'transparent' : undefined }}
+          >
+            {selectedMembers.length === 0 ? (
+              <UserCircle size={16} className="text-slate-300" />
+            ) : (
+              <div className="flex -space-x-1.5">
+                {selectedMembers.slice(0, 2).map((m, i) => (
+                  <div key={i}
+                    className="w-6 h-6 rounded-full border-2 border-white flex items-center justify-center text-white text-[9px] font-bold"
+                    style={{ background: m.color }}>
+                    {getInitials(m.name)}
+                  </div>
+                ))}
+                {selectedMembers.length > 2 && (
+                  <div className="w-6 h-6 rounded-full border-2 border-white bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600">
+                    +{selectedMembers.length - 2}
+                  </div>
+                )}
+              </div>
+            )}
+          </button>
+
+          {showAssignee && (
+            <div className="absolute bottom-full mb-1.5 left-0 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[170px]">
+              {members.length === 0 ? (
+                <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
+              ) : members.map(m => {
+                const selected = assigneeIds.includes(m.id)
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onMouseDown={e => e.preventDefault()}
+                    onClick={() => toggleAssignee(m.id)}
+                    className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left"
+                  >
+                    <div
+                      className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0"
+                      style={{ background: m.color }}>
+                      {getInitials(m.name)}
+                    </div>
+                    <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                    {selected && <CheckCircle2 size={14} className="text-primary-500 shrink-0" />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Due date picker */}
+        <div className="relative flex items-center gap-1.5">
+          <div className="relative w-7 h-7" title="Add due date">
+            <div className={cn(
+              'w-7 h-7 rounded-full border-2 border-dashed flex items-center justify-center transition-colors',
+              dueDate ? 'border-primary-400' : 'border-slate-300 hover:border-primary-400'
+            )}>
+              <CalendarDays size={13} className={dueDate ? 'text-primary-500' : 'text-slate-300'} />
+            </div>
+            <input
+              type="date"
+              value={dueDate}
+              onChange={e => setDueDate(e.target.value)}
+              onFocus={() => { datePickerActiveRef.current = true }}
+              onBlur={() => { setTimeout(() => { datePickerActiveRef.current = false }, 150) }}
+              className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+            />
+          </div>
+          {displayDate && (
+            <span className="text-xs text-slate-500">{displayDate}</span>
+          )}
+        </div>
       </div>
     </div>
   )
@@ -459,11 +592,9 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
     else localStorage.removeItem(completionKey)
   }
 
-  // Local section order (optimistic during column drag)
   const [localSections, setLocalSections] = useState<Section[]>(sections)
   const localSectionsRef = useRef<Section[]>(sections)
 
-  // Local task order per section — lazy init so tasks render immediately
   const [taskOrder, setTaskOrder] = useState<Record<string, string[]>>(
     () => buildTaskOrder(tasks, sections)
   )
@@ -471,7 +602,6 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
   const isDraggingRef = useRef(false)
   const lastOverId = useRef<string | null>(null)
 
-  // Active drag info
   const [activeDragType, setActiveDragType] = useState<'task' | 'column' | null>(null)
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null)
   const [activeColId, setActiveColId] = useState<string | null>(null)
@@ -481,14 +611,12 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
   )
 
-  // Sync sections prop → local (skip during drag)
   useEffect(() => {
     if (isDraggingRef.current) return
     setLocalSections(sections)
     localSectionsRef.current = sections
   }, [sections])
 
-  // Sync tasks prop → taskOrder (skip during drag)
   useEffect(() => {
     if (isDraggingRef.current) return
     const order = buildTaskOrder(tasks, sections)
@@ -503,9 +631,6 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
     return ''
   }
 
-  // Multi-container collision detection:
-  // - Column drags: closestCenter among section droppables only
-  // - Task drags: pointerWithin → rectIntersection, drill into column with closestCenter
   const collisionDetection = useCallback<CollisionDetection>((args) => {
     const activeType = args.active.data.current?.type as string | undefined
     if (activeType === 'column') {
@@ -561,10 +686,8 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
       const targetSec = overType === 'column' ? overId : findSectionForTask(overId)
       if (!targetSec) return
 
-      // Skip same-section reorders — finalized in handleDragEnd to avoid transform conflicts
       if (activeSec === targetSec) return
 
-      // Cross-section move: update state so card appears in the new column
       const cur = taskOrderRef.current
       const newOrder = { ...cur }
       newOrder[activeSec] = (newOrder[activeSec] ?? []).filter(id => id !== activeId)
@@ -600,7 +723,6 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
       const originalTask = tasks.find(t => t.id === taskId)
       if (!originalTask) return
 
-      // Apply same-section reorder now (skipped during dragOver)
       if (event.over && event.over.id !== taskId) {
         const overId = event.over.id as string
         const overType = event.over.data.current?.type
@@ -641,7 +763,6 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
 
       if (crossSection || movedToCompletion) onRefresh()
     } else if (type === 'column') {
-      // Persist new section positions
       const newSecs = localSectionsRef.current
       await Promise.all(
         newSecs.map((sec, idx) =>
@@ -710,7 +831,6 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
             />
           ))}
 
-          {/* Add section */}
           <div className="shrink-0 w-56">
             {showAddSection ? (
               <AddSectionForm
