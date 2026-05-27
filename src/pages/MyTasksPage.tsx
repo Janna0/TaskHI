@@ -89,6 +89,21 @@ function MultiSelect({ label, options, value, onChange }: {
   )
 }
 
+function SectionFilters({ statusFilter, priorityFilter, onStatusChange, onPriorityChange }: {
+  statusFilter: string[]
+  priorityFilter: string[]
+  onStatusChange: (v: string[]) => void
+  onPriorityChange: (v: string[]) => void
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <Filter size={12} className="text-slate-300" />
+      <MultiSelect label="All statuses" options={STATUS_OPTIONS} value={statusFilter} onChange={onStatusChange} />
+      <MultiSelect label="All priorities" options={PRIORITY_OPTIONS} value={priorityFilter} onChange={onPriorityChange} />
+    </div>
+  )
+}
+
 function TaskRow({ task, memberMap, projectName }: {
   task: Task
   memberMap: Record<string, { name: string; color: string }>
@@ -166,8 +181,11 @@ export function MyTasksPage() {
   const [memberMap, setMemberMap] = useState<Record<string, { name: string; color: string }>>({})
   const [projectNames, setProjectNames] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [statusFilter, setStatusFilter] = useState<string[]>([])
-  const [priorityFilter, setPriorityFilter] = useState<string[]>([])
+
+  const [assignedStatusFilter, setAssignedStatusFilter] = useState<string[]>([])
+  const [assignedPriorityFilter, setAssignedPriorityFilter] = useState<string[]>([])
+  const [projectStatusFilter, setProjectStatusFilter] = useState<string[]>([])
+  const [projectPriorityFilter, setProjectPriorityFilter] = useState<string[]>([])
 
   const storageKey = user ? `taskhi:task-filters:${user.id}` : null
 
@@ -176,17 +194,22 @@ export function MyTasksPage() {
     try {
       const saved = localStorage.getItem(storageKey)
       if (saved) {
-        const { status, priority } = JSON.parse(saved)
-        if (status) setStatusFilter(status)
-        if (priority) setPriorityFilter(priority)
+        const { assigned, projects } = JSON.parse(saved)
+        if (assigned?.status) setAssignedStatusFilter(assigned.status)
+        if (assigned?.priority) setAssignedPriorityFilter(assigned.priority)
+        if (projects?.status) setProjectStatusFilter(projects.status)
+        if (projects?.priority) setProjectPriorityFilter(projects.priority)
       }
     } catch {}
   }, [storageKey])
 
   useEffect(() => {
     if (!storageKey) return
-    localStorage.setItem(storageKey, JSON.stringify({ status: statusFilter, priority: priorityFilter }))
-  }, [storageKey, statusFilter, priorityFilter])
+    localStorage.setItem(storageKey, JSON.stringify({
+      assigned: { status: assignedStatusFilter, priority: assignedPriorityFilter },
+      projects: { status: projectStatusFilter, priority: projectPriorityFilter },
+    }))
+  }, [storageKey, assignedStatusFilter, assignedPriorityFilter, projectStatusFilter, projectPriorityFilter])
 
   useEffect(() => {
     if (user) load()
@@ -230,39 +253,23 @@ export function MyTasksPage() {
     setLoading(false)
   }
 
-  function applyFilters(tasks: Task[]) {
-    return tasks.filter(t => {
-      if (statusFilter.length > 0 && !statusFilter.includes(t.status)) return false
-      if (priorityFilter.length > 0 && !priorityFilter.includes(t.priority)) return false
-      return true
-    })
-  }
+  const filteredAssigned = assignedTasks.filter(t => {
+    if (assignedStatusFilter.length > 0 && !assignedStatusFilter.includes(t.status)) return false
+    if (assignedPriorityFilter.length > 0 && !assignedPriorityFilter.includes(t.priority)) return false
+    return true
+  })
 
-  const filteredAssigned = applyFilters(assignedTasks)
-  const filteredProject = applyFilters(projectTasks)
+  const filteredProject = projectTasks.filter(t => {
+    if (projectStatusFilter.length > 0 && !projectStatusFilter.includes(t.status)) return false
+    if (projectPriorityFilter.length > 0 && !projectPriorityFilter.includes(t.priority)) return false
+    return true
+  })
 
   return (
     <div className="max-w-5xl mx-auto px-6 py-8 pb-20">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-2xl font-bold text-slate-800">
-          {view === 'assigned' ? 'Assigned to me' : view === 'projects' ? 'My projects' : 'Tasks'}
-        </h1>
-        <div className="flex items-center gap-2">
-          <Filter size={14} className="text-slate-400" />
-          <MultiSelect
-            label="All statuses"
-            options={STATUS_OPTIONS}
-            value={statusFilter}
-            onChange={setStatusFilter}
-          />
-          <MultiSelect
-            label="All priorities"
-            options={PRIORITY_OPTIONS}
-            value={priorityFilter}
-            onChange={setPriorityFilter}
-          />
-        </div>
-      </div>
+      <h1 className="text-2xl font-bold text-slate-800 mb-8">
+        {view === 'assigned' ? 'Assigned to me' : view === 'projects' ? 'My projects' : 'Tasks'}
+      </h1>
 
       {loading ? (
         <p className="text-slate-400 text-sm">Loading…</p>
@@ -273,6 +280,14 @@ export function MyTasksPage() {
               <UserCheck size={16} className="text-primary-500" />
               <h2 className="text-base font-semibold text-slate-700">Assigned to me</h2>
               <span className="ml-1 text-xs text-slate-400">{filteredAssigned.length}</span>
+              <div className="ml-auto">
+                <SectionFilters
+                  statusFilter={assignedStatusFilter}
+                  priorityFilter={assignedPriorityFilter}
+                  onStatusChange={setAssignedStatusFilter}
+                  onPriorityChange={setAssignedPriorityFilter}
+                />
+              </div>
             </div>
             {filteredAssigned.length === 0 ? (
               <div className="flex flex-col items-center py-10 bg-slate-50 rounded-xl border border-slate-100">
@@ -296,6 +311,14 @@ export function MyTasksPage() {
               <Briefcase size={16} className="text-indigo-500" />
               <h2 className="text-base font-semibold text-slate-700">My projects</h2>
               <span className="ml-1 text-xs text-slate-400">{filteredProject.length}</span>
+              <div className="ml-auto">
+                <SectionFilters
+                  statusFilter={projectStatusFilter}
+                  priorityFilter={projectPriorityFilter}
+                  onStatusChange={setProjectStatusFilter}
+                  onPriorityChange={setProjectPriorityFilter}
+                />
+              </div>
             </div>
             {filteredProject.length === 0 ? (
               <div className="flex flex-col items-center py-10 bg-slate-50 rounded-xl border border-slate-100">
