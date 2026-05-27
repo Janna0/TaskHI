@@ -11,6 +11,7 @@ import { TaskDetailPanel } from '../components/tasks/TaskDetailPanel'
 import { CreateTaskModal } from '../components/tasks/CreateTaskModal'
 import { cn, isOverdue, getInitials } from '../lib/utils'
 import { loadFavoriteIds, setFavorite } from '../lib/favorites'
+import { ProjectIconBadge } from '../components/ui/ProjectIconBadge'
 
 type View = 'overview' | 'list' | 'board'
 
@@ -48,13 +49,6 @@ export function ProjectView() {
     const task = tasks.find(t => t.id === autoOpenTaskId)
     if (task) setSelectedTask(task)
   }, [autoOpenTaskId, tasks])
-
-  // Keep detail panel in sync when tasks refresh (e.g. after drag changes section)
-  useEffect(() => {
-    if (!selectedTask) return
-    const updated = tasks.find(t => t.id === selectedTask.id)
-    if (updated) setSelectedTask(updated)
-  }, [tasks])
 
   function setAsDefault(v: View) {
     if (!id) return
@@ -160,7 +154,7 @@ export function ProjectView() {
       {/* Project name row */}
       <div className="px-6 pt-5 pb-0 bg-white">
         <div className="flex items-center gap-3 mb-4">
-          <span className="w-6 h-6 rounded-md shrink-0" style={{ background: project.color }} />
+          <ProjectIconBadge project={project} size="lg" />
           <h1 className="font-bold text-xl text-slate-900">{project.name}</h1>
           <button onClick={toggleFavorite} className="p-1 rounded hover:bg-slate-100 transition-colors">
             <Star size={16} className={cn(project.is_favorite ? 'text-amber-400 fill-amber-400' : 'text-slate-400 hover:text-slate-600')} />
@@ -301,7 +295,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────
+// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, onAdd, onRemove }: {
   projectId: string
@@ -446,7 +440,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ────────────────────────────────────────────────────────────────────
+// ── Overview Tab ───────────────────────────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 

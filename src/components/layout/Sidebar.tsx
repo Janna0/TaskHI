@@ -16,6 +16,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { cn, getInitials, PROJECT_COLORS } from '../../lib/utils'
 import { Project } from '../../types'
 import { supabase } from '../../lib/supabase'
+import { ProjectIconBadge } from '../ui/ProjectIconBadge'
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Briefcase, Target, Rocket, Calendar,
@@ -29,28 +30,6 @@ const ICON_MAP: Record<string, LucideIcon> = {
 }
 
 const PROJECT_ICON_NAMES = Object.keys(ICON_MAP)
-
-function isImageUrl(icon: string | null | undefined): boolean {
-  return !!icon && (icon.startsWith('http') || icon.startsWith('data:'))
-}
-
-function ProjectIconBadge({ project }: { project: Project }) {
-  const isImg = isImageUrl(project.icon)
-  const Icon = !isImg && project.icon ? ICON_MAP[project.icon] : undefined
-  return (
-    <span
-      className="w-5 h-5 rounded flex items-center justify-center shrink-0 overflow-hidden text-white"
-      style={{ background: project.color }}
-    >
-      {isImg
-        ? <img src={project.icon!} alt="" className="w-full h-full object-cover" />
-        : Icon
-          ? <Icon size={12} strokeWidth={2.5} />
-          : <span className="text-[11px] font-bold leading-none">{project.name[0]?.toUpperCase()}</span>
-      }
-    </span>
-  )
-}
 
 interface SidebarProps {
   projects: Project[]
@@ -395,7 +374,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">Starred</p>
               {favorites.map(p => (
                 <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
-                  <ProjectIconBadge project={p} />
+                  <ProjectIconBadge project={p} size="sm" />
                   <span className="truncate">{p.name}</span>
                   <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />
                 </NavLink>
@@ -412,7 +391,7 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               </div>
               {activeProjects.map(p => (
                 <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
-                  <ProjectIconBadge project={p} />
+                  <ProjectIconBadge project={p} size="sm" />
                   <span className="truncate">{p.name}</span>
                   {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
                 </NavLink>
