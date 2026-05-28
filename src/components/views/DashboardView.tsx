@@ -311,9 +311,10 @@ export function DashboardView({ sections, tasks: allTasks, memberMap }: Props) {
     .slice(0, 8)
 
   const overTime = useMemo(() => {
-    if (tasks.length === 0) return []
-    const sorted = [...tasks].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
-    const start = new Date(sorted[0].created_at)
+    const doneTasks = tasks.filter(t => t.status === 'done')
+    if (doneTasks.length === 0) return []
+    const sorted = [...doneTasks].sort((a, b) => new Date(a.updated_at).getTime() - new Date(b.updated_at).getTime())
+    const start = new Date(sorted[0].updated_at)
     start.setDate(start.getDate() - start.getDay())
     start.setHours(0, 0, 0, 0)
     const end = new Date()
@@ -324,7 +325,7 @@ export function DashboardView({ sections, tasks: allTasks, memberMap }: Props) {
       snap.setDate(snap.getDate() + 7)
       result.push({
         label: `${MONTHS[cur.getMonth()]} ${cur.getDate()}`,
-        count: tasks.filter(t => new Date(t.created_at) < snap).length,
+        count: doneTasks.filter(t => new Date(t.updated_at) < snap).length,
       })
       cur.setDate(cur.getDate() + 7)
     }
@@ -356,7 +357,7 @@ export function DashboardView({ sections, tasks: allTasks, memberMap }: Props) {
         <ChartCard title="Tasks by assignee">
           <StackedBarChart data={byAssignee} />
         </ChartCard>
-        <ChartCard title="Task creation over time">
+        <ChartCard title="Task completion over time">
           <AreaChart data={overTime} />
         </ChartCard>
       </div>
