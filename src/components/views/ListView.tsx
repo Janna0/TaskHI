@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
@@ -37,7 +38,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Assignee avatars (shared) ────────────────────────────────────────────────
+// ── Assignee avatars (shared) ──────────────────────────────────────────────────────────
 
 function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<string, { name: string; color: string }> }) {
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
@@ -62,7 +63,73 @@ function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<st
   )
 }
 
-// ── Sortable task row ─────────────────────────────────────────────────────────
+// ── Portal date cell ─────────────────────────────────────────────────────────────────────
+
+function DateCell({ task, overdue, onUpdate }: {
+  task: Task
+  overdue: boolean | null | undefined
+  onUpdate: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (wrapperRef.current?.contains(t) || inputRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (wrapperRef.current) {
+      const r = wrapperRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - r.bottom - 8
+      const top = spaceBelow > 48 ? r.bottom + 4 : r.top - 52
+      setStyle({ top, left: r.left })
+    }
+    setOpen(v => !v)
+  }
+
+  return (
+    <div
+      ref={wrapperRef}
+      className="w-24 cursor-pointer"
+      onClick={handleClick}
+      onPointerDown={e => e.stopPropagation()}
+      title={task.due_date ? 'Change due date' : 'Add due date'}
+    >
+      <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400 hover:text-slate-600')}>
+        {task.due_date ? formatDate(task.due_date) : '—'}
+      </div>
+      {open && createPortal(
+        <div style={{ ...style, position: 'fixed', zIndex: 9999 }} className="bg-white border border-slate-200 rounded-xl shadow-lg p-2">
+          <input
+            ref={inputRef}
+            type="date"
+            defaultValue={task.due_date ?? ''}
+            autoFocus
+            onChange={async e => {
+              await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
+              setOpen(false)
+              onUpdate()
+            }}
+            className="text-sm text-slate-700 outline-none border border-slate-200 rounded-lg px-2 py-1 bg-white"
+          />
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -128,24 +195,7 @@ function TaskRow({
       <div className="w-24 flex justify-center">
         <PriorityBadge priority={task.priority} />
       </div>
-      <div
-        className="w-24 relative"
-        onClick={e => e.stopPropagation()}
-        title={task.due_date ? 'Change due date' : 'Add due date'}
-      >
-        <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400 hover:text-slate-600')}>
-          {task.due_date ? formatDate(task.due_date) : '—'}
-        </div>
-        <input
-          type="date"
-          value={task.due_date ?? ''}
-          onChange={async e => {
-            await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
-            onUpdate()
-          }}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        />
-      </div>
+      <DateCell task={task} overdue={overdue} onUpdate={onUpdate} />
       <button
         onClick={e => { e.stopPropagation(); onAddSubtask() }}
         title="Add subtask"
@@ -188,30 +238,13 @@ function SubtaskRow({
       <div className="w-24 flex justify-center">
         <PriorityBadge priority={task.priority} />
       </div>
-      <div
-        className="w-24 relative"
-        onClick={e => e.stopPropagation()}
-        title={task.due_date ? 'Change due date' : 'Add due date'}
-      >
-        <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400 hover:text-slate-600')}>
-          {task.due_date ? formatDate(task.due_date) : '—'}
-        </div>
-        <input
-          type="date"
-          value={task.due_date ?? ''}
-          onChange={async e => {
-            await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
-            onUpdate()
-          }}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        />
-      </div>
+      <DateCell task={task} overdue={overdue} onUpdate={onUpdate} />
       <div className="w-[22px] shrink-0" />
     </div>
   )
 }
 
-// ── Ghost shown in DragOverlay ─────────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -222,7 +255,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Add task inline ────────────────────────────────────────────────────────
+// ── Add task inline ────────────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -306,7 +339,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Add subtask inline ────────────────────────────────────────────────────
+// ── Add subtask inline ────────────────────────────────────────────────────────────────────
 
 function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   projectId: string
@@ -367,7 +400,7 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   )
 }
 
-// ── Section action menu ─────────────────────────────────────────────────────
+// ── Section action menu ────────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
@@ -426,7 +459,7 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   )
 }
 
-// ── Section drop zone ────────────────────────────────────────────────────────────
+// ── Section drop zone ────────────────────────────────────────────────────────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -437,7 +470,7 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
