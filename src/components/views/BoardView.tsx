@@ -139,7 +139,7 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
             )}
           </button>
           {showAssignee && (
-            <div className="absolute bottom-full mb-1.5 left-0 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[170px]">
+            <div className="absolute top-full mt-1.5 left-0 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[170px]">
               {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
                 const selected = assigneeIds.includes(m.id)
                 return (
@@ -324,7 +324,7 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
               )}
             </button>
             {showAssignee && (
-              <div className="absolute bottom-full right-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
+              <div className="absolute top-full right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
                 {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
                   const selected = (task.assignee_ids ?? []).includes(m.id)
                   return (
