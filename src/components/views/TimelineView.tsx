@@ -107,6 +107,9 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
     const bar = getBar(task)
     const color = PRIORITY_COLOR[task.priority] ?? PRIORITY_COLOR.medium
     const done = task.status === 'done'
+    let dueDate: Date | null = null
+    if (task.due_date) { dueDate = new Date(task.due_date); dueDate.setHours(0, 0, 0, 0) }
+    const overdue = !done && !!dueDate && dueDate < today
 
     return (
       <div className="flex" style={{ height: ROW_H }}>
@@ -115,7 +118,10 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
           className="shrink-0 sticky left-0 z-10 bg-white border-b border-r border-slate-100 flex items-center px-3 cursor-pointer hover:bg-slate-50 transition-colors"
           style={{ width: LABEL_W }}
         >
-          <span className={cn('text-sm truncate', done ? 'line-through text-slate-400' : 'text-slate-700')}>
+          <span className={cn('text-sm truncate',
+            done ? 'line-through text-slate-400' :
+            overdue ? 'text-red-500 font-medium' :
+            'text-slate-700')}>
             {task.title}
           </span>
         </div>
@@ -129,16 +135,20 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
                 'absolute h-6 rounded-full flex items-center px-2.5 text-[11px] font-medium text-white shadow-sm hover:brightness-110 transition-all overflow-hidden',
                 done && 'opacity-50'
               )}
-              style={{ left: bar.left, width: bar.width, background: color }}
+              style={{ left: bar.left, width: bar.width, background: overdue ? '#ef4444' : color }}
             >
               {bar.width > 52 && <span className="truncate">{task.title}</span>}
             </button>
-          ) : (
+          ) : overdue ? (
+            <span className="absolute left-2 h-5 px-1.5 rounded-md bg-red-100 text-red-600 text-[10px] font-semibold flex items-center gap-0.5">
+              ← Overdue
+            </span>
+          ) : !task.due_date ? (
             <div
               className="absolute h-1 rounded-full bg-slate-200"
               style={{ left: Math.max(2, pxFor(today)), width: WEEK_PX * 0.6 }}
             />
-          )}
+          ) : null}
         </div>
       </div>
     )
