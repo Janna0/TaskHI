@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
@@ -68,7 +69,41 @@ interface Props {
 
 interface Member { id: string; name: string; color: string }
 
-// ── Inline add task card ──────────────────────────────────────────────────────────
+// ── Portal dropdown (fixed position, escapes all overflow containers) ─────────────────────
+
+function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
+  const r = anchor.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - r.bottom - 8
+  const openUp = spaceBelow < estimatedHeight && r.top > estimatedHeight
+  const base: React.CSSProperties = openUp
+    ? { bottom: window.innerHeight - r.top + 6 }
+    : { top: r.bottom + 6 }
+  if (align === 'left') base.left = r.left
+  else base.right = window.innerWidth - r.right
+  return base
+}
+
+function PortalDropdown({ style, menuRef, open, minWidth, children }: {
+  style: React.CSSProperties
+  menuRef: React.RefObject<HTMLDivElement | null>
+  open: boolean
+  minWidth?: number
+  children: React.ReactNode
+}) {
+  if (!open) return null
+  return createPortal(
+    <div
+      ref={menuRef}
+      style={{ ...style, position: 'fixed', zIndex: 9999, ...(minWidth ? { minWidth } : {}) }}
+      className="bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-60 overflow-y-auto"
+    >
+      {children}
+    </div>,
+    document.body
+  )
+}
+
+// ── Inline add task card ──────────────────────────────────────────────
 
 function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   sectionId: string; projectId: string; position: number; onDone: () => void
@@ -80,8 +115,11 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   const [dueDate, setDueDate] = useState('')
   const [members, setMembers] = useState<Member[]>([])
   const [showAssignee, setShowAssignee] = useState(false)
+  const [assigneeStyle, setAssigneeStyle] = useState<React.CSSProperties>({})
   const cardRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const assigneeBtnRef = useRef<HTMLButtonElement>(null)
+  const assigneeMenuRef = useRef<HTMLDivElement>(null)
   const committingRef = useRef(false)
   const datePickerActiveRef = useRef(false)
 
@@ -89,6 +127,17 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
     requestAnimationFrame(() => inputRef.current?.focus())
     loadMembers()
   }, [projectId])
+
+  useEffect(() => {
+    if (!showAssignee) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (assigneeBtnRef.current?.contains(t) || assigneeMenuRef.current?.contains(t)) return
+      setShowAssignee(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAssignee])
 
   async function loadMembers() {
     try {
@@ -122,6 +171,11 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
     setAssigneeIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
+  function openAssignee() {
+    if (assigneeBtnRef.current) setAssigneeStyle(calcDropStyle(assigneeBtnRef.current, 'left', members.length * 36 + 16))
+    setShowAssignee(v => !v)
+  }
+
   const selectedMembers = members.filter(m => assigneeIds.includes(m.id))
   const displayDate = dueDate ? new Date(dueDate + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : null
 
@@ -133,7 +187,7 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
         className="w-full text-sm text-slate-700 placeholder-slate-300 outline-none bg-transparent font-medium leading-snug" />
       <div className="flex items-center gap-2 mt-2.5">
         <div className="relative">
-          <button type="button" onMouseDown={e => e.preventDefault()} onClick={() => setShowAssignee(v => !v)} title="Assign this task"
+          <button ref={assigneeBtnRef} type="button" onMouseDown={e => e.preventDefault()} onClick={openAssignee} title="Assign this task"
             className="flex items-center justify-center w-7 h-7 rounded-full border-2 border-dashed transition-colors"
             style={{ borderColor: assigneeIds.length ? 'transparent' : undefined }}>
             {selectedMembers.length === 0 ? <UserCircle size={16} className="text-slate-300" /> : (
@@ -143,21 +197,19 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
               </div>
             )}
           </button>
-          {showAssignee && (
-            <div className="absolute top-full mt-1.5 left-0 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[170px]">
-              {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
-                const selected = assigneeIds.includes(m.id)
-                return (
-                  <button key={m.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => toggleAssignee(m.id)}
-                    className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
-                    <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
-                    {selected && <CheckCircle2 size={14} className="text-primary-500 shrink-0" />}
-                  </button>
-                )
-              })}
-            </div>
-          )}
+          <PortalDropdown style={assigneeStyle} menuRef={assigneeMenuRef} open={showAssignee} minWidth={170}>
+            {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
+              const selected = assigneeIds.includes(m.id)
+              return (
+                <button key={m.id} type="button" onMouseDown={e => e.preventDefault()} onClick={() => toggleAssignee(m.id)}
+                  className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                  <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
+                  <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                  {selected && <CheckCircle2 size={14} className="text-primary-500 shrink-0" />}
+                </button>
+              )
+            })}
+          </PortalDropdown>
         </div>
         <div className="relative flex items-center gap-1.5">
           <div className="relative w-7 h-7" title="Add due date">
@@ -176,7 +228,7 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   )
 }
 
-// ── Sortable task card ───────────────────────────────────────────────────────────────────
+// ── Sortable task card ───────────────────────────────────────────────────────
 
 function SortableTaskCard({ task, memberMap, members, completionSectionId, onClick, onUpdate }: {
   task: Task
@@ -190,8 +242,12 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
   const [showAssignee, setShowAssignee] = useState(false)
   const [showPriority, setShowPriority] = useState(false)
-  const assigneeRef = useRef<HTMLDivElement>(null)
-  const priorityRef = useRef<HTMLDivElement>(null)
+  const [priorityStyle, setPriorityStyle] = useState<React.CSSProperties>({})
+  const [assigneeStyle, setAssigneeStyle] = useState<React.CSSProperties>({})
+  const priorityBtnRef = useRef<HTMLButtonElement>(null)
+  const assigneeBtnRef = useRef<HTMLButtonElement>(null)
+  const priorityMenuRef = useRef<HTMLDivElement>(null)
+  const assigneeMenuRef = useRef<HTMLDivElement>(null)
   const isDone = task.status === 'done'
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -200,22 +256,26 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   })
 
   useEffect(() => {
-    if (!showAssignee) return
-    function handler(e: MouseEvent) {
-      if (assigneeRef.current && !assigneeRef.current.contains(e.target as Node)) setShowAssignee(false)
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [showAssignee])
-
-  useEffect(() => {
     if (!showPriority) return
     function handler(e: MouseEvent) {
-      if (priorityRef.current && !priorityRef.current.contains(e.target as Node)) setShowPriority(false)
+      const t = e.target as Node
+      if (priorityBtnRef.current?.contains(t) || priorityMenuRef.current?.contains(t)) return
+      setShowPriority(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
   }, [showPriority])
+
+  useEffect(() => {
+    if (!showAssignee) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (assigneeBtnRef.current?.contains(t) || assigneeMenuRef.current?.contains(t)) return
+      setShowAssignee(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [showAssignee])
 
   async function toggleComplete(e: React.MouseEvent) {
     e.stopPropagation()
@@ -240,6 +300,18 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   async function handlePriorityChange(p: Task['priority']) {
     await supabase.from('tasks').update({ priority: p }).eq('id', task.id)
     onUpdate()
+  }
+
+  function openPriority(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (priorityBtnRef.current) setPriorityStyle(calcDropStyle(priorityBtnRef.current, 'left', 4 * 36 + 8))
+    setShowPriority(v => !v)
+  }
+
+  function openAssignee(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (assigneeBtnRef.current) setAssigneeStyle(calcDropStyle(assigneeBtnRef.current, 'right', members.length * 36 + 16))
+    setShowAssignee(v => !v)
   }
 
   return (
@@ -280,21 +352,19 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
       {/* Bottom row: priority + date + assignee */}
       <div className="flex items-center justify-between gap-1">
         {/* Priority */}
-        <div ref={priorityRef} className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-          <button onClick={() => setShowPriority(v => !v)} className="cursor-pointer">
+        <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+          <button ref={priorityBtnRef} onClick={openPriority} className="cursor-pointer">
             <PriorityBadge priority={task.priority} />
           </button>
-          {showPriority && (
-            <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50">
-              {PRIORITY_OPTIONS.map(p => (
-                <button key={p} onClick={() => { handlePriorityChange(p); setShowPriority(false) }}
-                  className={cn('flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors', p === task.priority && 'bg-slate-50')}>
-                  <PriorityBadge priority={p} />
-                  {p === task.priority && <Check size={11} className="text-primary-500 ml-auto shrink-0" />}
-                </button>
-              ))}
-            </div>
-          )}
+          <PortalDropdown style={priorityStyle} menuRef={priorityMenuRef} open={showPriority}>
+            {PRIORITY_OPTIONS.map(p => (
+              <button key={p} onClick={() => { handlePriorityChange(p); setShowPriority(false) }}
+                className={cn('flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors', p === task.priority && 'bg-slate-50')}>
+                <PriorityBadge priority={p} />
+                {p === task.priority && <Check size={11} className="text-primary-500 ml-auto shrink-0" />}
+              </button>
+            ))}
+          </PortalDropdown>
         </div>
 
         <div className="flex items-center gap-1.5">
@@ -311,8 +381,8 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
           </div>
 
           {/* Assignee */}
-          <div ref={assigneeRef} className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
-            <button onClick={() => setShowAssignee(v => !v)} title={assignees.length ? 'Change assignees' : 'Assign task'} className="flex items-center">
+          <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
+            <button ref={assigneeBtnRef} onClick={openAssignee} title={assignees.length ? 'Change assignees' : 'Assign task'} className="flex items-center">
               {assignees.length === 0 ? (
                 <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
                   <UserCircle size={11} className="text-slate-300" />
@@ -328,20 +398,18 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
                 </div>
               )}
             </button>
-            {showAssignee && (
-              <div className="absolute top-full right-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50 min-w-[160px]">
-                {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
-                  const selected = (task.assignee_ids ?? []).includes(m.id)
-                  return (
-                    <button key={m.id} onClick={() => toggleAssignee(m.id)} className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
-                      <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
-                      <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
-                      {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+            <PortalDropdown style={assigneeStyle} menuRef={assigneeMenuRef} open={showAssignee} minWidth={160}>
+              {members.length === 0 ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p> : members.map(m => {
+                const selected = (task.assignee_ids ?? []).includes(m.id)
+                return (
+                  <button key={m.id} onClick={() => toggleAssignee(m.id)} className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left">
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>{getInitials(m.name)}</div>
+                    <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                    {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
+                  </button>
+                )
+              })}
+            </PortalDropdown>
           </div>
         </div>
       </div>
@@ -349,7 +417,7 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   )
 }
 
-// ── Task ghost for DragOverlay ────────────────────────────────────────────────────────
+// ── Task ghost for DragOverlay ────────────────────────────────────────────
 
 function TaskCardGhost({ task }: { task: Task }) {
   return (
@@ -359,7 +427,7 @@ function TaskCardGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Sortable column ────────────────────────────────────────────────────────────────────
+// ── Sortable column ─────────────────────────────────────────────────────────────
 
 function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, completionSectionId, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh }: {
   section: Section; colIdx: number; taskIds: string[]; tasks: Task[]
@@ -392,7 +460,7 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, c
   )
 }
 
-// ── Column header ───────────────────────────────────────────────────────────────────
+// ── Column header ───────────────────────────────────────────────────────────
 
 function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes, isCompletion, onToggleCompletion }: {
   section: Section; count: number; appearance: { header: string; dot: string }
@@ -456,7 +524,7 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   )
 }
 
-// ── Add section form ──────────────────────────────────────────────────────────────────
+// ── Add section form ──────────────────────────────────────────────────
 
 function AddSectionForm({ projectId, position, onDone }: { projectId: string; position: number; onDone: () => void }) {
   const [name, setName] = useState('')
@@ -481,7 +549,7 @@ function AddSectionForm({ projectId, position, onDone }: { projectId: string; po
   )
 }
 
-// ── Main BoardView ────────────────────────────────────────────────────────────────────
+// ── Main BoardView ─────────────────────────────────────────────────────
 
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
