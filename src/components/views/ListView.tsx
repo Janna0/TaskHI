@@ -698,7 +698,7 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn('min-h-[60px] transition-colors', isOver && 'bg-primary-50/40')}>
+    <div ref={setNodeRef} className={cn('min-h-[4px] transition-colors', isOver && 'bg-primary-50/40')}>
       {children}
     </div>
   )
