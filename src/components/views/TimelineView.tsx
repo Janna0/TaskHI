@@ -132,14 +132,9 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
             <button
               onClick={() => onTaskClick(task)}
               title={task.title}
-              className={cn(
-                'absolute h-6 rounded-full flex items-center px-2.5 text-[11px] font-medium text-white shadow-sm hover:brightness-110 transition-all overflow-hidden',
-                done && 'opacity-50'
-              )}
+              className={cn('absolute h-6 rounded-full shadow-sm hover:brightness-110 transition-all', done && 'opacity-50')}
               style={{ left: bar.left, width: bar.width, background: overdue ? '#ef4444' : color }}
-            >
-              {bar.width > 52 && <span className="truncate">{task.title}</span>}
-            </button>
+            />
           ) : overdue ? (
             <span className="absolute left-2 h-5 px-1.5 rounded-md bg-red-100 text-red-600 text-[10px] font-semibold flex items-center gap-0.5">
               ← Overdue
