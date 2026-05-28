@@ -36,6 +36,7 @@ interface Props {
   projectId: string
   memberMap: Record<string, { name: string; color: string }>
   canEdit?: boolean
+  canAddSections?: boolean
   onTaskClick: (task: Task) => void
   onRefresh: () => void
 }
@@ -43,6 +44,8 @@ interface Props {
 interface Member { id: string; name: string; color: string }
 
 const PRIORITY_OPTIONS: Task['priority'][] = ['urgent', 'high', 'medium', 'low']
+
+// ── Portal dropdown ──────────────────────────────────────────────────────────────────────────────────────
 
 function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
   const r = anchor.getBoundingClientRect()
@@ -75,6 +78,8 @@ function PortalDropdown({ style, menuRef, open, minWidth, children }: {
     document.body
   )
 }
+
+// ── Date cell (custom calendar portal) ───────────────────────────────────────────────────────────
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_ABBR = ['Su','Mo','Tu','We','Th','Fr','Sa']
@@ -160,6 +165,7 @@ function DateCell({ task, overdue, onUpdate }: {
           style={{ ...style, position: 'fixed', zIndex: 9999 }}
           className="bg-white border border-slate-200 rounded-xl shadow-xl p-3 w-[232px]"
         >
+          {/* Header */}
           <div className="flex items-center justify-between mb-2">
             <button onClick={prevMonth} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
               <ChevronLeft size={14} />
@@ -170,12 +176,14 @@ function DateCell({ task, overdue, onUpdate }: {
             </button>
           </div>
 
+          {/* Day-of-week headers */}
           <div className="grid grid-cols-7 mb-1">
             {DAY_ABBR.map(d => (
               <div key={d} className="text-[10px] text-slate-400 text-center font-medium py-0.5">{d}</div>
             ))}
           </div>
 
+          {/* Day cells */}
           <div className="grid grid-cols-7 gap-y-0.5">
             {cells.map((day, i) => {
               if (!day) return <div key={i} />
@@ -199,6 +207,7 @@ function DateCell({ task, overdue, onUpdate }: {
             })}
           </div>
 
+          {/* Clear */}
           {task.due_date && (
             <button
               onClick={clearDate}
@@ -213,6 +222,8 @@ function DateCell({ task, overdue, onUpdate }: {
     </div>
   )
 }
+
+// ── Priority cell ───────────────────────────────────────────────────────────────────────────────────────
 
 function PriorityCell({ task, onUpdate }: {
   task: Task
@@ -266,6 +277,8 @@ function PriorityCell({ task, onUpdate }: {
     </div>
   )
 }
+
+// ── Assignee cell ──────────────────────────────────────────────────────────────────────────────────────
 
 function AssigneeCell({ task, members, onUpdate }: {
   task: Task
@@ -360,6 +373,8 @@ function AssigneeCell({ task, members, onUpdate }: {
   )
 }
 
+// ── Sortable task row ──────────────────────────────────────────────────────────────────────────────────
+
 function TaskRow({
   task,
   members,
@@ -432,6 +447,8 @@ function TaskRow({
   )
 }
 
+// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────────────────────────
+
 function SubtaskRow({
   task,
   members,
@@ -463,6 +480,8 @@ function SubtaskRow({
   )
 }
 
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────────────────────────────
+
 function TaskGhost({ task }: { task: Task }) {
   return (
     <div className="flex items-center gap-3 px-4 py-2 bg-white border border-primary-200 rounded-lg shadow-lg opacity-95">
@@ -471,6 +490,8 @@ function TaskGhost({ task }: { task: Task }) {
     </div>
   )
 }
+
+// ── Add task inline ────────────────────────────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -554,6 +575,8 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
+// ── Add subtask inline ────────────────────────────────────────────────────────────────────────────────────
+
 function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   projectId: string
   parentTask: Task
@@ -613,6 +636,8 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   )
 }
 
+// ── Section action menu ────────────────────────────────────────────────────────────────────────────────────
+
 function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
   onDelete: () => void
@@ -670,6 +695,8 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   )
 }
 
+// ── Section drop zone ────────────────────────────────────────────────────────────────────────────────────────
+
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
@@ -679,7 +706,9 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-export function ListView({ sections, tasks, projectId, memberMap: _memberMap, canEdit = true, onTaskClick, onRefresh }: Props) {
+// ── Main component ─────────────────────────────────────────────────────────────────────
+
+export function ListView({ sections, tasks, projectId, memberMap: _memberMap, canEdit = true, canAddSections = false, onTaskClick, onRefresh }: Props) {
   const { user } = useAuth()
   const [members, setMembers] = useState<Member[]>([])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -1001,6 +1030,7 @@ export function ListView({ sections, tasks, projectId, memberMap: _memberMap, ca
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-1">
+        {/* Column headers */}
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
           <span className="w-3.5 shrink-0" />
           <span className="flex-1">Task</span>
@@ -1126,7 +1156,7 @@ export function ListView({ sections, tasks, projectId, memberMap: _memberMap, ca
           </div>
         )}
 
-        {canEdit && <div className="px-4 py-2 border-t border-slate-100 mt-1">
+        {canAddSections && <div className="px-4 py-2 border-t border-slate-100 mt-1">
           {addingSection ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
