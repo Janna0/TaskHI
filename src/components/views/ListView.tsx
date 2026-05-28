@@ -22,7 +22,7 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2, CalendarDays, UserCircle, Check } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, ChevronLeft, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2, CalendarDays, UserCircle, Check, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -77,34 +77,146 @@ function PortalDropdown({ style, menuRef, open, minWidth, children }: {
   )
 }
 
-// ── Date cell ─────────────────────────────────────────────────────────────────────────────
+// ── Date cell (custom calendar portal) ───────────────────────────────────────────────
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const DAY_ABBR = ['Su','Mo','Tu','We','Th','Fr','Sa']
 
 function DateCell({ task, overdue, onUpdate }: {
   task: Task
   overdue: boolean | null | undefined
   onUpdate: () => void
 }) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const [viewYear, setViewYear] = useState(new Date().getFullYear())
+  const [viewMonth, setViewMonth] = useState(new Date().getMonth())
+  const btnRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  function handleOpen(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'left', 240))
+    const base = task.due_date ? new Date(task.due_date + 'T12:00:00') : new Date()
+    setViewYear(base.getFullYear())
+    setViewMonth(base.getMonth())
+    setOpen(v => !v)
+  }
+
+  function prevMonth() {
+    setViewMonth(m => { if (m === 0) { setViewYear(y => y - 1); return 11 } return m - 1 })
+  }
+  function nextMonth() {
+    setViewMonth(m => { if (m === 11) { setViewYear(y => y + 1); return 0 } return m + 1 })
+  }
+
+  async function pickDate(dateStr: string) {
+    await supabase.from('tasks').update({ due_date: dateStr }).eq('id', task.id)
+    setOpen(false)
+    onUpdate()
+  }
+
+  async function clearDate(e: React.MouseEvent) {
+    e.stopPropagation()
+    await supabase.from('tasks').update({ due_date: null }).eq('id', task.id)
+    setOpen(false)
+    onUpdate()
+  }
+
+  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay()
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const cells: (number | null)[] = [
+    ...Array(firstWeekday).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ]
+  while (cells.length % 7 !== 0) cells.push(null)
+
   return (
-    <div
-      className="w-24 flex justify-center"
-      onPointerDown={e => e.stopPropagation()}
-      onClick={e => e.stopPropagation()}
-      title={task.due_date ? 'Change due date' : 'Add due date'}
-    >
-      <div className="relative cursor-pointer min-h-[20px] min-w-[64px]">
-        <div className={cn('text-xs text-center pointer-events-none select-none', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
+    <div className="w-24 flex justify-center" onPointerDown={e => e.stopPropagation()}>
+      <div
+        ref={btnRef}
+        onClick={handleOpen}
+        className="cursor-pointer px-1"
+        title={task.due_date ? 'Change due date' : 'Add due date'}
+      >
+        <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
           {task.due_date ? formatDate(task.due_date) : <CalendarDays size={13} className="mx-auto" />}
         </div>
-        <input
-          type="date"
-          value={task.due_date ?? ''}
-          onChange={async e => {
-            await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
-            onUpdate()
-          }}
-          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-        />
       </div>
+
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={{ ...style, position: 'fixed', zIndex: 9999 }}
+          className="bg-white border border-slate-200 rounded-xl shadow-xl p-3 w-[232px]"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-2">
+            <button onClick={prevMonth} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-xs font-semibold text-slate-700">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+            <button onClick={nextMonth} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 mb-1">
+            {DAY_ABBR.map(d => (
+              <div key={d} className="text-[10px] text-slate-400 text-center font-medium py-0.5">{d}</div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 gap-y-0.5">
+            {cells.map((day, i) => {
+              if (!day) return <div key={i} />
+              const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              const isSelected = dateStr === task.due_date
+              const isToday = dateStr === todayStr
+              return (
+                <button
+                  key={i}
+                  onClick={() => pickDate(dateStr)}
+                  className={cn(
+                    'h-7 w-7 mx-auto rounded-md text-[11px] flex items-center justify-center transition-colors',
+                    isSelected ? 'bg-primary-500 text-white font-semibold' :
+                    isToday ? 'bg-primary-50 text-primary-600 font-semibold' :
+                    'text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  {day}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Clear */}
+          {task.due_date && (
+            <button
+              onClick={clearDate}
+              className="mt-2 w-full flex items-center justify-center gap-1 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg py-1.5 transition-colors"
+            >
+              <X size={11} /> Clear date
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
