@@ -38,7 +38,7 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Assignee avatars (shared) ──────────────────────────────────────────────────────────
+// ── Assignee avatars (shared) ──────────────────────────────────────────────
 
 function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<string, { name: string; color: string }> }) {
   const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
@@ -63,7 +63,7 @@ function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<st
   )
 }
 
-// ── Portal date cell ─────────────────────────────────────────────────────────────────────
+// ── Portal date cell ─────────────────────────────────────────────────────────
 
 function DateCell({ task, overdue, onUpdate }: {
   task: Task
@@ -129,7 +129,7 @@ function DateCell({ task, overdue, onUpdate }: {
   )
 }
 
-// ── Sortable task row ───────────────────────────────────────────────────────────────────
+// ── Sortable task row ─────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -157,9 +157,8 @@ function TaskRow({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      onClick={onClick}
       className={cn(
-        'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 group',
+        'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 border-b border-slate-50 group',
         isDragging && 'opacity-30'
       )}
     >
@@ -184,7 +183,10 @@ function TaskRow({
             ? <ChevronDown size={13} />
             : <ChevronRight size={13} />}
         </button>
-        <span className={cn('text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
+        <span
+          className={cn('text-sm truncate cursor-pointer', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700 hover:text-primary-600')}
+          onClick={onClick}
+        >
           {task.title}
         </span>
       </span>
@@ -207,7 +209,7 @@ function TaskRow({
   )
 }
 
-// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────
+// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────
 
 function SubtaskRow({
   task,
@@ -225,11 +227,13 @@ function SubtaskRow({
 
   return (
     <div
-      onClick={onClick}
-      className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 cursor-pointer border-b border-slate-50 group"
+      className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 border-b border-slate-50 group"
     >
       <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
-      <span className={cn('flex-1 text-sm truncate', isDone ? 'line-through text-slate-400' : 'text-slate-600')}>
+      <span
+        className={cn('flex-1 text-sm truncate cursor-pointer', isDone ? 'line-through text-slate-400' : 'text-slate-600 hover:text-primary-600')}
+        onClick={onClick}
+      >
         {task.title}
       </span>
       <div className="w-20 flex justify-center">
@@ -244,7 +248,7 @@ function SubtaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ───────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -255,7 +259,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Add task inline ────────────────────────────────────────────────────────────────────
+// ── Add task inline ──────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -339,7 +343,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Add subtask inline ────────────────────────────────────────────────────────────────────
+// ── Add subtask inline ──────────────────────────────────────────────────────────────
 
 function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   projectId: string
@@ -400,7 +404,7 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   )
 }
 
-// ── Section action menu ────────────────────────────────────────────────────────────────────
+// ── Section action menu ──────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
@@ -459,7 +463,7 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   )
 }
 
-// ── Section drop zone ────────────────────────────────────────────────────────────────────────
+// ── Section drop zone ─────────────────────────────────────────────────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -470,7 +474,7 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-// ── Main component ──────────────────────────────────────────────────────────────
+// ── Main component ────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
