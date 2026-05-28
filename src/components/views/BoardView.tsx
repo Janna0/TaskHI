@@ -93,7 +93,12 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   async function loadMembers() {
     try {
       const { data } = await supabase.from('project_members').select('user_id, profile:profiles(id, name, avatar_color)').eq('project_id', projectId)
-      if (data) setMembers((data as any[]).map(r => ({ id: r.user_id, name: (r.profile as any)?.name ?? r.user_id, color: (r.profile as any)?.avatar_color ?? '#94a3b8' })))
+      const list: Member[] = (data as any[] ?? []).map(r => ({ id: r.user_id, name: (r.profile as any)?.name ?? r.user_id, color: (r.profile as any)?.avatar_color ?? '#94a3b8' }))
+      if (user && !list.some(m => m.id === user.id)) {
+        const { data: profile } = await supabase.from('profiles').select('name, avatar_color').eq('id', user.id).single()
+        if (profile) list.unshift({ id: user.id, name: (profile as any).name ?? 'Me', color: (profile as any).avatar_color ?? '#94a3b8' })
+      }
+      setMembers(list)
     } catch {}
   }
 
@@ -372,7 +377,7 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, c
     <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}>
       <ColumnHeader section={section} count={colTasks.length} appearance={appearance} onRename={onRename} onRemove={onRemove} onAddTask={() => setIsAddingTask(true)} dragListeners={listeners} dragAttributes={attributes} isCompletion={isCompletion} onToggleCompletion={onToggleCompletion} />
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-        <div className={cn('flex-1 rounded-b-xl p-2 space-y-2 overflow-y-auto transition-colors', isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60')} style={{ minHeight: '120px' }}>
+        <div className={cn('flex-1 rounded-b-xl p-2 space-y-2 transition-colors', isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60')} style={{ minHeight: '120px' }}>
           {colTasks.map(task => (
             <SortableTaskCard key={task.id} task={task} memberMap={memberMap} members={members} completionSectionId={completionSectionId} onClick={() => onTaskClick(task)} onUpdate={onRefresh} />
           ))}
@@ -480,6 +485,7 @@ function AddSectionForm({ projectId, position, onDone }: { projectId: string; po
 
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
+  const { user } = useAuth()
   const [showAddSection, setShowAddSection] = useState(false)
   const [projectMembers, setProjectMembers] = useState<Member[]>([])
   const completionKey = `taskhi:completion-section:${projectId}`
@@ -490,7 +496,12 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, onT
   async function loadProjectMembers() {
     try {
       const { data } = await supabase.from('project_members').select('user_id, profile:profiles(id, name, avatar_color)').eq('project_id', projectId)
-      if (data) setProjectMembers((data as any[]).map(r => ({ id: r.user_id, name: (r.profile as any)?.name ?? r.user_id, color: (r.profile as any)?.avatar_color ?? '#94a3b8' })))
+      const members: Member[] = (data as any[] ?? []).map(r => ({ id: r.user_id, name: (r.profile as any)?.name ?? r.user_id, color: (r.profile as any)?.avatar_color ?? '#94a3b8' }))
+      if (user && !members.some(m => m.id === user.id)) {
+        const { data: profile } = await supabase.from('profiles').select('name, avatar_color').eq('id', user.id).single()
+        if (profile) members.unshift({ id: user.id, name: (profile as any).name ?? 'Me', color: (profile as any).avatar_color ?? '#94a3b8' })
+      }
+      setProjectMembers(members)
     } catch {}
   }
 
