@@ -129,8 +129,11 @@ export function ProjectView() {
   }
 
   async function updateMemberRole(memberId: string, role: string) {
-    await supabase.from('project_members').update({ role }).eq('id', memberId)
-    setMembers(prev => prev.map(m => m.id === memberId ? { ...m, role } : m))
+    const { error } = await supabase.from('project_members').update({ role }).eq('id', memberId)
+    if (error) {
+      alert('Failed to update role. You may not have permission — check your Supabase RLS policies for the project_members table.')
+    }
+    loadMembers()
   }
 
   async function toggleFavorite() {
