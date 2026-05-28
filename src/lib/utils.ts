@@ -1,58 +1,68 @@
-import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs));
+export function cn(...classes: (string | undefined | false | null)[]): string {
+  return classes.filter(Boolean).join(' ')
 }
 
-export function formatDate(date: string | Date, format: 'short' | 'long' | 'relative' = 'short'): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  if (isNaN(d.getTime())) return '';
-
-  if (format === 'relative') {
-    const now = new Date();
-    const diff = now.getTime() - d.getTime();
-    const days = Math.floor(diff / 86400000);
-    if (days === 0) return 'Today';
-    if (days === 1) return 'Yesterday';
-    if (days < 7) return `${days} days ago`;
-    if (days < 30) return `${Math.floor(days / 7)}w ago`;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  }
-
-  if (format === 'long') {
-    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  }
-
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+export function formatDate(date: string | null | undefined): string {
+  if (!date) return ''
+  return new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 }
 
-export function truncate(str: string, max: number): string {
-  return str.length > max ? str.slice(0, max) + '…' : str;
+export function isOverdue(date: string | null | undefined): boolean {
+  if (!date) return false
+  return new Date(date) < new Date(new Date().toDateString())
 }
 
-export function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .slice(0, 2)
-    .map(n => n[0])
-    .join('')
-    .toUpperCase();
+export const STATUS_LABELS: Record<string, string> = {
+  todo: 'To Do',
+  in_progress: 'In Progress',
+  review: 'Review',
+  blocked: 'Blocked',
+  done: 'Done',
 }
 
-const PROJECT_COLORS: Record<string, string> = {
-  indigo: '#6366f1', violet: '#8b5cf6', sky: '#0ea5e9', teal: '#14b8a6',
-  emerald: '#10b981', lime: '#84cc16', amber: '#f59e0b', orange: '#f97316',
-  rose: '#f43f5e', pink: '#ec4899', slate: '#64748b', stone: '#78716c',
-};
-
-export function getProjectColor(color: string): string {
-  return PROJECT_COLORS[color] ?? PROJECT_COLORS.indigo;
+export const STATUS_COLORS: Record<string, string> = {
+  todo: 'bg-slate-100 text-slate-600',
+  in_progress: 'bg-blue-100 text-blue-700',
+  review: 'bg-violet-100 text-violet-700',
+  blocked: 'bg-red-100 text-red-700',
+  done: 'bg-green-100 text-green-700',
 }
 
-export function hashColor(str: string): string {
-  const colors = Object.values(PROJECT_COLORS);
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
+export const STATUS_DOT: Record<string, string> = {
+  todo: 'bg-slate-400',
+  in_progress: 'bg-blue-500',
+  review: 'bg-violet-500',
+  blocked: 'bg-red-500',
+  done: 'bg-green-500',
+}
+
+export const PRIORITY_LABELS: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  urgent: 'Urgent',
+}
+
+export const PRIORITY_COLORS: Record<string, string> = {
+  low: 'bg-green-100 text-green-700',
+  medium: 'bg-amber-100 text-amber-700',
+  high: 'bg-red-100 text-red-700',
+  urgent: 'bg-purple-100 text-purple-700',
+}
+
+export const PRIORITY_BORDER: Record<string, string> = {
+  low: 'border-l-green-400',
+  medium: 'border-l-amber-400',
+  high: 'border-l-red-400',
+  urgent: 'border-l-purple-500',
+}
+
+export const PROJECT_COLORS = [
+  '#9CA3AF', '#F87171', '#FB923C', '#FBBF24', '#EAB308', '#A3E635', '#34D399',
+  '#22D3EE', '#818CF8', '#8B5CF6', '#C084FC', '#E879F9', '#F472B6', '#6B7280',
+]
+
+export function getInitials(name: string | null | undefined): string {
+  if (!name) return '?'
+  return name.split(' ').map(n => n[0]).filter(Boolean).join('').toUpperCase().slice(0, 2) || '?'
 }

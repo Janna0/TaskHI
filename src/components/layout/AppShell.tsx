@@ -1,23 +1,44 @@
-'use client';
-import { Sidebar } from './Sidebar';
-import { TopNav } from './TopNav';
+import { useState, useEffect, ReactNode } from 'react'
+import { Sidebar } from './Sidebar'
+import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
+import { Project } from '../../types'
+import { CreateProjectModal } from '../projects/CreateProjectModal'
+import { withFavorites } from '../../lib/favorites'
 
-interface AppShellProps {
-  children: React.ReactNode;
-  title?: string;
-  actions?: React.ReactNode;
-}
+export function AppShell({ children }: { children: ReactNode }) {
+  const { user } = useAuth()
+  const [projects, setProjects] = useState<Project[]>([])
+  const [showCreate, setShowCreate] = useState(false)
 
-export function AppShell({ children, title, actions }: AppShellProps) {
+  useEffect(() => {
+    if (!user) return
+    loadProjects()
+    const handler = () => setTimeout(() => loadProjects(), 400)
+    window.addEventListener('taskhi:projects-changed', handler)
+    return () => window.removeEventListener('taskhi:projects-changed', handler)
+  }, [user])
+
+  async function loadProjects() {
+    const [{ data: activeData }, { data: archivedData }] = await Promise.all([
+      supabase.rpc('get_my_projects'),
+      supabase.from('projects').select('*').eq('owner_id', user!.id).eq('status', 'archived').order('name'),
+    ])
+    const all = [...(activeData ?? []), ...(archivedData ?? [])]
+    setProjects(await withFavorites(all, user!.id))
+  }
+
   return (
-    <div className="flex h-screen overflow-hidden bg-[#f8fafc]">
-      <Sidebar />
-      <div className="flex flex-col flex-1 min-w-0">
-        <TopNav title={title} actions={actions} />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-      </div>
+    <div className="h-screen">
+      <Sidebar projects={projects} onNewProject={() => setShowCreate(true)} />
+      <main className="ml-64 h-screen overflow-y-auto overscroll-y-contain bg-slate-50">
+        {children}
+      </main>
+      <CreateProjectModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={() => { loadProjects(); setShowCreate(false) }}
+      />
     </div>
-  );
+  )
 }
