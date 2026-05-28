@@ -183,11 +183,9 @@ function TaskRow({ task, memberMap }: { task: Task; memberMap: Record<string, { 
       )}
       <StatusBadge status={task.status} />
       <PriorityBadge priority={task.priority} />
-      {task.due_date && (
-        <span className={cn('text-xs shrink-0', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-          {formatDate(task.due_date)}
-        </span>
-      )}
+      <span className={cn('text-xs shrink-0', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-400' : 'text-slate-300')}>
+        {task.due_date ? formatDate(task.due_date) : '—'}
+      </span>
     </Link>
   )
 }
