@@ -173,6 +173,7 @@ export function ProjectView() {
     (members.find(m => m.user_id === user?.id)?.role as 'admin' | 'member' | 'viewer') ?? 'viewer'
   const canEdit = userRole !== 'viewer'
   const canManageMembers = userRole === 'owner' || userRole === 'admin'
+  const canAdminProject = userRole === 'owner' || userRole === 'admin'
 
   return (
     <div className="flex flex-col h-full bg-white">
@@ -202,7 +203,7 @@ export function ProjectView() {
                 <Plus size={14} className="mr-1" /> Add Task
               </Button>
             )}
-            {userRole === 'owner' && (
+            {canAdminProject && (
               <div className="relative">
                 <button onClick={() => setShowMenu(s => !s)} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400">
                   <MoreHorizontal size={16} />
@@ -299,11 +300,11 @@ export function ProjectView() {
           )}
           {view === 'list' && (
             <ListView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} canEdit={canEdit} canAddSections={userRole === 'owner'} onTaskClick={openTask} onRefresh={() => loadAll(false)} />
+              memberMap={memberMap} canEdit={canEdit} canAddSections={canAdminProject} onTaskClick={openTask} onRefresh={() => loadAll(false)} />
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} canEdit={canEdit} canAddSections={userRole === 'owner'}
+              memberMap={memberMap} canEdit={canEdit} canAddSections={canAdminProject}
               onTaskClick={openTask}
               onRefresh={() => loadAll(false)} />
           )}
