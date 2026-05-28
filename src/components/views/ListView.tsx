@@ -45,7 +45,7 @@ interface Member { id: string; name: string; color: string }
 
 const PRIORITY_OPTIONS: Task['priority'][] = ['urgent', 'high', 'medium', 'low']
 
-// ── Portal dropdown ──────────────────────────────────────────────────────────────────────────────────────
+// ── Portal dropdown ────────────────────────────────────────────────────────────────────────
 
 function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
   const r = anchor.getBoundingClientRect()
@@ -79,7 +79,7 @@ function PortalDropdown({ style, menuRef, open, minWidth, children }: {
   )
 }
 
-// ── Date cell (custom calendar portal) ───────────────────────────────────────────────────────────
+// ── Date cell (custom calendar portal) ───────────────────────────────────────────────────
 
 const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
 const DAY_ABBR = ['Su','Mo','Tu','We','Th','Fr','Sa']
@@ -223,7 +223,7 @@ function DateCell({ task, overdue, onUpdate }: {
   )
 }
 
-// ── Priority cell ───────────────────────────────────────────────────────────────────────────────────────
+// ── Priority cell ─────────────────────────────────────────────────────────────────────────
 
 function PriorityCell({ task, onUpdate }: {
   task: Task
@@ -278,7 +278,7 @@ function PriorityCell({ task, onUpdate }: {
   )
 }
 
-// ── Assignee cell ──────────────────────────────────────────────────────────────────────────────────────
+// ── Assignee cell ─────────────────────────────────────────────────────────────────────────
 
 function AssigneeCell({ task, members, onUpdate }: {
   task: Task
@@ -373,7 +373,7 @@ function AssigneeCell({ task, members, onUpdate }: {
   )
 }
 
-// ── Sortable task row ──────────────────────────────────────────────────────────────────────────────────
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -447,7 +447,7 @@ function TaskRow({
   )
 }
 
-// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────────────────────────
+// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────
 
 function SubtaskRow({
   task,
@@ -480,7 +480,7 @@ function SubtaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -491,7 +491,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Add task inline ────────────────────────────────────────────────────────────────────────────────────
+// ── Add task inline ────────────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -575,7 +575,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Add subtask inline ────────────────────────────────────────────────────────────────────────────────────
+// ── Add subtask inline ────────────────────────────────────────────────────────────────────
 
 function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   projectId: string
@@ -636,7 +636,7 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   )
 }
 
-// ── Section action menu ────────────────────────────────────────────────────────────────────────────────────
+// ── Section action menu ────────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
@@ -695,7 +695,7 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   )
 }
 
-// ── Section drop zone ────────────────────────────────────────────────────────────────────────────────────────
+// ── Section drop zone ────────────────────────────────────────────────────────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -706,7 +706,7 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-// ── Main component ─────────────────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap: _memberMap, canEdit = true, canAddSections = false, onTaskClick, onRefresh }: Props) {
   const { user } = useAuth()
@@ -950,19 +950,17 @@ export function ListView({ sections, tasks, projectId, memberMap: _memberMap, ca
     const movedToCompletion = !!newSectionId && newSectionId === completionSectionId
     const movedFromCompletion = sectionChanged && originalTask.section_id === completionSectionId && !movedToCompletion
 
-    await Promise.all(
-      finalSectionIds.map((id, idx) => {
-        const update: Record<string, unknown> = { position: idx }
-        if (id === taskId) {
-          if (sectionChanged) update.section_id = newSectionId
-          if (movedToCompletion) update.status = 'done'
-          else if (movedFromCompletion && originalTask.status === 'done') update.status = 'todo'
-        }
-        return supabase.from('tasks').update(update).eq('id', id)
-      })
-    )
-
-    if (sectionChanged || movedToCompletion || movedFromCompletion) onRefresh()
+    // Await only the moved task (1 round-trip). Background-fire position updates for the rest.
+    const movedUpd: Record<string, unknown> = { position: finalSectionIds.indexOf(taskId) }
+    if (sectionChanged) movedUpd.section_id = newSectionId
+    if (movedToCompletion) movedUpd.status = 'done'
+    else if (movedFromCompletion && originalTask.status === 'done') movedUpd.status = 'todo'
+    await supabase.from('tasks').update(movedUpd).eq('id', taskId)
+    const bgWrites: Promise<unknown>[] = []
+    finalSectionIds.forEach((id, idx) => { if (id !== taskId) bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
+    if (sectionChanged) (localOrderRef.current[originalTask.section_id ?? ''] ?? []).forEach((id, idx) => { bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
+    Promise.all(bgWrites)
+    if (movedToCompletion || movedFromCompletion) onRefresh()
   }
 
   function renderTaskWithSubtasks(task: Task) {

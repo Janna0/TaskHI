@@ -676,16 +676,17 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, can
       const crossSection = finalSec !== originalTask.section_id
       const movedToCompletion = !!finalSec && finalSec === completionSectionId
       const movedFromCompletion = crossSection && originalTask.section_id === completionSectionId && !movedToCompletion
-      await Promise.all(finalIds.map((id, idx) => {
-        const upd: Record<string, unknown> = { position: idx }
-        if (id === taskId) {
-          if (crossSection) upd.section_id = finalSec
-          if (movedToCompletion) upd.status = 'done'
-          else if (movedFromCompletion && originalTask.status === 'done') upd.status = 'todo'
-        }
-        return supabase.from('tasks').update(upd).eq('id', id)
-      }))
-      if (crossSection || movedToCompletion) onRefresh()
+      // Await only the moved task (1 round-trip). Background-fire position updates for the rest.
+      const movedUpd: Record<string, unknown> = { position: finalIds.indexOf(taskId) }
+      if (crossSection) movedUpd.section_id = finalSec
+      if (movedToCompletion) movedUpd.status = 'done'
+      else if (movedFromCompletion && originalTask.status === 'done') movedUpd.status = 'todo'
+      await supabase.from('tasks').update(movedUpd).eq('id', taskId)
+      const bgWrites: Promise<unknown>[] = []
+      finalIds.forEach((id, idx) => { if (id !== taskId) bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
+      if (crossSection) (taskOrderRef.current[originalTask.section_id] ?? []).forEach((id, idx) => { bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
+      Promise.all(bgWrites)
+      if (movedToCompletion || movedFromCompletion) onRefresh()
     } else if (type === 'column') {
       await Promise.all(localSectionsRef.current.map((sec, idx) => supabase.from('sections').update({ position: idx }).eq('id', sec.id)))
       onRefresh()
