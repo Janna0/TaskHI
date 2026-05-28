@@ -107,7 +107,7 @@ function DateCell({ task, overdue, onUpdate }: {
 
   function handleOpen(e: React.MouseEvent) {
     e.stopPropagation()
-    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'left', 240))
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'right', 240))
     const base = task.due_date ? new Date(task.due_date + 'T12:00:00') : new Date()
     setViewYear(base.getFullYear())
     setViewMonth(base.getMonth())
