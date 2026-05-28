@@ -280,7 +280,7 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
             <PriorityBadge priority={task.priority} />
           </button>
           {showPriority && (
-            <div className="absolute bottom-full left-0 mb-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50">
+            <div className="absolute top-full left-0 mt-1.5 bg-white border border-slate-200 rounded-xl shadow-lg py-1 z-50">
               {PRIORITY_OPTIONS.map(p => (
                 <button key={p} onClick={() => { handlePriorityChange(p); setShowPriority(false) }}
                   className={cn('flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors', p === task.priority && 'bg-slate-50')}>
