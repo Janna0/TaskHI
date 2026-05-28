@@ -22,8 +22,9 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2 } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2, CalendarDays, UserCircle, Check } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
@@ -38,48 +39,92 @@ interface Props {
   onRefresh: () => void
 }
 
-// ── Assignee avatars (shared) ──────────────────────────────────────────────
+interface Member { id: string; name: string; color: string }
 
-function AssigneeAvatars({ task, memberMap }: { task: Task; memberMap: Record<string, { name: string; color: string }> }) {
-  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
-  return (
-    <div className="flex -space-x-1.5">
-      {assignees.slice(0, 2).map((a, i) => (
-        <div
-          key={i}
-          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
-          style={{ background: a.color }}
-          title={a.name}
-        >
-          {getInitials(a.name)}
-        </div>
-      ))}
-      {assignees.length > 2 && (
-        <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
-          +{assignees.length - 2}
-        </div>
-      )}
-    </div>
+const PRIORITY_OPTIONS: Task['priority'][] = ['urgent', 'high', 'medium', 'low']
+
+// ── Portal dropdown ──────────────────────────────────────────────────────────────
+
+function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
+  const r = anchor.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - r.bottom - 8
+  const openUp = spaceBelow < estimatedHeight && r.top > estimatedHeight
+  const base: React.CSSProperties = openUp
+    ? { bottom: window.innerHeight - r.top + 6 }
+    : { top: r.bottom + 6 }
+  if (align === 'left') base.left = r.left
+  else base.right = window.innerWidth - r.right
+  return base
+}
+
+function PortalDropdown({ style, menuRef, open, minWidth, children }: {
+  style: React.CSSProperties
+  menuRef: React.RefObject<HTMLDivElement | null>
+  open: boolean
+  minWidth?: number
+  children: React.ReactNode
+}) {
+  if (!open) return null
+  return createPortal(
+    <div
+      ref={menuRef}
+      style={{ ...style, position: 'fixed', zIndex: 9999, ...(minWidth ? { minWidth } : {}) }}
+      className="bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-60 overflow-y-auto"
+    >
+      {children}
+    </div>,
+    document.body
   )
 }
 
-// ── Portal date cell ─────────────────────────────────────────────────────────
+// ── Date cell ─────────────────────────────────────────────────────────────────
 
 function DateCell({ task, overdue, onUpdate }: {
   task: Task
   overdue: boolean | null | undefined
   onUpdate: () => void
 }) {
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
+    onUpdate()
+  }
+
+  return (
+    <div
+      className="relative w-24"
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+      title={task.due_date ? 'Change due date' : 'Add due date'}
+    >
+      <div className={cn('text-xs text-center pointer-events-none', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
+        {task.due_date ? formatDate(task.due_date) : <CalendarDays size={13} className="mx-auto" />}
+      </div>
+      <input
+        type="date"
+        value={task.due_date ?? ''}
+        onChange={handleChange}
+        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+      />
+    </div>
+  )
+}
+
+// ── Priority cell ───────────────────────────────────────────────────────────────
+
+function PriorityCell({ task, onUpdate }: {
+  task: Task
+  onUpdate: () => void
+}) {
   const [open, setOpen] = useState(false)
   const [style, setStyle] = useState<React.CSSProperties>({})
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!open) return
     function handler(e: MouseEvent) {
       const t = e.target as Node
-      if (wrapperRef.current?.contains(t) || inputRef.current?.contains(t)) return
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
       setOpen(false)
     }
     document.addEventListener('mousedown', handler)
@@ -88,43 +133,128 @@ function DateCell({ task, overdue, onUpdate }: {
 
   function handleClick(e: React.MouseEvent) {
     e.stopPropagation()
-    if (wrapperRef.current) {
-      const r = wrapperRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - r.bottom - 8
-      const top = spaceBelow > 48 ? r.bottom + 4 : r.top - 52
-      setStyle({ top, left: r.left })
-    }
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'left', PRIORITY_OPTIONS.length * 36 + 8))
     setOpen(v => !v)
   }
 
+  async function setPriority(p: Task['priority']) {
+    await supabase.from('tasks').update({ priority: p }).eq('id', task.id)
+    setOpen(false)
+    onUpdate()
+  }
+
   return (
-    <div
-      ref={wrapperRef}
-      className="w-24 cursor-pointer"
-      onClick={handleClick}
-      onPointerDown={e => e.stopPropagation()}
-      title={task.due_date ? 'Change due date' : 'Add due date'}
-    >
-      <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400 hover:text-slate-600')}>
-        {task.due_date ? formatDate(task.due_date) : '—'}
-      </div>
-      {open && createPortal(
-        <div style={{ ...style, position: 'fixed', zIndex: 9999 }} className="bg-white border border-slate-200 rounded-xl shadow-lg p-2">
-          <input
-            ref={inputRef}
-            type="date"
-            defaultValue={task.due_date ?? ''}
-            autoFocus
-            onChange={async e => {
-              await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
-              setOpen(false)
-              onUpdate()
-            }}
-            className="text-sm text-slate-700 outline-none border border-slate-200 rounded-lg px-2 py-1 bg-white"
-          />
-        </div>,
-        document.body
-      )}
+    <div className="w-24 flex justify-center" onPointerDown={e => e.stopPropagation()}>
+      <button ref={btnRef} onClick={handleClick} className="hover:opacity-80 transition-opacity">
+        <PriorityBadge priority={task.priority} />
+      </button>
+      <PortalDropdown style={style} menuRef={menuRef} open={open}>
+        {PRIORITY_OPTIONS.map(p => (
+          <button
+            key={p}
+            onClick={() => setPriority(p)}
+            className={cn('flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors', p === task.priority && 'bg-slate-50')}
+          >
+            <PriorityBadge priority={p} />
+            {p === task.priority && <Check size={11} className="text-primary-500 ml-auto shrink-0" />}
+          </button>
+        ))}
+      </PortalDropdown>
+    </div>
+  )
+}
+
+// ── Assignee cell ───────────────────────────────────────────────────────────────
+
+function AssigneeCell({ task, members, onUpdate }: {
+  task: Task
+  members: Member[]
+  onUpdate: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'left', members.length * 36 + 16))
+    setOpen(v => !v)
+  }
+
+  async function toggleAssignee(memberId: string) {
+    const current = task.assignee_ids ?? []
+    const next = current.includes(memberId) ? current.filter(id => id !== memberId) : [...current, memberId]
+    await supabase.from('tasks').update({ assignee_ids: next }).eq('id', task.id)
+    onUpdate()
+  }
+
+  const assignees = (task.assignee_ids ?? []).map(id => members.find(m => m.id === id)).filter(Boolean) as Member[]
+
+  return (
+    <div className="w-20 flex justify-center" onPointerDown={e => e.stopPropagation()}>
+      <button
+        ref={btnRef}
+        onClick={handleClick}
+        className="flex -space-x-1.5 hover:opacity-80 transition-opacity"
+        title={assignees.length ? 'Change assignees' : 'Assign task'}
+      >
+        {assignees.length === 0 ? (
+          <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+            <UserCircle size={11} className="text-slate-300" />
+          </div>
+        ) : (
+          <>
+            {assignees.slice(0, 2).map((a, i) => (
+              <div
+                key={i}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
+                style={{ background: a.color }}
+                title={a.name}
+              >
+                {getInitials(a.name)}
+              </div>
+            ))}
+            {assignees.length > 2 && (
+              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
+                +{assignees.length - 2}
+              </div>
+            )}
+          </>
+        )}
+      </button>
+      <PortalDropdown style={style} menuRef={menuRef} open={open} minWidth={160}>
+        {members.length === 0
+          ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
+          : members.map(m => {
+            const selected = (task.assignee_ids ?? []).includes(m.id)
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleAssignee(m.id)}
+                className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left"
+              >
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>
+                  {getInitials(m.name)}
+                </div>
+                <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
+              </button>
+            )
+          })
+        }
+      </PortalDropdown>
     </div>
   )
 }
@@ -133,7 +263,7 @@ function DateCell({ task, overdue, onUpdate }: {
 
 function TaskRow({
   task,
-  memberMap,
+  members,
   onClick,
   hasSubtasks,
   isExpanded,
@@ -142,7 +272,7 @@ function TaskRow({
   onUpdate,
 }: {
   task: Task
-  memberMap: Record<string, { name: string; color: string }>
+  members: Member[]
   onClick: () => void
   hasSubtasks: boolean
   isExpanded: boolean
@@ -179,9 +309,7 @@ function TaskRow({
             !hasSubtasks && 'invisible pointer-events-none'
           )}
         >
-          {isExpanded
-            ? <ChevronDown size={13} />
-            : <ChevronRight size={13} />}
+          {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
         </button>
         <span
           className={cn('text-sm truncate cursor-pointer', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700 hover:text-primary-600')}
@@ -191,12 +319,8 @@ function TaskRow({
         </span>
       </span>
 
-      <div className="w-20 flex justify-center">
-        <AssigneeAvatars task={task} memberMap={memberMap} />
-      </div>
-      <div className="w-24 flex justify-center">
-        <PriorityBadge priority={task.priority} />
-      </div>
+      <AssigneeCell task={task} members={members} onUpdate={onUpdate} />
+      <PriorityCell task={task} onUpdate={onUpdate} />
       <DateCell task={task} overdue={overdue} onUpdate={onUpdate} />
       <button
         onClick={e => { e.stopPropagation(); onAddSubtask() }}
@@ -213,12 +337,12 @@ function TaskRow({
 
 function SubtaskRow({
   task,
-  memberMap,
+  members,
   onClick,
   onUpdate,
 }: {
   task: Task
-  memberMap: Record<string, { name: string; color: string }>
+  members: Member[]
   onClick: () => void
   onUpdate: () => void
 }) {
@@ -226,9 +350,7 @@ function SubtaskRow({
   const isDone = task.status === 'done'
 
   return (
-    <div
-      className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 border-b border-slate-50 group"
-    >
+    <div className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 border-b border-slate-50 group">
       <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
       <span
         className={cn('flex-1 text-sm truncate cursor-pointer', isDone ? 'line-through text-slate-400' : 'text-slate-600 hover:text-primary-600')}
@@ -236,12 +358,8 @@ function SubtaskRow({
       >
         {task.title}
       </span>
-      <div className="w-20 flex justify-center">
-        <AssigneeAvatars task={task} memberMap={memberMap} />
-      </div>
-      <div className="w-24 flex justify-center">
-        <PriorityBadge priority={task.priority} />
-      </div>
+      <AssigneeCell task={task} members={members} onUpdate={onUpdate} />
+      <PriorityCell task={task} onUpdate={onUpdate} />
       <DateCell task={task} overdue={overdue} onUpdate={onUpdate} />
       <div className="w-[22px] shrink-0" />
     </div>
@@ -476,7 +594,9 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
 
 // ── Main component ────────────────────────────────────────────────────────
 
-export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
+export function ListView({ sections, tasks, projectId, memberMap: _memberMap, onTaskClick, onRefresh }: Props) {
+  const { user } = useAuth()
+  const [members, setMembers] = useState<Member[]>([])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [inlineAdding, setInlineAdding] = useState<string | null>(null)
   const [createSection, setCreateSection] = useState<string | null>(null)
@@ -495,6 +615,37 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const completionKey = `taskhi:completion-section:${projectId}`
   const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
 
+  useEffect(() => {
+    loadMembers()
+  }, [projectId])
+
+  async function loadMembers() {
+    try {
+      const { data } = await supabase
+        .from('project_members')
+        .select('user_id, profile:profiles(id, name, avatar_color)')
+        .eq('project_id', projectId)
+      const list: Member[] = (data as any[] ?? []).map(r => ({
+        id: r.user_id,
+        name: (r.profile as any)?.name ?? r.user_id,
+        color: (r.profile as any)?.avatar_color ?? '#94a3b8',
+      }))
+      if (user && !list.some(m => m.id === user.id)) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, avatar_color')
+          .eq('id', user.id)
+          .single()
+        if (profile) list.unshift({
+          id: user.id,
+          name: (profile as any).name ?? 'Me',
+          color: (profile as any).avatar_color ?? '#94a3b8',
+        })
+      }
+      setMembers(list)
+    } catch {}
+  }
+
   function toggleCompletionSection(sectionId: string) {
     const next = completionSectionId === sectionId ? '' : sectionId
     setCompletionSectionId(next)
@@ -503,7 +654,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     setOpenMenuSection(null)
   }
 
-  // Only top-level tasks participate in section drag-and-drop
   const rootTasks = tasks.filter(t => !t.parent_task_id)
   const subtasksByParent: Record<string, Task[]> = {}
   for (const t of tasks) {
@@ -710,7 +860,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
       <>
         <TaskRow
           task={task}
-          memberMap={memberMap}
+          members={members}
           onClick={() => onTaskClick(task)}
           hasSubtasks={taskSubtasks.length > 0 || isAddingSubtask}
           isExpanded={isExpanded || isAddingSubtask}
@@ -727,7 +877,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
               <SubtaskRow
                 key={sub.id}
                 task={sub}
-                memberMap={memberMap}
+                members={members}
                 onClick={() => onTaskClick(sub)}
                 onUpdate={onRefresh}
               />
@@ -778,9 +928,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
         {sections.map(section => {
           const sectionTaskIds = localOrder[section.id] ?? []
-          const sectionTasks = sectionTaskIds
-            .map(id => taskById[id])
-            .filter(Boolean)
+          const sectionTasks = sectionTaskIds.map(id => taskById[id]).filter(Boolean)
           const isCollapsed = collapsed[section.id]
           const isHovered = hoveredSection === section.id
           const menuOpen = openMenuSection === section.id
@@ -871,7 +1019,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           )
         })}
 
-        {/* Ungrouped tasks */}
         {ungroupedIds.length > 0 && (
           <div>
             {sections.length > 0 && (
@@ -893,7 +1040,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
           </div>
         )}
 
-        {/* Add section */}
         <div className="px-4 py-2 border-t border-slate-100 mt-1">
           {addingSection ? (
             <div className="space-y-1">
