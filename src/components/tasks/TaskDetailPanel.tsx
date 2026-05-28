@@ -3,7 +3,7 @@ import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
-import { STATUS_LABELS, PRIORITY_LABELS, isOverdue, getInitials, cn } from '../../lib/utils'
+import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
 
 interface Comment {
   id: string
@@ -18,6 +18,7 @@ interface Props {
   task: Task
   sections: Section[]
   memberMap: Record<string, { name: string; color: string }>
+  canEdit?: boolean
   onClose: () => void
   onUpdated: () => void
   onDeleted: () => void
@@ -372,7 +373,7 @@ function SubtaskRow({ sub, memberMap, onUpdate }: {
   )
 }
 
-export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated, onDeleted }: Props) {
+export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onClose, onUpdated, onDeleted }: Props) {
   const { user, profile } = useAuth()
   const [title, setTitle] = useState(task.title)
   const [status, setStatus] = useState<string>(task.status)
@@ -515,13 +516,18 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
         <div className="flex items-center gap-2">
-          <button onClick={handleDelete} disabled={deleting}
-            className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete task">
-            <Trash2 size={14} />
-          </button>
+          {canEdit && (
+            <button onClick={handleDelete} disabled={deleting}
+              className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete task">
+              <Trash2 size={14} />
+            </button>
+          )}
+          {!canEdit && (
+            <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">View only</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {saved ? (
+          {canEdit && (saved ? (
             <span className="text-xs text-emerald-600 font-medium flex items-center gap-1">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
               Saved
@@ -531,7 +537,7 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
               className="text-xs font-medium bg-primary-500 hover:bg-primary-600 disabled:opacity-50 text-white px-3 py-1.5 rounded-md transition-colors">
               {saving ? 'Saving…' : 'Save'}
             </button>
-          )}
+          ))}
           <button onClick={onClose} className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 transition-colors">
             <X size={16} />
           </button>
@@ -542,9 +548,10 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
         {/* Title */}
         <div className="px-6 pt-5 pb-2">
           <input
-            className="w-full text-xl font-semibold text-slate-800 bg-transparent outline-none placeholder-slate-300 leading-snug"
+            className="w-full text-xl font-semibold text-slate-800 bg-transparent outline-none placeholder-slate-300 leading-snug read-only:cursor-default"
             value={title}
-            onChange={e => setTitle(e.target.value)}
+            readOnly={!canEdit}
+            onChange={e => canEdit && setTitle(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur() }}
             placeholder="Task title"
           />
@@ -555,8 +562,8 @@ export function TaskDetailPanel({ task, sections, memberMap, onClose, onUpdated,
           <PropRow icon={<User size={14} />} label="Assignee">
             <div className="relative" ref={assigneePickerRef}>
               <button
-                onClick={() => setShowAssigneePicker(v => !v)}
-                className="flex items-center gap-1.5 text-sm text-left hover:bg-slate-100 rounded-md px-1.5 py-0.5 -ml-1.5 transition-colors"
+                onClick={() => canEdit && setShowAssigneePicker(v => !v)}
+                className={cn("flex items-center gap-1.5 text-sm text-left rounded-md px-1.5 py-0.5 -ml-1.5 transition-colors", canEdit ? "hover:bg-slate-100" : "cursor-default")}
               >
                 {assigneeIds.length === 0 ? (
                   <span className="text-slate-400">No assignee</span>
