@@ -64,11 +64,14 @@ interface Props {
   projectId: string
   memberMap: Record<string, { name: string; color: string }>
   canEdit?: boolean
+  canAddSections?: boolean
   onTaskClick: (task: Task) => void
   onRefresh: () => void
 }
 
 interface Member { id: string; name: string; color: string }
+
+// ── Portal dropdown (fixed position, escapes all overflow containers) ─────────────────
 
 function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
   const r = anchor.getBoundingClientRect()
@@ -101,6 +104,8 @@ function PortalDropdown({ style, menuRef, open, minWidth, children }: {
     document.body
   )
 }
+
+// ── Inline add task card ──────────────────────────────────────────────────────────
 
 function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   sectionId: string; projectId: string; position: number; onDone: () => void
@@ -225,6 +230,8 @@ function InlineAddTaskCard({ sectionId, projectId, position, onDone }: {
   )
 }
 
+// ── Sortable task card ───────────────────────────────────────────────────────────────────
+
 function SortableTaskCard({ task, memberMap, members, completionSectionId, onClick, onUpdate }: {
   task: Task
   memberMap: Record<string, { name: string; color: string }>
@@ -321,6 +328,7 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
         isDragging ? 'opacity-40 shadow-none scale-95' : 'shadow-sm hover:shadow-md hover:border-primary-200'
       )}
     >
+      {/* Title row with completion toggle */}
       <div className="flex items-start gap-2 mb-2.5">
         <div
           onPointerDown={e => e.stopPropagation()}
@@ -343,7 +351,9 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
         </p>
       </div>
 
+      {/* Bottom row: priority + date + assignee */}
       <div className="flex items-center justify-between gap-1">
+        {/* Priority */}
         <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
           <button ref={priorityBtnRef} onClick={openPriority} className="cursor-pointer">
             <PriorityBadge priority={task.priority} />
@@ -360,6 +370,7 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Due date */}
           <div className="relative" onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()} title={task.due_date ? 'Change due date' : 'Add due date'}>
             <div className={cn('flex items-center justify-center rounded-full transition-colors cursor-pointer', task.due_date ? 'gap-1' : 'w-6 h-6 border-2 border-dashed border-slate-200 hover:border-primary-300')}>
               {task.due_date ? (
@@ -371,6 +382,7 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
             <input type="date" value={task.due_date ?? ''} onChange={e => handleDateChange(e.target.value)} className="absolute inset-0 opacity-0 w-full h-full cursor-pointer" />
           </div>
 
+          {/* Assignee */}
           <div onPointerDown={e => e.stopPropagation()} onClick={e => e.stopPropagation()}>
             <button ref={assigneeBtnRef} onClick={openAssignee} title={assignees.length ? 'Change assignees' : 'Assign task'} className="flex items-center">
               {assignees.length === 0 ? (
@@ -407,6 +419,8 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   )
 }
 
+// ── Task ghost for DragOverlay ────────────────────────────────────────────────────────
+
 function TaskCardGhost({ task }: { task: Task }) {
   return (
     <div className="bg-white rounded-lg p-3 border border-primary-200 shadow-xl opacity-95 w-64">
@@ -414,6 +428,8 @@ function TaskCardGhost({ task }: { task: Task }) {
     </div>
   )
 }
+
+// ── Sortable column ────────────────────────────────────────────────────────────────────
 
 function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, completionSectionId, onTaskClick, onRename, onRemove, isTaskDragActive, isCompletion, onToggleCompletion, projectId, onRefresh, canEdit }: {
   section: Section; colIdx: number; taskIds: string[]; tasks: Task[]
@@ -447,6 +463,8 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, c
     </div>
   )
 }
+
+// ── Column header ───────────────────────────────────────────────────────────────────
 
 function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTask, dragListeners, dragAttributes, isCompletion, onToggleCompletion }: {
   section: Section; count: number; appearance: { header: string; dot: string }
@@ -510,6 +528,8 @@ function ColumnHeader({ section, count, appearance, onRename, onRemove, onAddTas
   )
 }
 
+// ── Add section form ──────────────────────────────────────────────────────────────────
+
 function AddSectionForm({ projectId, position, onDone }: { projectId: string; position: number; onDone: () => void }) {
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
@@ -533,7 +553,9 @@ function AddSectionForm({ projectId, position, onDone }: { projectId: string; po
   )
 }
 
-export function BoardView({ sections, tasks: allTasks, projectId, memberMap, canEdit = true, onTaskClick, onRefresh }: Props) {
+// ── Main BoardView ────────────────────────────────────────────────────────────────────
+
+export function BoardView({ sections, tasks: allTasks, projectId, memberMap, canEdit = true, canAddSections = false, onTaskClick, onRefresh }: Props) {
   const tasks = allTasks.filter(t => !t.parent_task_id)
   const { user } = useAuth()
   const [showAddSection, setShowAddSection] = useState(false)
@@ -711,7 +733,7 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, can
           <div className="shrink-0 w-56">
             {showAddSection
               ? <AddSectionForm projectId={projectId} position={localSections.length} onDone={() => { setShowAddSection(false); onRefresh() }} />
-              : canEdit ? <button onClick={() => setShowAddSection(true)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"><Plus size={15} /> Add section</button> : null
+              : canAddSections ? <button onClick={() => setShowAddSection(true)} className="flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-white/60 rounded-xl transition-colors w-full"><Plus size={15} /> Add section</button> : null
             }
           </div>
         </div>
