@@ -47,6 +47,7 @@ export function ProjectView() {
   const ownerDisplayName = projectOwner?.name || projectOwner?.email?.split('@')[0] || '?'
   const ownerAvatarColor = projectOwner?.avatar_color ?? '#6366f1'
 
+  // Auto-open task from URL param (e.g. inbox link or shared link)
   useEffect(() => {
     if (!autoOpenTaskId || tasks.length === 0 || selectedTask) return
     const task = tasks.find(t => t.id === autoOpenTaskId)
@@ -298,11 +299,11 @@ export function ProjectView() {
           )}
           {view === 'list' && (
             <ListView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} canEdit={canEdit} onTaskClick={openTask} onRefresh={() => loadAll(false)} />
+              memberMap={memberMap} canEdit={canEdit} canAddSections={userRole === 'owner'} onTaskClick={openTask} onRefresh={() => loadAll(false)} />
           )}
           {view === 'board' && (
             <BoardView sections={sections} tasks={tasks} projectId={project.id}
-              memberMap={memberMap} canEdit={canEdit}
+              memberMap={memberMap} canEdit={canEdit} canAddSections={userRole === 'owner'}
               onTaskClick={openTask}
               onRefresh={() => loadAll(false)} />
           )}
@@ -331,7 +332,7 @@ export function ProjectView() {
   )
 }
 
-// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────
+// ── Member Picker (header) ──────────────────────────────────────────────────────────────────────────────────────────
 
 function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, ownerAvatarColor, canManageMembers, onAdd, onRemove }: {
   projectId: string
@@ -484,7 +485,7 @@ function MemberPicker({ projectId, members, ownerProfile, ownerDisplayName, owne
   )
 }
 
-// ── Overview Tab ────────────────────────────────────────────────────────────────────
+// ── Overview Tab ──────────────────────────────────────────────────────────────────────────────
 
 interface Resource { id: string; title: string; url: string }
 
