@@ -84,27 +84,54 @@ function DateCell({ task, overdue, onUpdate }: {
   overdue: boolean | null | undefined
   onUpdate: () => void
 }) {
-  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
-    onUpdate()
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState({ top: 0, left: 0 })
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    requestAnimationFrame(() => {
+      try { (inputRef.current as any)?.showPicker() } catch {}
+    })
+  }, [open])
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (wrapperRef.current) {
+      const r = wrapperRef.current.getBoundingClientRect()
+      const spaceBelow = window.innerHeight - r.bottom - 8
+      setPos({ top: spaceBelow > 48 ? r.bottom + 4 : r.top - 52, left: r.left })
+    }
+    setOpen(true)
   }
 
   return (
     <div
-      className="relative w-24"
+      ref={wrapperRef}
+      className="w-24 cursor-pointer"
       onPointerDown={e => e.stopPropagation()}
-      onClick={e => e.stopPropagation()}
+      onClick={handleClick}
       title={task.due_date ? 'Change due date' : 'Add due date'}
     >
-      <div className={cn('text-xs text-center pointer-events-none', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
+      <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
         {task.due_date ? formatDate(task.due_date) : <CalendarDays size={13} className="mx-auto" />}
       </div>
-      <input
-        type="date"
-        value={task.due_date ?? ''}
-        onChange={handleChange}
-        className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
-      />
+      {open && createPortal(
+        <input
+          ref={inputRef}
+          type="date"
+          defaultValue={task.due_date ?? ''}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+          onChange={async e => {
+            await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
+            setOpen(false)
+            onUpdate()
+          }}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+        />,
+        document.body
+      )}
     </div>
   )
 }
