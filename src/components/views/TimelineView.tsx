@@ -62,10 +62,11 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
     if (!task.due_date) return null
     const due = new Date(task.due_date); due.setHours(0, 0, 0, 0)
     const created = new Date(task.created_at); created.setHours(0, 0, 0, 0)
-    if (due < windowStart || created > windowEnd) return null
-    const barStart = created < windowStart ? windowStart : created
+    // Use the earlier of created/due so tasks with a backdated due date still show a bar
+    const rawStart = created < due ? created : due
+    if (due < windowStart || rawStart > windowEnd) return null
+    const barStart = rawStart < windowStart ? windowStart : rawStart
     const barEnd = due > windowEnd ? windowEnd : due
-    if (barEnd < barStart) return null
     const left = Math.max(0, pxFor(barStart))
     const width = Math.max(12, pxFor(barEnd) - left)
     return { left, width }
