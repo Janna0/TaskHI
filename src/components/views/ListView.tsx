@@ -43,7 +43,7 @@ interface Member { id: string; name: string; color: string }
 
 const PRIORITY_OPTIONS: Task['priority'][] = ['urgent', 'high', 'medium', 'low']
 
-// ── Portal dropdown ──────────────────────────────────────────────────────────────
+// ── Portal dropdown ────────────────────────────────────────────────────────────────────────
 
 function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
   const r = anchor.getBoundingClientRect()
@@ -77,66 +77,39 @@ function PortalDropdown({ style, menuRef, open, minWidth, children }: {
   )
 }
 
-// ── Date cell ─────────────────────────────────────────────────────────────────
+// ── Date cell ─────────────────────────────────────────────────────────────────────────────
 
 function DateCell({ task, overdue, onUpdate }: {
   task: Task
   overdue: boolean | null | undefined
   onUpdate: () => void
 }) {
-  const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState({ top: 0, left: 0 })
-  const wrapperRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (!open) return
-    requestAnimationFrame(() => {
-      try { (inputRef.current as any)?.showPicker() } catch {}
-    })
-  }, [open])
-
-  function handleClick(e: React.MouseEvent) {
-    e.stopPropagation()
-    if (wrapperRef.current) {
-      const r = wrapperRef.current.getBoundingClientRect()
-      const spaceBelow = window.innerHeight - r.bottom - 8
-      setPos({ top: spaceBelow > 48 ? r.bottom + 4 : r.top - 52, left: r.left })
-    }
-    setOpen(true)
-  }
-
   return (
     <div
-      ref={wrapperRef}
-      className="w-24 cursor-pointer"
+      className="w-24 flex justify-center"
       onPointerDown={e => e.stopPropagation()}
-      onClick={handleClick}
+      onClick={e => e.stopPropagation()}
       title={task.due_date ? 'Change due date' : 'Add due date'}
     >
-      <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
-        {task.due_date ? formatDate(task.due_date) : <CalendarDays size={13} className="mx-auto" />}
-      </div>
-      {open && createPortal(
+      <div className="relative cursor-pointer min-h-[20px] min-w-[64px]">
+        <div className={cn('text-xs text-center pointer-events-none select-none', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
+          {task.due_date ? formatDate(task.due_date) : <CalendarDays size={13} className="mx-auto" />}
+        </div>
         <input
-          ref={inputRef}
           type="date"
-          defaultValue={task.due_date ?? ''}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, opacity: 0, width: 1, height: 1, pointerEvents: 'none' }}
+          value={task.due_date ?? ''}
           onChange={async e => {
             await supabase.from('tasks').update({ due_date: e.target.value || null }).eq('id', task.id)
-            setOpen(false)
             onUpdate()
           }}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
-        />,
-        document.body
-      )}
+          className="absolute inset-0 opacity-0 w-full h-full cursor-pointer"
+        />
+      </div>
     </div>
   )
 }
 
-// ── Priority cell ───────────────────────────────────────────────────────────────
+// ── Priority cell ─────────────────────────────────────────────────────────────────────────
 
 function PriorityCell({ task, onUpdate }: {
   task: Task
@@ -191,7 +164,7 @@ function PriorityCell({ task, onUpdate }: {
   )
 }
 
-// ── Assignee cell ───────────────────────────────────────────────────────────────
+// ── Assignee cell ─────────────────────────────────────────────────────────────────────────
 
 function AssigneeCell({ task, members, onUpdate }: {
   task: Task
@@ -286,7 +259,7 @@ function AssigneeCell({ task, members, onUpdate }: {
   )
 }
 
-// ── Sortable task row ─────────────────────────────────────────────────────────
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
 
 function TaskRow({
   task,
@@ -360,7 +333,7 @@ function TaskRow({
   )
 }
 
-// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────
+// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────
 
 function SubtaskRow({
   task,
@@ -393,7 +366,7 @@ function SubtaskRow({
   )
 }
 
-// ── Ghost shown in DragOverlay ───────────────────────────────────────────────────────────
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
 
 function TaskGhost({ task }: { task: Task }) {
   return (
@@ -404,7 +377,7 @@ function TaskGhost({ task }: { task: Task }) {
   )
 }
 
-// ── Add task inline ──────────────────────────────────────────────────────────────
+// ── Add task inline ────────────────────────────────────────────────────────────────────
 
 function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
@@ -488,7 +461,7 @@ function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate
   )
 }
 
-// ── Add subtask inline ──────────────────────────────────────────────────────────────
+// ── Add subtask inline ────────────────────────────────────────────────────────────────────
 
 function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   projectId: string
@@ -549,7 +522,7 @@ function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
   )
 }
 
-// ── Section action menu ──────────────────────────────────────────────────────────────
+// ── Section action menu ────────────────────────────────────────────────────────────────────
 
 function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
@@ -608,7 +581,7 @@ function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleComple
   )
 }
 
-// ── Section drop zone ─────────────────────────────────────────────────────────────────
+// ── Section drop zone ────────────────────────────────────────────────────────────────────────
 
 function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
@@ -619,7 +592,7 @@ function SectionDropZone({ id, children }: { id: string; children: React.ReactNo
   )
 }
 
-// ── Main component ────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────
 
 export function ListView({ sections, tasks, projectId, memberMap: _memberMap, onTaskClick, onRefresh }: Props) {
   const { user } = useAuth()
