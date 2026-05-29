@@ -31,7 +31,15 @@ serve(async (req) => {
       if (text) docContents.push({ name, text })
     }
 
-    const systemPrompt = buildSystemPrompt(taskContext, docContents)
+    // Download and read example files
+    const exampleDocUrls = (taskContext.exampleDocUrls ?? []) as { name: string; url: string }[]
+    const exampleContents: { name: string; text: string }[] = []
+    for (const { name, url } of exampleDocUrls) {
+      const text = await readDocument(url, name)
+      if (text) exampleContents.push({ name, text })
+    }
+
+    const systemPrompt = buildSystemPrompt(taskContext, docContents, exampleContents)
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -129,7 +137,7 @@ function smartTruncate(text: string): string {
   return text.slice(0, cut) + '\n\n[Document continues — content above covers the main sections]'
 }
 
-function buildSystemPrompt(ctx: Record<string, unknown>, docContents: { name: string; text: string }[]): string {
+function buildSystemPrompt(ctx: Record<string, unknown>, docContents: { name: string; text: string }[], exampleContents: { name: string; text: string }[] = []): string {
   const lines = [
     'You are a helpful AI assistant embedded in a task management app called TaskHI.',
     'Help the user understand and complete the task described below. Be concise and practical.',
@@ -153,6 +161,14 @@ function buildSystemPrompt(ctx: Record<string, unknown>, docContents: { name: st
       lines.push(`\n### ${doc.name}\n${doc.text}`)
     }
     lines.push('\nBase your answers on the document content above. Quote specific parts when helpful.')
+  }
+
+  if (exampleContents.length > 0) {
+    lines.push('\n## Example Files (reference examples for this task type)')
+    for (const ex of exampleContents) {
+      lines.push(`\n### ${ex.name}\n${ex.text}`)
+    }
+    lines.push('\nUse the example files above as concrete references — model outputs and formats after them when relevant.')
   }
 
   lines.push('\nAnswer questions clearly, give step-by-step guidance when helpful, and keep responses focused on this specific task.')

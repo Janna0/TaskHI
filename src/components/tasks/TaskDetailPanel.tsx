@@ -410,6 +410,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
   const templatePickerRef = useRef<HTMLDivElement>(null)
   const [predefinedTaskId, setPredefinedTaskId] = useState<string | null>(task.predefined_task_id ?? null)
   const [templateInstructions, setTemplateInstructions] = useState<string>('')
+  const [templateExamples, setTemplateExamples] = useState<string[]>([])
   const [savedDocIndex, setSavedDocIndex] = useState<number | null>(null)
 
   const memberEntries = Object.entries(memberMap)
@@ -436,9 +437,13 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     const newPredefinedId = task.predefined_task_id ?? null
     setPredefinedTaskId(newPredefinedId)
     setTemplateInstructions('')
+    setTemplateExamples([])
     if (newPredefinedId) {
-      supabase.from('predefined_tasks').select('instructions').eq('id', newPredefinedId).single()
-        .then(({ data }) => { if (data?.instructions) setTemplateInstructions(data.instructions) })
+      supabase.from('predefined_tasks').select('instructions, example_attachments').eq('id', newPredefinedId).single()
+        .then(({ data }) => {
+          if (data?.instructions) setTemplateInstructions(data.instructions)
+          if (data?.example_attachments) setTemplateExamples(data.example_attachments)
+        })
     }
     // Load persisted AI chat for this user+task from localStorage
     const savedChat = (() => {
@@ -496,6 +501,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     }
     setPredefinedTaskId(t.id)
     setTemplateInstructions(t.instructions ?? '')
+    setTemplateExamples(t.example_attachments ?? [])
     setShowTemplatePicker(false)
     setTemplateSearch('')
     setTemplateApplied(true)
@@ -623,6 +629,15 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
         if (data?.signedUrl) howToDocUrls.push({ name: docName, url: data.signedUrl })
       }
 
+      const exampleDocUrls: { name: string; url: string }[] = []
+      for (const docPath of templateExamples) {
+        const { data } = await supabase.storage.from('how-to-docs').createSignedUrl(docPath, 300)
+        if (data?.signedUrl) {
+          const fileName = docPath.split('/').pop() ?? docPath
+          exampleDocUrls.push({ name: fileName, url: data.signedUrl })
+        }
+      }
+
       const taskContext = {
         title: task.title,
         phase: phase || null,
@@ -631,6 +646,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
         notes: notes || null,
         howToDocs,
         howToDocUrls,
+        exampleDocUrls,
         templateInstructions: templateInstructions || null,
       }
 
@@ -1109,6 +1125,11 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
                 {howToDocs.length > 0 && (
                   <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
                     {howToDocs.length} how-to doc{howToDocs.length > 1 ? 's' : ''} will be read
+                  </span>
+                )}
+                {templateExamples.length > 0 && (
+                  <span className="text-[11px] text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full">
+                    {templateExamples.length} example file{templateExamples.length > 1 ? 's' : ''} will be read
                   </span>
                 )}
               </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, Plus, Pencil, Trash2, Search, BookOpen, Clock } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Pencil, Trash2, Search, BookOpen, Clock, Upload, FileText } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { PredefinedTask } from '../../types'
 import { cn } from '../../lib/utils'
@@ -57,6 +57,7 @@ export interface TemplateData {
   competency: string | null
   phase: string | null
   how_to_attachments: string[] | null
+  example_attachments: string[] | null
 }
 
 type NewForm = {
@@ -67,6 +68,7 @@ type NewForm = {
   competency: string
   phase: string
   how_to_attachments: string[]
+  example_attachments: string[]
 }
 
 interface Props {
@@ -84,13 +86,17 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
   const [addingNew, setAddingNew] = useState(false)
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set())
   const [editForm, setEditForm] = useState<Partial<PredefinedTask>>({})
-  const [newForm, setNewForm] = useState<NewForm>({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+  const [newForm, setNewForm] = useState<NewForm>({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [], example_attachments: [] })
   const [saving, setSaving] = useState(false)
   const [availableDocs, setAvailableDocs] = useState<{ name: string }[]>([])
   const [docsLoading, setDocsLoading] = useState(false)
   const [docsLoaded, setDocsLoaded] = useState(false)
   const [showEditDocPicker, setShowEditDocPicker] = useState(false)
   const [showNewDocPicker, setShowNewDocPicker] = useState(false)
+  const [showEditExamples, setShowEditExamples] = useState(false)
+  const [showNewExamples, setShowNewExamples] = useState(false)
+  const [uploadingExample, setUploadingExample] = useState(false)
+  const [uploadExampleError, setUploadExampleError] = useState<string | null>(null)
 
   const isSelector = mode === 'selector'
   const isPage = mode === 'page'
@@ -147,11 +153,13 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
       competency: editForm.competency || null,
       phase: editForm.phase || null,
       how_to_attachments: editForm.how_to_attachments?.length ? editForm.how_to_attachments : null,
+      example_attachments: editForm.example_attachments?.length ? editForm.example_attachments : null,
     }).eq('id', editingId)
     setSaving(false)
     setEditingId(null)
     setEditForm({})
     setShowEditDocPicker(false)
+    setShowEditExamples(false)
     loadTasks()
   }
 
@@ -173,12 +181,14 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
       competency: newForm.competency || null,
       phase: newForm.phase || null,
       how_to_attachments: newForm.how_to_attachments.length ? newForm.how_to_attachments : null,
+      example_attachments: newForm.example_attachments.length ? newForm.example_attachments : null,
       position: maxPos + 1,
     })
     setSaving(false)
     setAddingNew(false)
     setShowNewDocPicker(false)
-    setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+    setShowNewExamples(false)
+    setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [], example_attachments: [] })
     loadTasks()
   }
 
@@ -186,7 +196,35 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
     setEditingId(task.id)
     setEditForm({ ...task })
     setShowEditDocPicker(false)
+    setShowEditExamples(false)
+    setUploadExampleError(null)
     setAddingNew(false)
+  }
+
+  async function uploadExampleFile(file: File, isNew: boolean) {
+    setUploadingExample(true)
+    setUploadExampleError(null)
+    const path = `examples/${Date.now()}-${file.name}`
+    const { error } = await supabase.storage.from('how-to-docs').upload(path, file, { upsert: false })
+    if (error) {
+      setUploadExampleError(error.message)
+      setUploadingExample(false)
+      return
+    }
+    if (isNew) {
+      setNewForm(f => ({ ...f, example_attachments: [...f.example_attachments, path] }))
+    } else {
+      setEditForm(f => ({ ...f, example_attachments: [...(f.example_attachments ?? []), path] }))
+    }
+    setUploadingExample(false)
+  }
+
+  function removeExampleFile(path: string, isNew: boolean) {
+    if (isNew) {
+      setNewForm(f => ({ ...f, example_attachments: f.example_attachments.filter(p => p !== path) }))
+    } else {
+      setEditForm(f => ({ ...f, example_attachments: (f.example_attachments ?? []).filter(p => p !== path) }))
+    }
   }
 
   function togglePhase(phase: string) {
@@ -264,6 +302,74 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
     )
   }
 
+  // ── example files uploader ────────────────────────────────────────────────
+  function renderExampleUploader(
+    selectedExamples: string[],
+    isNew: boolean,
+    show: boolean,
+    setShow: (v: boolean) => void
+  ) {
+    return (
+      <div>
+        <button
+          type="button"
+          onClick={() => setShow(!show)}
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-700 transition-colors"
+        >
+          <FileText size={11} />
+          <span>Example Files</span>
+          {selectedExamples.length > 0 && (
+            <span className="text-violet-500 font-medium ml-0.5">({selectedExamples.length})</span>
+          )}
+          <ChevronDown size={10} className={cn('transition-transform', show && 'rotate-180')} />
+        </button>
+        {show && (
+          <div className="mt-1.5 border border-slate-200 rounded-md p-2 bg-white space-y-1.5">
+            <p className="text-[11px] text-slate-400">Files the AI will read as concrete examples when helping with this task</p>
+            {selectedExamples.length > 0 && (
+              <div className="space-y-0.5">
+                {selectedExamples.map(path => {
+                  const name = path.split('/').pop() ?? path
+                  return (
+                    <div key={path} className="flex items-center gap-1.5 py-0.5 px-1 rounded hover:bg-slate-50">
+                      <FileText size={10} className="text-violet-400 shrink-0" />
+                      <span className="text-xs text-slate-600 truncate flex-1">{name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeExampleFile(path, isNew)}
+                        className="text-slate-300 hover:text-red-400 shrink-0 leading-none ml-1"
+                      >×</button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {uploadExampleError && (
+              <p className="text-xs text-red-500">{uploadExampleError}</p>
+            )}
+            <label className={cn(
+              'flex items-center gap-1 text-xs cursor-pointer w-fit',
+              uploadingExample ? 'text-slate-400 cursor-wait' : 'text-primary-600 hover:text-primary-700'
+            )}>
+              <Upload size={10} />
+              {uploadingExample ? 'Uploading…' : 'Upload file'}
+              <input
+                type="file"
+                className="hidden"
+                disabled={uploadingExample}
+                onChange={async e => {
+                  const files = Array.from(e.target.files ?? [])
+                  e.target.value = ''
+                  for (const f of files) await uploadExampleFile(f, isNew)
+                }}
+              />
+            </label>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   // ── edit form (shared) ────────────────────────────────────────────────────
   function renderEditForm(compact = false) {
     const wrap = compact
@@ -321,12 +427,13 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
           </select>
         </div>
         {renderDocPicker(editForm.how_to_attachments ?? [], toggleEditDoc, showEditDocPicker, setShowEditDocPicker)}
+        {renderExampleUploader(editForm.example_attachments ?? [], false, showEditExamples, setShowEditExamples)}
         <div className="flex gap-1.5">
           <button onClick={saveEdit} disabled={saving}
             className="text-xs bg-primary-500 text-white px-3 py-1.5 rounded-md hover:bg-primary-600 disabled:opacity-50 font-medium">
             {saving ? 'Saving…' : 'Save'}
           </button>
-          <button onClick={() => { setEditingId(null); setEditForm({}); setShowEditDocPicker(false) }}
+          <button onClick={() => { setEditingId(null); setEditForm({}); setShowEditDocPicker(false); setShowEditExamples(false) }}
             className="text-xs text-slate-500 px-2 py-1.5 rounded-md hover:bg-slate-200">
             Cancel
           </button>
@@ -368,6 +475,12 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                 <span className="text-[11px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
                   <BookOpen size={10} />
                   {task.how_to_attachments!.length} how-to{task.how_to_attachments!.length > 1 ? 's' : ''}
+                </span>
+              )}
+              {(task.example_attachments?.length ?? 0) > 0 && (
+                <span className="text-[11px] bg-violet-50 text-violet-600 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                  <FileText size={10} />
+                  {task.example_attachments!.length} example{task.example_attachments!.length > 1 ? 's' : ''}
                 </span>
               )}
             </div>
@@ -438,7 +551,8 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
           if (e.key === 'Escape') {
             setAddingNew(false)
             setShowNewDocPicker(false)
-            setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+            setShowNewExamples(false)
+            setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [], example_attachments: [] })
           }
         }}
         className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-300 bg-white"
@@ -487,6 +601,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
         </select>
       </div>
       {renderDocPicker(newForm.how_to_attachments, toggleNewDoc, showNewDocPicker, setShowNewDocPicker)}
+      {renderExampleUploader(newForm.example_attachments, true, showNewExamples, setShowNewExamples)}
       <div className="flex gap-2 pt-1">
         <button
           onClick={addTask}
@@ -499,7 +614,8 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
           onClick={() => {
             setAddingNew(false)
             setShowNewDocPicker(false)
-            setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+            setShowNewExamples(false)
+            setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [], example_attachments: [] })
           }}
           className="text-sm text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-200"
         >
@@ -563,6 +679,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
           competency: task.competency,
           phase: task.phase,
           how_to_attachments: task.how_to_attachments,
+          example_attachments: task.example_attachments,
         }) : undefined}
         className={cn(
           'flex items-start gap-2 py-1.5 px-2 -mx-2 rounded-lg group transition-colors',
@@ -571,7 +688,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
       >
         <div className="flex-1 min-w-0">
           <p className="text-sm text-slate-700 leading-snug">{task.title}</p>
-          {(task.time_required || task.competency || (task.how_to_attachments?.length ?? 0) > 0) && (
+          {(task.time_required || task.competency || (task.how_to_attachments?.length ?? 0) > 0 || (task.example_attachments?.length ?? 0) > 0) && (
             <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               {task.competency && (
                 <span className="text-[10px] bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">{task.competency}</span>
@@ -583,6 +700,12 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                 <span className="text-[10px] bg-amber-50 text-amber-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
                   <BookOpen size={9} />
                   {task.how_to_attachments!.length}
+                </span>
+              )}
+              {(task.example_attachments?.length ?? 0) > 0 && (
+                <span className="text-[10px] bg-violet-50 text-violet-600 px-1.5 py-0.5 rounded flex items-center gap-0.5">
+                  <FileText size={9} />
+                  {task.example_attachments!.length}
                 </span>
               )}
             </div>
@@ -663,7 +786,8 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                   if (e.key === 'Escape') {
                     setAddingNew(false)
                     setShowNewDocPicker(false)
-                    setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+                    setShowNewExamples(false)
+                    setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [], example_attachments: [] })
                   }
                 }}
                 className="w-full text-sm border border-slate-200 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-primary-300"
@@ -706,6 +830,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                 </select>
               </div>
               {renderDocPicker(newForm.how_to_attachments, toggleNewDoc, showNewDocPicker, setShowNewDocPicker)}
+              {renderExampleUploader(newForm.example_attachments, true, showNewExamples, setShowNewExamples)}
               <div className="flex gap-1.5">
                 <button onClick={addTask} disabled={saving || !newForm.title.trim()}
                   className="text-xs bg-primary-500 text-white px-2.5 py-1 rounded-md hover:bg-primary-600 disabled:opacity-50">
@@ -714,7 +839,8 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                 <button onClick={() => {
                   setAddingNew(false)
                   setShowNewDocPicker(false)
-                  setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+                  setShowNewExamples(false)
+                  setNewForm({ title: '', description: '', instructions: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [], example_attachments: [] })
                 }}
                   className="text-xs text-slate-500 px-2 py-1 rounded-md hover:bg-slate-100">
                   Cancel
