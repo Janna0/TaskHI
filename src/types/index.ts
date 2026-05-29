@@ -58,6 +58,8 @@ export interface Task {
   created_by: string
   assignee_ids: string[]
   how_to_attachments: string[] | null
+  competency: string | null
+  time_required: string | null
   position: number
   depth: number
   created_at: string

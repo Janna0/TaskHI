@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText, Clock, Award } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -383,6 +383,8 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
   const [notes, setNotes] = useState(task.notes ?? '')
   const [assigneeIds, setAssigneeIds] = useState<string[]>(task.assignee_ids ?? [])
   const [howToDocs, setHowToDocs] = useState<string[]>(task.how_to_attachments ?? [])
+  const [competency, setCompetency] = useState(task.competency ?? '')
+  const [timeRequired, setTimeRequired] = useState(task.time_required ?? '')
   const [availableDocs, setAvailableDocs] = useState<{ id: string; name: string }[]>([])
   const [showDocPicker, setShowDocPicker] = useState(false)
   const [docSearch, setDocSearch] = useState('')
@@ -406,6 +408,8 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     setNotes(task.notes ?? '')
     setAssigneeIds(task.assignee_ids ?? [])
     setHowToDocs(task.how_to_attachments ?? [])
+    setCompetency(task.competency ?? '')
+    setTimeRequired(task.time_required ?? '')
     setSaved(false)
     setShowDocPicker(false)
     setDocSearch('')
@@ -450,6 +454,8 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       notes: notes || null,
       assignee_ids: assigneeIds,
       how_to_attachments: howToDocs,
+      competency: competency || null,
+      time_required: timeRequired || null,
     }).eq('id', task.id)
 
     const added = assigneeIds.filter(id => !(task.assignee_ids ?? []).includes(id) && id !== user?.id)
@@ -705,6 +711,62 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
                 </div>
               )}
             </div>
+          </PropRow>
+
+          <PropRow icon={<Award size={14} />} label="Competency">
+            <select
+              className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
+              value={competency}
+              onChange={e => setCompetency(e.target.value)}
+            >
+              <option value="">None</option>
+              <option value="L1">L1</option>
+              <option value="L2">L2</option>
+              <option value="L3">L3</option>
+              <option value="L4">L4</option>
+            </select>
+          </PropRow>
+
+          <PropRow icon={<Clock size={14} />} label="Time Required">
+            {(() => {
+              const TIME_OPTIONS = [
+                'A few minutes',
+                'About 30 minutes',
+                'About 1 hour',
+                'Half a day (4-8 hours)',
+                '1 day',
+                'A few days',
+                '1 week',
+              ]
+              const isCustom = timeRequired !== '' && !TIME_OPTIONS.includes(timeRequired)
+              return (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <select
+                    className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
+                    value={isCustom ? 'Other' : timeRequired}
+                    onChange={e => {
+                      if (e.target.value === 'Other') setTimeRequired('__custom__')
+                      else setTimeRequired(e.target.value)
+                    }}
+                  >
+                    <option value="">None</option>
+                    {TIME_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                    <option value="Other">Other</option>
+                  </select>
+                  {(isCustom || timeRequired === '__custom__') && (
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Custom time…"
+                      value={timeRequired === '__custom__' ? '' : timeRequired}
+                      onChange={e => setTimeRequired(e.target.value || '__custom__')}
+                      onBlur={e => { if (!e.target.value) setTimeRequired('') }}
+                      className="text-sm border border-slate-200 rounded px-2 py-0.5 outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300 w-36"
+                    />
+                  )}
+                </div>
+              )
+            })()}
           </PropRow>
         </div>
 
