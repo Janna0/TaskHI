@@ -5,6 +5,7 @@ export interface PredefinedTask {
   time_required: string | null
   competency: string | null
   phase: string | null
+  how_to_attachments: string[] | null
   position: number
   created_at: string
 }
