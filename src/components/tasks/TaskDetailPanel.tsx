@@ -445,7 +445,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     const trimmedTitle = title.trim() || task.title
     setTitle(trimmedTitle)
 
-    await supabase.from('tasks').update({
+    const { error: updateError } = await supabase.from('tasks').update({
       title: trimmedTitle,
       status,
       priority,
@@ -455,8 +455,23 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       assignee_ids: assigneeIds,
       how_to_attachments: howToDocs,
       competency: competency || null,
-      time_required: timeRequired || null,
+      time_required: (timeRequired && timeRequired !== '__custom__') ? timeRequired : null,
     }).eq('id', task.id)
+
+    if (updateError) {
+      setSaving(false)
+      alert(
+        'Failed to save task.\n\n' +
+        (updateError.message.includes('competency') || updateError.message.includes('time_required')
+          ? 'The "Competency" and "Time Required" fields require new database columns.\n\n' +
+            'Go to your Supabase dashboard → Table Editor → tasks → Add column:\n' +
+            '  • competency  (type: text, nullable)\n' +
+            '  • time_required  (type: text, nullable)\n\n' +
+            'Then try saving again.'
+          : updateError.message)
+      )
+      return
+    }
 
     const added = assigneeIds.filter(id => !(task.assignee_ids ?? []).includes(id) && id !== user?.id)
     if (added.length > 0) {
