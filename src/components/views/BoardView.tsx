@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import {
   DndContext,
@@ -556,7 +556,7 @@ function AddSectionForm({ projectId, position, onDone }: { projectId: string; po
 // ── Main BoardView ────────────────────────────────────────────────────────────────────
 
 export function BoardView({ sections, tasks: allTasks, projectId, memberMap, canEdit = true, canAddSections = false, onTaskClick, onRefresh }: Props) {
-  const tasks = allTasks.filter(t => !t.parent_task_id)
+  const tasks = useMemo(() => allTasks.filter(t => !t.parent_task_id), [allTasks])
   const { user } = useAuth()
   const [showAddSection, setShowAddSection] = useState(false)
   const [projectMembers, setProjectMembers] = useState<Member[]>([])
@@ -686,7 +686,7 @@ export function BoardView({ sections, tasks: allTasks, projectId, memberMap, can
       finalIds.forEach((id, idx) => { if (id !== taskId) bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
       if (crossSection) (taskOrderRef.current[originalTask.section_id] ?? []).forEach((id, idx) => { bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
       Promise.all(bgWrites)
-      if (movedToCompletion || movedFromCompletion) onRefresh()
+      if (crossSection || movedToCompletion || movedFromCompletion) onRefresh()
     } else if (type === 'column') {
       await Promise.all(localSectionsRef.current.map((sec, idx) => supabase.from('sections').update({ position: idx }).eq('id', sec.id)))
       onRefresh()
