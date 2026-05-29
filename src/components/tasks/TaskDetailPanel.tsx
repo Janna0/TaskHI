@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText, Clock, Award, Tag, Sparkles, ChevronDown, LayoutTemplate } from 'lucide-react'
 import { supabase, supabaseUrl, supabaseAnonKey } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
@@ -1106,10 +1107,18 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
                       )}
                       <div className="flex flex-col gap-1 max-w-[80%]">
                         <div className={cn(
-                          'text-sm rounded-xl px-3 py-2 leading-relaxed whitespace-pre-wrap break-words',
+                          'text-sm rounded-xl px-3 py-2 leading-relaxed break-words',
                           msg.role === 'user' ? 'bg-primary-500 text-white rounded-br-sm' : 'bg-slate-100 text-slate-700 rounded-bl-sm'
                         )}>
-                          {msg.content ? msg.content : (
+                          {msg.content ? (
+                            msg.role === 'assistant' ? (
+                              <div className="prose prose-sm prose-slate max-w-none prose-p:my-1 prose-headings:my-1.5 prose-ul:my-1 prose-li:my-0.5 prose-strong:text-slate-800">
+                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                              </div>
+                            ) : (
+                              <span className="whitespace-pre-wrap">{msg.content}</span>
+                            )
+                          ) : (
                             msg.role === 'assistant' && aiStreaming && i === aiMessages.length - 1 ? (
                               <span className="flex gap-1 items-center py-0.5">
                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />

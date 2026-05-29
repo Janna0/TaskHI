@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const MAX_DOC_CHARS = 12000
+const MAX_DOC_CHARS = 30000
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -85,7 +85,7 @@ async function readDocument(url: string, name: string): Promise<string> {
 
     // Plain text, markdown, csv, etc.
     const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
-    return text.slice(0, MAX_DOC_CHARS)
+    return smartTruncate(text)
   } catch {
     return ''
   }
@@ -114,10 +114,19 @@ async function readPdf(bytes: Uint8Array, name: string): Promise<string> {
     if (t.length > 2 && /[a-zA-Z]/.test(t)) parts.push(t)
   }
   if (parts.length > 30) {
-    return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, MAX_DOC_CHARS)
+    return smartTruncate(parts.join(' ').replace(/\s+/g, ' ').trim())
   }
 
   return `[The PDF "${name}" is attached but its text could not be extracted automatically. Ask the user to paste the relevant section or describe the content.]`
+}
+
+function smartTruncate(text: string): string {
+  if (text.length <= MAX_DOC_CHARS) return text
+  // Cut at a paragraph or sentence boundary to avoid mid-sentence truncation
+  const cutoff = text.lastIndexOf('\n\n', MAX_DOC_CHARS)
+  const cutoff2 = text.lastIndexOf('. ', MAX_DOC_CHARS)
+  const cut = cutoff > MAX_DOC_CHARS * 0.8 ? cutoff : cutoff2 > MAX_DOC_CHARS * 0.8 ? cutoff2 + 1 : MAX_DOC_CHARS
+  return text.slice(0, cut) + '\n\n[Document continues — content above covers the main sections]'
 }
 
 function buildSystemPrompt(ctx: Record<string, unknown>, docContents: { name: string; text: string }[]): string {
