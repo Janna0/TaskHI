@@ -224,7 +224,7 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
     )
   }
 
-  function SectionHeaderRow({ name, sectionKey, taskCount }: { name: string; sectionKey: string; taskCount: number }) {
+  function SectionHeaderRow({ name, sectionKey }: { name: string; sectionKey: string }) {
     const collapsed = collapsedSections.has(sectionKey)
     return (
       <div className="flex" style={{ height: ROW_H }}>
@@ -235,9 +235,6 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
         >
           <ChevronDown size={12} className={cn('text-slate-400 transition-transform shrink-0', collapsed && '-rotate-90')} />
           <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{name}</span>
-          {collapsed && taskCount > 0 && (
-            <span className="ml-auto text-xs text-slate-400 font-normal normal-case tracking-normal">{taskCount} hidden</span>
-          )}
         </button>
         <div className="relative border-b border-slate-100" style={{ width: totalPx }}>
           <GridLines />
@@ -337,7 +334,7 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
           {/* Sectioned tasks */}
           {sectionRows.map(({ section, tasks: sTasks }) => (
             <div key={section.id}>
-              <SectionHeaderRow name={section.name} sectionKey={section.id} taskCount={sTasks.length} />
+              <SectionHeaderRow name={section.name} sectionKey={section.id} />
               {!collapsedSections.has(section.id) && sTasks.map(t => <TaskRow key={t.id} task={t} />)}
             </div>
           ))}
@@ -346,7 +343,7 @@ export function TimelineView({ sections, tasks: allTasks, onTaskClick }: Props) 
           {unsectioned.length > 0 && (
             <div>
               {sections.length > 0 && (
-                <SectionHeaderRow name="No section" sectionKey="__unsectioned__" taskCount={unsectioned.length} />
+                <SectionHeaderRow name="No section" sectionKey="__unsectioned__" />
               )}
               {(!sections.length || !collapsedSections.has('__unsectioned__')) && unsectioned.map(t => <TaskRow key={t.id} task={t} />)}
             </div>
