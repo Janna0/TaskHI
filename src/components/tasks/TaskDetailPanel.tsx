@@ -407,6 +407,9 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
   const [templateSearch, setTemplateSearch] = useState('')
   const [templateApplied, setTemplateApplied] = useState(false)
   const templatePickerRef = useRef<HTMLDivElement>(null)
+  const [predefinedTaskId, setPredefinedTaskId] = useState<string | null>(task.predefined_task_id ?? null)
+  const [templateInstructions, setTemplateInstructions] = useState<string>('')
+  const [savedDocIndex, setSavedDocIndex] = useState<number | null>(null)
 
   const memberEntries = Object.entries(memberMap)
 
@@ -429,6 +432,14 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     setAiMessages([])
     setAiInput('')
     setAiStreaming(false)
+    setSavedDocIndex(null)
+    const newPredefinedId = task.predefined_task_id ?? null
+    setPredefinedTaskId(newPredefinedId)
+    setTemplateInstructions('')
+    if (newPredefinedId) {
+      supabase.from('predefined_tasks').select('instructions').eq('id', newPredefinedId).single()
+        .then(({ data }) => { if (data?.instructions) setTemplateInstructions(data.instructions) })
+    }
     loadSubtasks()
   }, [task.id])
 
@@ -466,6 +477,8 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     if (t.how_to_attachments?.length) {
       setHowToDocs(prev => [...new Set([...prev, ...t.how_to_attachments!])])
     }
+    setPredefinedTaskId(t.id)
+    setTemplateInstructions(t.instructions ?? '')
     setShowTemplatePicker(false)
     setTemplateSearch('')
     setTemplateApplied(true)
@@ -499,6 +512,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       competency: competency || null,
       time_required: (timeRequired && timeRequired !== '__custom__') ? timeRequired : null,
       phase: phase || null,
+      predefined_task_id: predefinedTaskId,
     }).eq('id', task.id)
 
     if (updateError) {
@@ -592,6 +606,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
         time_required: timeRequired || null,
         notes: notes || null,
         howToDocs,
+        templateInstructions: templateInstructions || null,
       }
 
       const response = await fetch(`${supabaseUrl}/functions/v1/ask-ai`, {
@@ -648,6 +663,19 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       })
     } finally {
       setAiStreaming(false)
+    }
+  }
+
+  async function saveAsDoc(content: string, msgIndex: number) {
+    const safeName = task.title.replace(/[^a-z0-9\- ]/gi, '').trim().slice(0, 40) || 'Document'
+    const ts = new Date().toISOString().slice(0, 10)
+    const filename = `${safeName} - AI - ${ts}.txt`
+    const blob = new Blob([content], { type: 'text/plain' })
+    const { error } = await supabase.storage.from('how-to-docs').upload(filename, blob, { upsert: true })
+    if (!error) {
+      setHowToDocs(prev => [...new Set([...prev, filename])])
+      setSavedDocIndex(msgIndex)
+      setTimeout(() => setSavedDocIndex(null), 2500)
     }
   }
 
@@ -1047,18 +1075,34 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
                           <Sparkles size={11} className="text-violet-500" />
                         </div>
                       )}
-                      <div className={cn(
-                        'max-w-[80%] text-sm rounded-xl px-3 py-2 leading-relaxed whitespace-pre-wrap break-words',
-                        msg.role === 'user' ? 'bg-primary-500 text-white rounded-br-sm' : 'bg-slate-100 text-slate-700 rounded-bl-sm'
-                      )}>
-                        {msg.content ? msg.content : (
-                          msg.role === 'assistant' && aiStreaming && i === aiMessages.length - 1 ? (
-                            <span className="flex gap-1 items-center py-0.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
-                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
-                            </span>
-                          ) : null
+                      <div className="flex flex-col gap-1 max-w-[80%]">
+                        <div className={cn(
+                          'text-sm rounded-xl px-3 py-2 leading-relaxed whitespace-pre-wrap break-words',
+                          msg.role === 'user' ? 'bg-primary-500 text-white rounded-br-sm' : 'bg-slate-100 text-slate-700 rounded-bl-sm'
+                        )}>
+                          {msg.content ? msg.content : (
+                            msg.role === 'assistant' && aiStreaming && i === aiMessages.length - 1 ? (
+                              <span className="flex gap-1 items-center py-0.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+                              </span>
+                            ) : null
+                          )}
+                        </div>
+                        {msg.role === 'assistant' && msg.content && !aiStreaming && (
+                          <button
+                            onClick={() => saveAsDoc(msg.content, i)}
+                            className={cn(
+                              'self-start text-[11px] flex items-center gap-1 px-2 py-0.5 rounded-md transition-colors',
+                              savedDocIndex === i
+                                ? 'text-emerald-600 bg-emerald-50'
+                                : 'text-slate-400 hover:text-violet-600 hover:bg-violet-50'
+                            )}
+                          >
+                            <FileText size={10} />
+                            {savedDocIndex === i ? 'Saved to How To docs!' : 'Save as document'}
+                          </button>
                         )}
                       </div>
                     </div>
