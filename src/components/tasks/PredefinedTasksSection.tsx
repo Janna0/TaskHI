@@ -45,7 +45,7 @@ type NewForm = {
 }
 
 interface Props {
-  mode?: 'panel' | 'selector'
+  mode?: 'panel' | 'selector' | 'page'
   onSelect?: (t: TemplateData) => void
 }
 
@@ -63,13 +63,14 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
   const [saving, setSaving] = useState(false)
 
   const isSelector = mode === 'selector'
+  const isPage = mode === 'page'
 
   useEffect(() => {
-    if (isSelector) loadTasks()
+    if (isSelector || isPage) loadTasks()
   }, [])
 
   useEffect(() => {
-    if (!isSelector && sectionOpen && !loaded) loadTasks()
+    if (!isSelector && !isPage && sectionOpen && !loaded) loadTasks()
   }, [sectionOpen])
 
   async function loadTasks() {
@@ -361,7 +362,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
     </div>
   )
 
-  if (isSelector) return body
+  if (isSelector || isPage) return body
 
   return (
     <div className="px-6 py-4 border-b border-slate-100">
