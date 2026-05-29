@@ -49,6 +49,7 @@ const TIME_OPTIONS = [
 ]
 
 export interface TemplateData {
+  id: string
   title: string
   description: string | null
   instructions: string | null
@@ -554,6 +555,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
       <div
         key={task.id}
         onClick={isSelector ? () => onSelect?.({
+          id: task.id,
           title: task.title,
           description: task.description,
           instructions: task.instructions,

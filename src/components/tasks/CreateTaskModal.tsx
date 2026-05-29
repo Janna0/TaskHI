@@ -65,12 +65,14 @@ export function CreateTaskModal({ open, onClose, onCreated, projectId, sections,
       insertData.competency = template.competency || null
       insertData.time_required = template.time_required || null
       insertData.phase = template.phase || null
+      insertData.how_to_attachments = template.how_to_attachments?.length ? template.how_to_attachments : null
+      insertData.predefined_task_id = template.id
     }
 
     const { error: err } = await supabase.from('tasks').insert(insertData)
     setLoading(false)
     if (err) {
-      const isColErr = err.message.includes('competency') || err.message.includes('time_required') || err.message.includes('phase') || err.message.includes('notes')
+      const isColErr = err.message.includes('competency') || err.message.includes('time_required') || err.message.includes('phase') || err.message.includes('notes') || err.message.includes('how_to_attachments')
       setError(isColErr
         ? 'Template fields require DB columns. Add competency, time_required, phase (text, nullable) to the tasks table in Supabase, then try again.'
         : err.message
