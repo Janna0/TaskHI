@@ -1,10 +1,9 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText, Clock, Award, Tag, Sparkles, ChevronDown } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText, Clock, Award, Tag, Sparkles, ChevronDown, LayoutTemplate } from 'lucide-react'
 import { supabase, supabaseUrl, supabaseAnonKey } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
-import { Task, Section } from '../../types'
+import { Task, Section, PredefinedTask } from '../../types'
 import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
-import { PredefinedTasksSection } from './PredefinedTasksSection'
 
 interface Comment {
   id: string
@@ -403,6 +402,11 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
   const [aiInput, setAiInput] = useState('')
   const [aiStreaming, setAiStreaming] = useState(false)
   const aiMessagesRef = useRef<HTMLDivElement>(null)
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false)
+  const [templates, setTemplates] = useState<PredefinedTask[]>([])
+  const [templateSearch, setTemplateSearch] = useState('')
+  const [templateApplied, setTemplateApplied] = useState(false)
+  const templatePickerRef = useRef<HTMLDivElement>(null)
 
   const memberEntries = Object.entries(memberMap)
 
@@ -432,6 +436,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     function onClickOutside(e: MouseEvent) {
       if (assigneePickerRef.current && !assigneePickerRef.current.contains(e.target as Node)) setShowAssigneePicker(false)
       if (docPickerRef.current && !docPickerRef.current.contains(e.target as Node)) setShowDocPicker(false)
+      if (templatePickerRef.current && !templatePickerRef.current.contains(e.target as Node)) setShowTemplatePicker(false)
     }
     document.addEventListener('mousedown', onClickOutside)
     return () => document.removeEventListener('mousedown', onClickOutside)
@@ -446,6 +451,25 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
   async function loadSubtasks() {
     const { data } = await supabase.from('tasks').select('*').eq('parent_task_id', task.id).order('position')
     if (data) setSubtasks(data as Task[])
+  }
+
+  async function loadTemplates() {
+    const { data } = await supabase.from('predefined_tasks').select('*').order('position')
+    if (data) setTemplates(data as PredefinedTask[])
+  }
+
+  function applyTemplate(t: PredefinedTask) {
+    if (!phase && t.phase) setPhase(t.phase)
+    if (!competency && t.competency) setCompetency(t.competency)
+    if (!timeRequired && t.time_required) setTimeRequired(t.time_required)
+    if (!notes && t.description) setNotes(t.description)
+    if (t.how_to_attachments?.length) {
+      setHowToDocs(prev => [...new Set([...prev, ...t.how_to_attachments!])])
+    }
+    setShowTemplatePicker(false)
+    setTemplateSearch('')
+    setTemplateApplied(true)
+    setTimeout(() => setTemplateApplied(false), 2500)
   }
 
   async function loadAvailableDocs() {
@@ -633,12 +657,63 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     <div className="w-[640px] shrink-0 border-l border-slate-200 bg-white flex flex-col h-full">
       {/* Top bar */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           {canEdit && (
             <button onClick={handleDelete} disabled={deleting}
               className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 transition-colors" title="Delete task">
               <Trash2 size={14} />
             </button>
+          )}
+          {canEdit && (
+            <div className="relative" ref={templatePickerRef}>
+              <button
+                onClick={() => { setShowTemplatePicker(v => !v); if (!showTemplatePicker) { loadTemplates(); setTemplateSearch('') } }}
+                className={cn('p-1.5 rounded-md transition-colors', templateApplied ? 'text-emerald-500 bg-emerald-50' : 'text-slate-400 hover:text-violet-500 hover:bg-violet-50')}
+                title="Apply template"
+              >
+                <LayoutTemplate size={14} />
+              </button>
+              {showTemplatePicker && (
+                <div className="absolute left-0 top-full mt-1 w-72 bg-white border border-slate-200 rounded-xl shadow-lg z-40 overflow-hidden">
+                  <div className="px-3 pt-2.5 pb-2 border-b border-slate-100">
+                    <p className="text-xs font-semibold text-slate-500 mb-1.5">Apply template</p>
+                    <input
+                      autoFocus
+                      type="text"
+                      placeholder="Search templates…"
+                      value={templateSearch}
+                      onChange={e => setTemplateSearch(e.target.value)}
+                      className="w-full text-sm outline-none bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 placeholder-slate-400"
+                    />
+                    <p className="text-[11px] text-slate-400 mt-1.5">Only fills fields that aren't set yet</p>
+                  </div>
+                  {(() => {
+                    const filtered = templates.filter(t =>
+                      t.title.toLowerCase().includes(templateSearch.toLowerCase()) ||
+                      (t.phase ?? '').toLowerCase().includes(templateSearch.toLowerCase())
+                    )
+                    return filtered.length === 0 ? (
+                      <p className="px-4 py-3 text-xs text-slate-400">
+                        {templates.length === 0 ? 'No templates found' : 'No matching templates'}
+                      </p>
+                    ) : (
+                      <div className="py-1 max-h-56 overflow-y-auto">
+                        {filtered.map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => applyTemplate(t)}
+                            className="flex flex-col w-full px-3 py-2.5 hover:bg-slate-50 text-left transition-colors"
+                          >
+                            <span className="text-sm text-slate-700 font-medium">{t.title}</span>
+                            {t.phase && <span className="text-xs text-slate-400 truncate mt-0.5">{t.phase}</span>}
+                          </button>
+                        ))}
+                      </div>
+                    )
+                  })()}
+                </div>
+              )}
+            </div>
           )}
           {!canEdit && (
             <span className="text-xs text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">View only</span>
@@ -944,9 +1019,6 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
             />
           </div>
         </div>
-
-        {/* Predefined Tasks */}
-        <PredefinedTasksSection />
 
         {/* AI Assistant */}
         <div className="border-b border-slate-100">
