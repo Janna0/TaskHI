@@ -1,3 +1,14 @@
+export interface PredefinedTask {
+  id: string
+  title: string
+  description: string | null
+  time_required: string | null
+  competency: string | null
+  phase: string | null
+  position: number
+  created_at: string
+}
+
 export interface Profile {
   id: string
   name: string
@@ -48,6 +59,7 @@ export interface Task {
   id: string
   project_id: string
   section_id: string | null
+  parent_task_id: string | null
   title: string
   description: string
   status: 'todo' | 'in_progress' | 'review' | 'blocked' | 'done'
@@ -56,7 +68,12 @@ export interface Task {
   due_date: string | null
   created_by: string
   assignee_ids: string[]
+  how_to_attachments: string[] | null
+  competency: string | null
+  time_required: string | null
+  phase: string | null
   position: number
+  depth: number
   created_at: string
   updated_at: string
 }

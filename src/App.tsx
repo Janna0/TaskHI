@@ -11,6 +11,8 @@ import { MyTasksPage } from './pages/MyTasksPage'
 import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { InboxPage } from './pages/InboxPage'
+import { HowToPage } from './pages/HowToPage'
+import { PredefinedTasksPage } from './pages/PredefinedTasksPage'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null }
@@ -24,8 +26,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
             <pre className="text-xs text-slate-600 bg-slate-50 rounded p-3 overflow-auto whitespace-pre-wrap">
               {(this.state.error as Error).message}
             </pre>
-            <button onClick={() => this.setState({ error: null })}
-              className="mt-4 text-sm text-primary-600 hover:underline">Try again</button>
+            <button onClick={() => this.setState({ error: null })} className="mt-4 text-sm text-primary-600 hover:underline">Try again</button>
           </div>
         </div>
       )
@@ -59,6 +60,8 @@ function AppRoutes() {
       <Route path="/projects/:id" element={<PrivateRoute><ProjectView /></PrivateRoute>} />
       <Route path="/my-tasks" element={<PrivateRoute><MyTasksPage /></PrivateRoute>} />
       <Route path="/inbox" element={<PrivateRoute><InboxPage /></PrivateRoute>} />
+      <Route path="/how-to" element={<PrivateRoute><HowToPage /></PrivateRoute>} />
+      <Route path="/predefined-tasks" element={<PrivateRoute><PredefinedTasksPage /></PrivateRoute>} />
       <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
