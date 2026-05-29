@@ -1065,11 +1065,32 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
             <div className="flex items-center gap-2">
               <Sparkles size={15} className="text-violet-500" />
               <span className="text-sm font-semibold text-slate-700">AI Assistant</span>
+              {templateInstructions && (
+                <span className="text-[10px] font-medium bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full">Skill loaded</span>
+              )}
             </div>
             <ChevronDown size={15} className={cn('text-slate-400 transition-transform', aiOpen && 'rotate-180')} />
           </button>
           {aiOpen && (
             <div className="px-6 pb-5">
+              <div className="flex items-center gap-1.5 mb-2 flex-wrap">
+                {templateInstructions ? (
+                  <span className="text-[11px] text-violet-600 bg-violet-50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                    <Sparkles size={9} /> Skill instructions active
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    No skill linked —{' '}
+                    <button onClick={() => { setShowTemplatePicker(true); loadTemplates() }} className="underline hover:text-slate-600">apply a template</button>
+                    {' '}to add skill context
+                  </span>
+                )}
+                {howToDocs.length > 0 && (
+                  <span className="text-[11px] text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
+                    {howToDocs.length} how-to doc{howToDocs.length > 1 ? 's' : ''} will be read
+                  </span>
+                )}
+              </div>
               <div ref={aiMessagesRef} className="flex flex-col gap-3 mb-3 max-h-72 overflow-y-auto pr-1">
                 {aiMessages.length === 0 ? (
                   <p className="text-xs text-slate-400 py-2 text-center">
