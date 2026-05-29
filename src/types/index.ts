@@ -2,20 +2,20 @@ export interface PredefinedTask {
   id: string
   title: string
   description: string | null
+  instructions: string | null
   time_required: string | null
   competency: string | null
   phase: string | null
+  how_to_attachments: string[] | null
   position: number
   created_at: string
 }
 
 export interface Profile {
   id: string
-  name: string
-  email?: string
-  avatar_url: string | null
-  avatar_color?: string
-  created_at: string
+  name: string | null
+  avatar_color: string | null
+  email: string | null
 }
 
 export interface ProjectMember {
@@ -23,28 +23,22 @@ export interface ProjectMember {
   project_id: string
   user_id: string
   role: string
-  created_at: string
-  profile?: Profile
+  profile: Profile
 }
 
 export interface BoardColumnConfig {
-  status: string
-  name: string
+  sectionId: string
+  width: number
 }
 
 export interface Project {
   id: string
   name: string
-  description: string
-  color: string
-  icon?: string | null
-  owner_id: string
-  is_favorite: boolean
-  status: 'active' | 'archived'
-  board_columns?: BoardColumnConfig[] | null
+  description: string | null
+  created_by: string
   created_at: string
   updated_at: string
-  task_count?: number
+  board_column_configs: BoardColumnConfig[] | null
 }
 
 export interface Section {
@@ -72,6 +66,7 @@ export interface Task {
   competency: string | null
   time_required: string | null
   phase: string | null
+  predefined_task_id: string | null
   position: number
   depth: number
   created_at: string
@@ -86,9 +81,6 @@ export interface Notification {
   task_id: string | null
   project_id: string | null
   comment_id: string | null
-  is_read: boolean
+  read: boolean
   created_at: string
-  actor?: { name: string | null; avatar_color: string | null } | null
-  task?: { title: string | null } | null
-  project?: { name: string | null; color: string | null } | null
 }

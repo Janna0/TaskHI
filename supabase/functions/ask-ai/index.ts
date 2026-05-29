@@ -75,6 +75,11 @@ function buildSystemPrompt(ctx: Record<string, unknown>): string {
   if (ctx.time_required) lines.push(`Time required: ${ctx.time_required}`)
   if (ctx.notes) lines.push(`\nDescription:\n${ctx.notes}`)
 
+  if (ctx.templateInstructions) {
+    lines.push(`\n## Skill Instructions\n${ctx.templateInstructions}`)
+    lines.push('(The above instructions are the authoritative guide for this task type. Follow them closely.)')
+  }
+
   const docs = ctx.howToDocs as string[] | undefined
   if (docs && docs.length > 0) {
     lines.push(`\nAttached how-to documents: ${docs.join(', ')}`)
