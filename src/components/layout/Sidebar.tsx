@@ -46,7 +46,9 @@ interface SearchResult {
 const navClass = ({ isActive }: { isActive: boolean }) =>
   cn(
     'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm transition-colors',
-    isActive ? 'bg-white/15 text-white font-medium' : 'text-white/70 hover:bg-white/10 hover:text-white'
+    isActive
+      ? 'bg-white/15 text-white font-medium'
+      : 'text-white/70 hover:bg-white/10 hover:text-white'
   )
 
 export function Sidebar({ projects, onNewProject }: SidebarProps) {
@@ -86,7 +88,11 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
   }, [user])
 
   async function loadUnreadCount() {
-    const { count } = await supabase.from('notifications').select('*', { count: 'exact', head: true }).eq('user_id', user!.id).eq('is_read', false)
+    const { count } = await supabase
+      .from('notifications')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', user!.id)
+      .eq('is_read', false)
     setUnreadCount(count ?? 0)
   }
 
@@ -117,22 +123,36 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
 
   useEffect(() => {
     if (!contextMenu) return
-    function onMouseDown(e: MouseEvent) { if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu() }
-    function onKeyDown(e: KeyboardEvent) { if (e.key === 'Escape') closeMenu() }
+    function onMouseDown(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) closeMenu()
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') closeMenu()
+    }
     document.addEventListener('mousedown', onMouseDown)
     document.addEventListener('keydown', onKeyDown)
-    return () => { document.removeEventListener('mousedown', onMouseDown); document.removeEventListener('keydown', onKeyDown) }
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
   }, [contextMenu])
 
-  useEffect(() => { if (renameProject) requestAnimationFrame(() => renameInputRef.current?.focus()) }, [renameProject])
+  useEffect(() => {
+    if (renameProject) requestAnimationFrame(() => renameInputRef.current?.focus())
+  }, [renameProject])
 
   function openContextMenu(e: React.MouseEvent, project: Project) {
-    e.preventDefault(); e.stopPropagation()
+    e.preventDefault()
+    e.stopPropagation()
     setContextMenu({ project, x: e.clientX, y: e.clientY })
     setShowColorPanel(false)
   }
 
-  function closeMenu() { setContextMenu(null); setShowColorPanel(false); setUploadError(null) }
+  function closeMenu() {
+    setContextMenu(null)
+    setShowColorPanel(false)
+    setUploadError(null)
+  }
 
   async function handleRename() {
     if (!renameProject || !renameValue.trim()) { setRenameProject(null); return }
@@ -160,18 +180,25 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
     const file = e.target.files[0]
     const ext = file.name.split('.').pop() ?? 'png'
     const path = `${contextMenu.project.id}/${Date.now()}.${ext}`
-    setUploading(true); setUploadError(null)
+    setUploading(true)
+    setUploadError(null)
     const { error } = await supabase.storage.from('project-icons').upload(path, file)
-    if (error) { setUploadError(error.message); setUploading(false); return }
+    if (error) {
+      setUploadError(error.message)
+      setUploading(false)
+      return
+    }
     const { data } = supabase.storage.from('project-icons').getPublicUrl(path)
     await supabase.from('projects').update({ icon: data.publicUrl }).eq('id', contextMenu.project.id)
     window.dispatchEvent(new Event('taskhi:projects-changed'))
-    setUploading(false); closeMenu()
+    setUploading(false)
+    closeMenu()
   }
 
   async function handleArchive() {
     if (!contextMenu) return
-    const p = contextMenu.project; closeMenu()
+    const p = contextMenu.project
+    closeMenu()
     if (!confirm(`Archive "${p.name}"? It will be moved to the Archived section.`)) return
     await supabase.from('projects').update({ status: 'archived' }).eq('id', p.id)
     window.dispatchEvent(new Event('taskhi:projects-changed'))
@@ -180,79 +207,141 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
 
   async function handleUnarchive() {
     if (!contextMenu) return
-    const p = contextMenu.project; closeMenu()
+    const p = contextMenu.project
+    closeMenu()
     await supabase.from('projects').update({ status: 'active' }).eq('id', p.id)
     window.dispatchEvent(new Event('taskhi:projects-changed'))
   }
 
-  async function handleSignOut() { await signOut(); navigate('/login') }
+  async function handleSignOut() {
+    await signOut()
+    navigate('/login')
+  }
 
   const MENU_H = showColorPanel ? 480 : 148
   const menuX = contextMenu ? Math.min(contextMenu.x, window.innerWidth - 232) : 0
-  const menuY = contextMenu ? (contextMenu.y + MENU_H > window.innerHeight - 8 ? Math.max(8, contextMenu.y - MENU_H) : contextMenu.y) : 0
+  const menuY = contextMenu
+    ? (contextMenu.y + MENU_H > window.innerHeight - 8
+        ? Math.max(8, contextMenu.y - MENU_H)
+        : contextMenu.y)
+    : 0
+
   const isArchived = contextMenu?.project.status === 'archived'
 
   return (
     <aside className="fixed inset-y-0 left-0 w-64 bg-[#1e1f21] flex flex-col z-10">
+      {/* User row */}
       <div className="px-4 py-4 border-b border-white/10">
         <div className="flex items-center gap-2.5">
           <Link to="/profile" className="flex items-center gap-2.5 flex-1 min-w-0 group">
-            <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 group-hover:opacity-80 transition-opacity" style={{ background: avatarColor }}>
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 group-hover:opacity-80 transition-opacity"
+              style={{ background: avatarColor }}
+            >
               {getInitials(displayName)}
             </div>
-            <span className="font-semibold text-white text-sm truncate group-hover:opacity-80 transition-opacity">{displayName}</span>
+            <span className="font-semibold text-white text-sm truncate group-hover:opacity-80 transition-opacity">
+              {displayName}
+            </span>
           </Link>
-          <button onClick={handleSignOut} className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors shrink-0" title="Sign out"><LogOut size={14} /></button>
+          <button
+            onClick={handleSignOut}
+            className="p-1 rounded hover:bg-white/10 text-white/50 hover:text-white/80 transition-colors shrink-0"
+            title="Sign out"
+          >
+            <LogOut size={14} />
+          </button>
         </div>
       </div>
 
+      {/* Search */}
       <div className="px-3 pt-3 pb-1">
         <div className="relative">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-white/35 pointer-events-none" />
-          <input type="text" placeholder="Search…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-            className="w-full pl-7 pr-6 py-1.5 text-xs bg-white/10 border border-white/10 rounded-md text-white placeholder-white/35 focus:outline-none focus:bg-white/15 focus:border-white/20 transition-all" />
-          {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70"><X size={12} /></button>}
+          <input
+            type="text"
+            placeholder="Search…"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            className="w-full pl-7 pr-6 py-1.5 text-xs bg-white/10 border border-white/10 rounded-md text-white placeholder-white/35 focus:outline-none focus:bg-white/15 focus:border-white/20 transition-all"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white/35 hover:text-white/70"
+            >
+              <X size={12} />
+            </button>
+          )}
         </div>
       </div>
 
+      {/* Nav */}
       <nav className="flex-1 min-h-0 px-3 py-2 overflow-y-auto overscroll-y-contain scrollbar-thin">
         {searchQuery.trim() ? (
-          searchLoading ? <p className="px-3 py-2 text-xs text-white/35">Searching…</p>
-          : searchResults.length === 0 ? <p className="px-3 py-2 text-xs text-white/35">No results for "{searchQuery}"</p>
-          : (
+          searchLoading ? (
+            <p className="px-3 py-2 text-xs text-white/35">Searching…</p>
+          ) : searchResults.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-white/35">No results for "{searchQuery}"</p>
+          ) : (
             <div className="space-y-0.5">
-              {searchResults.some(r => r.type === 'project') && <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider">Projects</p>}
+              {searchResults.some(r => r.type === 'project') && (
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider">Projects</p>
+              )}
               {searchResults.filter(r => r.type === 'project').map(r => (
-                <button key={r.id} onClick={() => handleSearchSelect(r)} className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-md text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left">
-                  <FolderOpen size={14} className="shrink-0" /><span className="truncate">{r.title}</span>
+                <button key={r.id} onClick={() => handleSearchSelect(r)}
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-md text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left">
+                  <FolderOpen size={14} className="shrink-0" />
+                  <span className="truncate">{r.title}</span>
                 </button>
               ))}
-              {searchResults.some(r => r.type === 'task') && <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider">Tasks</p>}
+              {searchResults.some(r => r.type === 'task') && (
+                <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-white/30 uppercase tracking-wider">Tasks</p>
+              )}
               {searchResults.filter(r => r.type === 'task').map(r => (
-                <button key={r.id} onClick={() => handleSearchSelect(r)} className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-md text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left">
-                  <FileText size={14} className="shrink-0" /><span className="truncate">{r.title}</span>
+                <button key={r.id} onClick={() => handleSearchSelect(r)}
+                  className="flex items-center gap-2.5 w-full px-3 py-1.5 rounded-md text-sm text-white/70 hover:bg-white/10 hover:text-white transition-colors text-left">
+                  <FileText size={14} className="shrink-0" />
+                  <span className="truncate">{r.title}</span>
                 </button>
               ))}
             </div>
           )
         ) : (
           <div className="space-y-0.5">
-            <NavLink to="/dashboard" className={navClass}><Home size={15} /> Home</NavLink>
+            <NavLink to="/dashboard" className={navClass}>
+              <Home size={15} /> Home
+            </NavLink>
             <div>
-              <button onClick={() => setShowTasks(v => !v)}
-                className={cn('flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left transition-colors',
-                  location.pathname === '/my-tasks' ? 'bg-white/15 text-white font-medium' : 'text-white/70 hover:bg-white/10 hover:text-white')}>
-                <CheckSquare size={15} />Tasks
+              <button
+                onClick={() => setShowTasks(v => !v)}
+                className={cn(
+                  'flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left transition-colors',
+                  location.pathname === '/my-tasks'
+                    ? 'bg-white/15 text-white font-medium'
+                    : 'text-white/70 hover:bg-white/10 hover:text-white'
+                )}
+              >
+                <CheckSquare size={15} />
+                Tasks
                 <ChevronRight size={12} className={cn('ml-auto text-white/30 transition-transform', showTasks && 'rotate-90')} />
               </button>
               {showTasks && (
                 <div className="mt-0.5 space-y-0.5">
-                  {[{ view: 'assigned', label: 'Assigned to me' }, { view: 'projects', label: 'My projects' }].map(({ view, label }) => {
+                  {[
+                    { view: 'assigned', label: 'Assigned to me' },
+                    { view: 'projects', label: 'My projects' },
+                  ].map(({ view, label }) => {
                     const active = location.pathname === '/my-tasks' && new URLSearchParams(location.search).get('view') === view
                     return (
-                      <Link key={view} to={`/my-tasks?view=${view}`}
-                        className={cn('flex items-center pl-9 pr-3 py-1.5 rounded-md text-sm transition-colors',
-                          active ? 'bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/10 hover:text-white')}>
+                      <Link
+                        key={view}
+                        to={`/my-tasks?view=${view}`}
+                        className={cn(
+                          'flex items-center pl-9 pr-3 py-1.5 rounded-md text-sm transition-colors',
+                          active ? 'bg-white/15 text-white font-medium' : 'text-white/60 hover:bg-white/10 hover:text-white'
+                        )}
+                      >
                         {label}
                       </Link>
                     )
@@ -261,66 +350,102 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
               )}
             </div>
             <NavLink to="/inbox" className={navClass}>
-              <Bell size={15} />Inbox
+              <Bell size={15} />
+              Inbox
               {unreadCount > 0 && (
                 <span className="ml-auto bg-primary-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
                   {unreadCount > 99 ? '99+' : unreadCount}
                 </span>
               )}
             </NavLink>
-            <NavLink to="/how-to" className={navClass}><BookOpen size={15} /> How To</NavLink>
-            <NavLink to="/predefined-tasks" className={navClass}><ListChecks size={15} /> Predefined Tasks</NavLink>
-            <NavLink to="/projects" end className={navClass}><FolderOpen size={15} /> Projects</NavLink>
+            <NavLink to="/how-to" className={navClass}>
+              <BookOpen size={15} /> How To
+            </NavLink>
+            <NavLink to="/predefined-tasks" className={navClass}>
+              <ListChecks size={15} /> Task Templates
+            </NavLink>
+            <NavLink to="/projects" end className={navClass}>
+              <FolderOpen size={15} /> Projects
+            </NavLink>
+
             <div>
-              <button onClick={() => setShowArchived(v => !v)}
-                className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left text-white/50 hover:bg-white/10 hover:text-white/80 transition-colors">
-                <Archive size={15} />Archived
-                <ChevronRight size={12} className={cn('ml-auto text-white/30 transition-transform', showArchived && 'rotate-90')} />
+              <button
+                onClick={() => setShowArchived(v => !v)}
+                className="flex items-center gap-2.5 px-3 py-1.5 rounded-md text-sm w-full text-left text-white/50 hover:bg-white/10 hover:text-white/80 transition-colors"
+              >
+                <Archive size={15} />
+                Archived
+                <ChevronRight
+                  size={12}
+                  className={cn('ml-auto text-white/30 transition-transform', showArchived && 'rotate-90')}
+                />
               </button>
               {showArchived && (
                 archivedProjects.length === 0
                   ? <p className="pl-8 pr-3 py-1.5 text-xs text-white/25">No archived projects</p>
                   : archivedProjects.map(p => (
-                    <NavLink key={p.id} to={`/projects/${p.id}`}
-                      className={({ isActive }) => cn('flex items-center gap-2.5 pl-8 pr-3 py-1.5 rounded-md text-sm transition-colors',
-                        isActive ? 'bg-white/15 text-white/70 font-medium' : 'text-white/40 hover:bg-white/10 hover:text-white/60')}
-                      onContextMenu={e => openContextMenu(e, p)}>
-                      <span className="w-4 h-4 rounded flex items-center justify-center shrink-0 opacity-50" style={{ background: p.color }}><Archive size={9} /></span>
+                    <NavLink
+                      key={p.id}
+                      to={`/projects/${p.id}`}
+                      className={({ isActive }) => cn(
+                        'flex items-center gap-2.5 pl-8 pr-3 py-1.5 rounded-md text-sm transition-colors',
+                        isActive
+                          ? 'bg-white/15 text-white/70 font-medium'
+                          : 'text-white/40 hover:bg-white/10 hover:text-white/60'
+                      )}
+                      onContextMenu={e => openContextMenu(e, p)}
+                    >
+                      <span
+                        className="w-4 h-4 rounded flex items-center justify-center shrink-0 opacity-50"
+                        style={{ background: p.color }}
+                      >
+                        <Archive size={9} />
+                      </span>
                       <span className="truncate">{p.name}</span>
                     </NavLink>
                   ))
               )}
             </div>
+
             <div className="pt-5">
               <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">Starred</p>
               {favorites.map(p => (
                 <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
-                  <ProjectIconBadge project={p} size="sm" /><span className="truncate">{p.name}</span>
+                  <ProjectIconBadge project={p} size="sm" />
+                  <span className="truncate">{p.name}</span>
                   <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />
                 </NavLink>
               ))}
             </div>
+
             <div className="pt-5">
               <div className="flex items-center justify-between px-3 mb-1">
                 <p className="text-[10px] font-semibold text-white/40 uppercase tracking-widest">My Projects</p>
-                <button onClick={onNewProject} className="p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors" title="New project"><Plus size={14} /></button>
+                <button onClick={onNewProject} className="p-0.5 rounded hover:bg-white/10 text-white/40 hover:text-white/80 transition-colors" title="New project">
+                  <Plus size={14} />
+                </button>
               </div>
               {ownedProjects.map(p => (
                 <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
-                  <ProjectIconBadge project={p} size="sm" /><span className="truncate">{p.name}</span>
+                  <ProjectIconBadge project={p} size="sm" />
+                  <span className="truncate">{p.name}</span>
                   {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
                 </NavLink>
               ))}
               {ownedProjects.length === 0 && (
-                <button onClick={onNewProject} className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/40 hover:text-white/70 w-full transition-colors"><Plus size={14} /> New project</button>
+                <button onClick={onNewProject} className="flex items-center gap-2 px-3 py-1.5 text-sm text-white/40 hover:text-white/70 w-full transition-colors">
+                  <Plus size={14} /> New project
+                </button>
               )}
             </div>
+
             {memberProjects.length > 0 && (
               <div className="pt-5">
                 <p className="px-3 text-[10px] font-semibold text-white/40 uppercase tracking-widest mb-1">Member Of</p>
                 {memberProjects.map(p => (
                   <NavLink key={p.id} to={`/projects/${p.id}`} className={navClass} onContextMenu={e => openContextMenu(e, p)}>
-                    <ProjectIconBadge project={p} size="sm" /><span className="truncate">{p.name}</span>
+                    <ProjectIconBadge project={p} size="sm" />
+                    <span className="truncate">{p.name}</span>
                     {p.is_favorite && <Star size={11} className="ml-auto shrink-0 text-amber-400 fill-amber-400" />}
                   </NavLink>
                 ))}
@@ -331,16 +456,31 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
       </nav>
 
       {contextMenu && (
-        <div ref={menuRef} style={{ position: 'fixed', top: menuY, left: menuX, zIndex: 9999 }} className="bg-white rounded-lg shadow-xl border border-slate-200 py-1 w-56">
+        <div
+          ref={menuRef}
+          style={{ position: 'fixed', top: menuY, left: menuX, zIndex: 9999 }}
+          className="bg-white rounded-lg shadow-xl border border-slate-200 py-1 w-56"
+        >
           {!isArchived && (
-            <button onClick={() => { setRenameValue(contextMenu.project.name); setRenameProject(contextMenu.project); closeMenu() }}
-              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-              <Pencil size={14} className="text-slate-400 shrink-0" />Rename
+            <button
+              onClick={() => {
+                setRenameValue(contextMenu.project.name)
+                setRenameProject(contextMenu.project)
+                closeMenu()
+              }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Pencil size={14} className="text-slate-400 shrink-0" />
+              Rename
             </button>
           )}
           {!isArchived && (
-            <button onClick={() => setShowColorPanel(v => !v)} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
-              <Palette size={14} className="text-slate-400 shrink-0" />Set color & icon
+            <button
+              onClick={() => setShowColorPanel(v => !v)}
+              className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+            >
+              <Palette size={14} className="text-slate-400 shrink-0" />
+              Set color & icon
               <ChevronRight size={13} className={cn('ml-auto text-slate-300 transition-transform', showColorPanel && 'rotate-90')} />
             </button>
           )}
@@ -355,8 +495,10 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
                 ))}
               </div>
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">Icon</p>
-              <label className={cn('flex items-center gap-2 w-full px-2 py-1.5 mb-1 rounded-md border border-dashed transition-colors',
-                uploading ? 'border-slate-200 text-slate-400 cursor-wait' : 'border-slate-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer text-slate-500 hover:text-primary-600')}>
+              <label className={cn(
+                'flex items-center gap-2 w-full px-2 py-1.5 mb-1 rounded-md border border-dashed transition-colors',
+                uploading ? 'border-slate-200 text-slate-400 cursor-wait' : 'border-slate-300 hover:border-primary-400 hover:bg-primary-50 cursor-pointer text-slate-500 hover:text-primary-600'
+              )}>
                 <Upload size={13} className="shrink-0" />
                 <span className="text-xs">{uploading ? 'Uploading…' : 'Upload image…'}</span>
                 <input type="file" accept="image/*" className="hidden" disabled={uploading} onChange={handleIconUpload} />
@@ -392,10 +534,14 @@ export function Sidebar({ projects, onNewProject }: SidebarProps) {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onMouseDown={() => setRenameProject(null)}>
           <div className="bg-white rounded-lg shadow-xl border border-slate-200 p-4 w-72" onMouseDown={e => e.stopPropagation()}>
             <p className="text-sm font-semibold text-slate-700 mb-2">Rename project</p>
-            <input ref={renameInputRef} value={renameValue} onChange={e => setRenameValue(e.target.value)}
+            <input
+              ref={renameInputRef}
+              value={renameValue}
+              onChange={e => setRenameValue(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') handleRename(); if (e.key === 'Escape') setRenameProject(null) }}
               className="w-full text-sm border border-slate-300 rounded-md px-3 py-2 outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-400"
-              placeholder="Project name" />
+              placeholder="Project name"
+            />
             <div className="flex justify-end gap-2 mt-3">
               <button onClick={() => setRenameProject(null)} className="text-xs text-slate-500 hover:text-slate-700 px-3 py-1.5">Cancel</button>
               <button onClick={handleRename} className="text-xs bg-primary-600 text-white rounded-md px-3 py-1.5 hover:bg-primary-700 transition-colors">Save</button>
