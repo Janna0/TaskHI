@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
 import { STATUS_LABELS, PRIORITY_LABELS, formatDate, isOverdue, getInitials, cn } from '../../lib/utils'
+import { PredefinedTasksSection } from './PredefinedTasksSection'
 
 interface Comment {
   id: string
@@ -852,6 +853,9 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
             />
           </div>
         </div>
+
+        {/* Predefined Tasks */}
+        <PredefinedTasksSection />
 
         {/* Comments */}
         <div className="px-6 py-4">

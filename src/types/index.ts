@@ -1,3 +1,14 @@
+export interface PredefinedTask {
+  id: string
+  title: string
+  description: string | null
+  time_required: string | null
+  competency: string | null
+  phase: string | null
+  position: number
+  created_at: string
+}
+
 export interface Profile {
   id: string
   name: string
