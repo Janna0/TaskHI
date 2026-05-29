@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronRight, Plus, Pencil, Trash2, Search, BookOpen } from 'lucide-react'
+import { ChevronDown, ChevronRight, Plus, Pencil, Trash2, Search, BookOpen, Clock } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { PredefinedTask } from '../../types'
 import { cn } from '../../lib/utils'
@@ -17,6 +17,26 @@ export const PREDEFINED_PHASES = [
   'PHASE 10 - Optimization',
   'PHASE 11 - Internal',
 ]
+
+const PHASE_COLORS = [
+  { badge: 'bg-blue-100 text-blue-700', dot: 'bg-blue-400' },
+  { badge: 'bg-indigo-100 text-indigo-700', dot: 'bg-indigo-400' },
+  { badge: 'bg-violet-100 text-violet-700', dot: 'bg-violet-400' },
+  { badge: 'bg-purple-100 text-purple-700', dot: 'bg-purple-400' },
+  { badge: 'bg-teal-100 text-teal-700', dot: 'bg-teal-400' },
+  { badge: 'bg-emerald-100 text-emerald-700', dot: 'bg-emerald-400' },
+  { badge: 'bg-cyan-100 text-cyan-700', dot: 'bg-cyan-400' },
+  { badge: 'bg-green-100 text-green-700', dot: 'bg-green-400' },
+  { badge: 'bg-orange-100 text-orange-700', dot: 'bg-orange-400' },
+  { badge: 'bg-amber-100 text-amber-700', dot: 'bg-amber-400' },
+  { badge: 'bg-slate-100 text-slate-600', dot: 'bg-slate-400' },
+]
+
+function parsePhase(phase: string): { num: string; name: string } {
+  const m = phase.match(/^PHASE (\d+)\s*[-–]\s*(.+)$/)
+  if (m) return { num: m[1], name: m[2] }
+  return { num: '', name: phase }
+}
 
 const TIME_OPTIONS = [
   'A few minutes',
@@ -100,12 +120,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
   function toggleEditDoc(name: string) {
     setEditForm(f => {
       const current = f.how_to_attachments ?? []
-      return {
-        ...f,
-        how_to_attachments: current.includes(name)
-          ? current.filter(n => n !== name)
-          : [...current, name],
-      }
+      return { ...f, how_to_attachments: current.includes(name) ? current.filter(n => n !== name) : [...current, name] }
     })
   }
 
@@ -183,16 +198,18 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
   const filtered = tasks.filter(t =>
     !search ||
     t.title.toLowerCase().includes(search.toLowerCase()) ||
+    (t.description || '').toLowerCase().includes(search.toLowerCase()) ||
     (t.phase || '').toLowerCase().includes(search.toLowerCase())
   )
 
-  const grouped = PREDEFINED_PHASES.map(phase => ({
+  const grouped = PREDEFINED_PHASES.map((phase, idx) => ({
     phase,
+    idx,
     tasks: filtered.filter(t => t.phase === phase),
   })).filter(g => g.tasks.length > 0)
 
   const otherTasks = filtered.filter(t => !PREDEFINED_PHASES.includes(t.phase || ''))
-  if (otherTasks.length > 0) grouped.push({ phase: 'Other', tasks: otherTasks })
+  if (otherTasks.length > 0) grouped.push({ phase: 'Other', idx: 11, tasks: otherTasks })
 
   function renderDocPicker(
     selectedDocs: string[],
@@ -241,23 +258,30 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
     )
   }
 
-  function renderEditRow() {
+  function renderEditForm(compact = false) {
+    const wrap = compact
+      ? 'py-2 px-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2 mt-1 mb-1'
+      : 'p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3 my-1'
     return (
-      <div className="py-2 px-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2 mt-1 mb-1">
+      <div className={wrap}>
+        {!compact && <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Editing task</p>}
         <input
           autoFocus
           value={editForm.title || ''}
           onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))}
           placeholder="Task title"
-          className="w-full text-sm border border-slate-200 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-primary-300"
-          onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') { setEditingId(null); setEditForm({}); setShowEditDocPicker(false) } }}
+          className={cn('w-full border border-slate-200 rounded px-2 py-1.5 outline-none focus:ring-1 focus:ring-primary-300', compact ? 'text-sm' : 'text-sm font-medium')}
+          onKeyDown={e => {
+            if (e.key === 'Enter') saveEdit()
+            if (e.key === 'Escape') { setEditingId(null); setEditForm({}); setShowEditDocPicker(false) }
+          }}
         />
         <textarea
           value={editForm.description || ''}
           onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))}
           placeholder="Description (optional)"
           rows={2}
-          className="w-full text-xs border border-slate-200 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-primary-300 resize-none"
+          className="w-full text-xs border border-slate-200 rounded px-2 py-1.5 outline-none focus:ring-1 focus:ring-primary-300 resize-none"
         />
         <div className="flex gap-2 flex-wrap">
           <select className={selectCls} value={editForm.time_required || ''}
@@ -279,19 +303,14 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
             {PREDEFINED_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        {renderDocPicker(
-          editForm.how_to_attachments ?? [],
-          toggleEditDoc,
-          showEditDocPicker,
-          setShowEditDocPicker
-        )}
+        {renderDocPicker(editForm.how_to_attachments ?? [], toggleEditDoc, showEditDocPicker, setShowEditDocPicker)}
         <div className="flex gap-1.5">
           <button onClick={saveEdit} disabled={saving}
-            className="text-xs bg-primary-500 text-white px-2.5 py-1 rounded-md hover:bg-primary-600 disabled:opacity-50">
+            className="text-xs bg-primary-500 text-white px-3 py-1.5 rounded-md hover:bg-primary-600 disabled:opacity-50 font-medium">
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button onClick={() => { setEditingId(null); setEditForm({}); setShowEditDocPicker(false) }}
-            className="text-xs text-slate-500 px-2 py-1 rounded-md hover:bg-slate-100">
+            className="text-xs text-slate-500 px-2 py-1.5 rounded-md hover:bg-slate-200">
             Cancel
           </button>
         </div>
@@ -299,9 +318,207 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
     )
   }
 
-  function renderTaskRow(task: PredefinedTask) {
+  // PAGE MODE
+  function renderPageTaskRow(task: PredefinedTask) {
     if (editingId === task.id) {
-      return <div key={task.id}>{renderEditRow()}</div>
+      return <div key={task.id} className="px-4 py-2">{renderEditForm(false)}</div>
+    }
+    return (
+      <div
+        key={task.id}
+        className="flex items-start gap-3 px-5 py-3.5 group hover:bg-slate-50 transition-colors border-b border-slate-100 last:border-0"
+      >
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-slate-800 leading-snug">{task.title}</p>
+          {task.description && (
+            <p className="text-xs text-slate-400 mt-0.5 leading-relaxed line-clamp-2">{task.description}</p>
+          )}
+          {(task.time_required || task.competency || (task.how_to_attachments?.length ?? 0) > 0) && (
+            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+              {task.competency && (
+                <span className="text-[11px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-md font-semibold">{task.competency}</span>
+              )}
+              {task.time_required && (
+                <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                  <Clock size={10} />
+                  {task.time_required}
+                </span>
+              )}
+              {(task.how_to_attachments?.length ?? 0) > 0 && (
+                <span className="text-[11px] bg-amber-50 text-amber-600 px-2 py-0.5 rounded-md flex items-center gap-1 font-medium">
+                  <BookOpen size={10} />
+                  {task.how_to_attachments!.length} how-to{task.how_to_attachments!.length > 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+          <button
+            onClick={e => { e.stopPropagation(); startEdit(task) }}
+            className="p-1.5 rounded-lg hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+            title="Edit"
+          >
+            <Pencil size={13} />
+          </button>
+          <button
+            onClick={e => { e.stopPropagation(); deleteTask(task.id) }}
+            className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"
+            title="Delete"
+          >
+            <Trash2 size={13} />
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  function renderPhaseCard(group: { phase: string; idx: number; tasks: PredefinedTask[] }) {
+    const isExpanded = !!search || expandedPhases.has(group.phase)
+    const color = PHASE_COLORS[group.idx % PHASE_COLORS.length]
+    const { num, name } = parsePhase(group.phase)
+    return (
+      <div key={group.phase} className="rounded-xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <button
+          onClick={() => togglePhase(group.phase)}
+          className="w-full flex items-center gap-3 px-5 py-4 hover:bg-slate-50 transition-colors text-left"
+        >
+          {num && (
+            <span className={cn('text-xs font-bold px-2.5 py-1 rounded-lg shrink-0', color.badge)}>
+              {num}
+            </span>
+          )}
+          <span className="text-sm font-semibold text-slate-700 flex-1 min-w-0 truncate">{name}</span>
+          <span className="text-xs text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full shrink-0 font-medium">
+            {group.tasks.length} task{group.tasks.length !== 1 ? 's' : ''}
+          </span>
+          {isExpanded
+            ? <ChevronDown size={15} className="text-slate-400 shrink-0" />
+            : <ChevronRight size={15} className="text-slate-400 shrink-0" />
+          }
+        </button>
+        {isExpanded && (
+          <div className="border-t border-slate-100">
+            {group.tasks.map(t => renderPageTaskRow(t))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const pageAddForm = addingNew ? (
+    <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-5 space-y-3">
+      <p className="text-sm font-semibold text-slate-700">New predefined task</p>
+      <input
+        autoFocus
+        value={newForm.title}
+        onChange={e => setNewForm(f => ({ ...f, title: e.target.value }))}
+        placeholder="Task title *"
+        onKeyDown={e => {
+          if (e.key === 'Escape') {
+            setAddingNew(false)
+            setShowNewDocPicker(false)
+            setNewForm({ title: '', description: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+          }
+        }}
+        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-300 bg-white"
+      />
+      <textarea
+        value={newForm.description}
+        onChange={e => setNewForm(f => ({ ...f, description: e.target.value }))}
+        placeholder="Description (optional)"
+        rows={2}
+        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-primary-300 resize-none bg-white"
+      />
+      <div className="flex gap-2 flex-wrap">
+        <select
+          className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none bg-white text-slate-700 focus:ring-1 focus:ring-primary-300"
+          value={newForm.time_required}
+          onChange={e => setNewForm(f => ({ ...f, time_required: e.target.value }))}>
+          <option value="">No time estimate</option>
+          {TIME_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+        <select
+          className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none bg-white text-slate-700 focus:ring-1 focus:ring-primary-300"
+          value={newForm.competency}
+          onChange={e => setNewForm(f => ({ ...f, competency: e.target.value }))}>
+          <option value="">No level</option>
+          <option value="L1">L1</option>
+          <option value="L2">L2</option>
+          <option value="L3">L3</option>
+          <option value="L4">L4</option>
+        </select>
+        <select
+          className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 outline-none bg-white text-slate-700 focus:ring-1 focus:ring-primary-300"
+          value={newForm.phase}
+          onChange={e => setNewForm(f => ({ ...f, phase: e.target.value }))}>
+          <option value="">No phase</option>
+          {PREDEFINED_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+      {renderDocPicker(newForm.how_to_attachments, toggleNewDoc, showNewDocPicker, setShowNewDocPicker)}
+      <div className="flex gap-2 pt-1">
+        <button
+          onClick={addTask}
+          disabled={saving || !newForm.title.trim()}
+          className="text-sm bg-primary-500 text-white px-4 py-1.5 rounded-lg hover:bg-primary-600 disabled:opacity-50 font-medium"
+        >
+          {saving ? 'Adding…' : 'Add task'}
+        </button>
+        <button
+          onClick={() => {
+            setAddingNew(false)
+            setShowNewDocPicker(false)
+            setNewForm({ title: '', description: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+          }}
+          className="text-sm text-slate-500 px-3 py-1.5 rounded-lg hover:bg-slate-200"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  ) : (
+    <button
+      onClick={() => setAddingNew(true)}
+      className="flex items-center gap-2 text-sm text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors px-4 py-3 rounded-xl border border-dashed border-slate-200 w-full justify-center"
+    >
+      <Plus size={14} />
+      Add predefined task
+    </button>
+  )
+
+  if (isPage) {
+    return (
+      <div className="space-y-3">
+        <div className="relative">
+          <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search tasks…"
+            className="w-full text-sm border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 outline-none focus:ring-2 focus:ring-primary-200 placeholder-slate-400 bg-white shadow-sm"
+          />
+        </div>
+
+        {loading && (
+          <div className="text-center py-12 text-slate-400 text-sm">Loading…</div>
+        )}
+
+        {!loading && grouped.length === 0 && (
+          <div className="text-center py-12 text-slate-400 text-sm">No tasks found</div>
+        )}
+
+        {!loading && grouped.map(g => renderPhaseCard(g))}
+
+        {!loading && pageAddForm}
+      </div>
+    )
+  }
+
+  // SELECTOR / PANEL MODE
+  function renderCompactTaskRow(task: PredefinedTask) {
+    if (editingId === task.id) {
+      return <div key={task.id}>{renderEditForm(true)}</div>
     }
     return (
       <div
@@ -369,7 +586,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
       {loading && <p className="text-xs text-slate-400 text-center py-4">Loading…</p>}
 
       {!loading && (
-        <div className={cn('space-y-1', isSelector && 'max-h-72 overflow-y-auto pr-1', isPage && 'space-y-1')}>
+        <div className={cn('space-y-1', isSelector && 'max-h-72 overflow-y-auto pr-1')}>
           {grouped.length === 0 && (
             <p className="text-xs text-slate-400 text-center py-4">No tasks found</p>
           )}
@@ -390,7 +607,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                 </button>
                 {isExpanded && (
                   <div className="ml-3 space-y-0 mt-0.5">
-                    {group.tasks.map(t => renderTaskRow(t))}
+                    {group.tasks.map(t => renderCompactTaskRow(t))}
                   </div>
                 )}
               </div>
@@ -409,7 +626,13 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                 value={newForm.title}
                 onChange={e => setNewForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Task title *"
-                onKeyDown={e => { if (e.key === 'Escape') { setAddingNew(false); setShowNewDocPicker(false); setNewForm({ title: '', description: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] }) } }}
+                onKeyDown={e => {
+                  if (e.key === 'Escape') {
+                    setAddingNew(false)
+                    setShowNewDocPicker(false)
+                    setNewForm({ title: '', description: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+                  }
+                }}
                 className="w-full text-sm border border-slate-200 rounded px-2 py-1 outline-none focus:ring-1 focus:ring-primary-300"
               />
               <textarea
@@ -439,18 +662,17 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
                   {PREDEFINED_PHASES.map(p => <option key={p} value={p}>{p}</option>)}
                 </select>
               </div>
-              {renderDocPicker(
-                newForm.how_to_attachments,
-                toggleNewDoc,
-                showNewDocPicker,
-                setShowNewDocPicker
-              )}
+              {renderDocPicker(newForm.how_to_attachments, toggleNewDoc, showNewDocPicker, setShowNewDocPicker)}
               <div className="flex gap-1.5">
                 <button onClick={addTask} disabled={saving || !newForm.title.trim()}
                   className="text-xs bg-primary-500 text-white px-2.5 py-1 rounded-md hover:bg-primary-600 disabled:opacity-50">
                   {saving ? 'Adding…' : 'Add'}
                 </button>
-                <button onClick={() => { setAddingNew(false); setShowNewDocPicker(false); setNewForm({ title: '', description: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] }) }}
+                <button onClick={() => {
+                  setAddingNew(false)
+                  setShowNewDocPicker(false)
+                  setNewForm({ title: '', description: '', time_required: '', competency: '', phase: PREDEFINED_PHASES[0], how_to_attachments: [] })
+                }}
                   className="text-xs text-slate-500 px-2 py-1 rounded-md hover:bg-slate-100">
                   Cancel
                 </button>
@@ -470,7 +692,7 @@ export function PredefinedTasksSection({ mode = 'panel', onSelect }: Props) {
     </div>
   )
 
-  if (isSelector || isPage) return body
+  if (isSelector) return body
 
   return (
     <div className="px-6 py-4 border-b border-slate-100">
