@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import {
   DndContext,
   DragOverlay,
@@ -21,8 +22,9 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Plus, ChevronDown, ChevronRight, GripVertical, MoreHorizontal, Trash2, Pencil } from 'lucide-react'
+import { Plus, ChevronDown, ChevronRight, ChevronLeft, GripVertical, MoreHorizontal, Trash2, Pencil, CheckCircle2, CalendarDays, UserCircle, Check, X } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
 import { PriorityBadge } from '../ui/Badge'
 import { formatDate, isOverdue, cn, getInitials } from '../../lib/utils'
@@ -33,26 +35,467 @@ interface Props {
   tasks: Task[]
   projectId: string
   memberMap: Record<string, { name: string; color: string }>
+  canEdit?: boolean
+  canAddSections?: boolean
   onTaskClick: (task: Task) => void
   onRefresh: () => void
 }
 
-function sectionNameToStatus(name: string): Task['status'] | null {
-  const n = name.toLowerCase().replace(/[-_\s]+/g, '')
-  if (n === 'todo') return 'todo'
-  if (n === 'inprogress') return 'in_progress'
-  if (n === 'review' || n === 'inreview') return 'review'
-  if (n === 'blocked') return 'blocked'
-  if (n === 'done' || n === 'complete' || n === 'completed' || n === 'finished') return 'done'
-  return null
+interface Member { id: string; name: string; color: string }
+
+const PRIORITY_OPTIONS: Task['priority'][] = ['urgent', 'high', 'medium', 'low']
+
+// ── Portal dropdown ────────────────────────────────────────────────────────────────────────
+
+function calcDropStyle(anchor: HTMLElement, align: 'left' | 'right', estimatedHeight = 180): React.CSSProperties {
+  const r = anchor.getBoundingClientRect()
+  const spaceBelow = window.innerHeight - r.bottom - 8
+  const openUp = spaceBelow < estimatedHeight && r.top > estimatedHeight
+  const base: React.CSSProperties = openUp
+    ? { bottom: window.innerHeight - r.top + 6 }
+    : { top: r.bottom + 6 }
+  if (align === 'left') base.left = r.left
+  else base.right = window.innerWidth - r.right
+  return base
 }
 
-// ── Inline add-task row ──────────────────────────────────────────────────
+function PortalDropdown({ style, menuRef, open, minWidth, children }: {
+  style: React.CSSProperties
+  menuRef: React.Ref<HTMLDivElement>
+  open: boolean
+  minWidth?: number
+  children: React.ReactNode
+}) {
+  if (!open) return null
+  return createPortal(
+    <div
+      ref={menuRef}
+      style={{ ...style, position: 'fixed', zIndex: 9999, ...(minWidth ? { minWidth } : {}) }}
+      className="bg-white border border-slate-200 rounded-xl shadow-lg py-1 max-h-60 overflow-y-auto"
+    >
+      {children}
+    </div>,
+    document.body
+  )
+}
 
-function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActive, onActivate, onDone }: {
+// ── Date cell (custom calendar portal) ───────────────────────────────────────────────────
+
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December']
+const DAY_ABBR = ['Su','Mo','Tu','We','Th','Fr','Sa']
+
+function DateCell({ task, overdue, onUpdate }: {
+  task: Task
+  overdue: boolean | null | undefined
+  onUpdate: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const [viewYear, setViewYear] = useState(new Date().getFullYear())
+  const [viewMonth, setViewMonth] = useState(new Date().getMonth())
+  const btnRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  function handleOpen(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'right', 240))
+    const base = task.due_date ? new Date(task.due_date + 'T12:00:00') : new Date()
+    setViewYear(base.getFullYear())
+    setViewMonth(base.getMonth())
+    setOpen(v => !v)
+  }
+
+  function prevMonth() {
+    setViewMonth(m => { if (m === 0) { setViewYear(y => y - 1); return 11 } return m - 1 })
+  }
+  function nextMonth() {
+    setViewMonth(m => { if (m === 11) { setViewYear(y => y + 1); return 0 } return m + 1 })
+  }
+
+  async function pickDate(dateStr: string) {
+    await supabase.from('tasks').update({ due_date: dateStr }).eq('id', task.id)
+    setOpen(false)
+    onUpdate()
+  }
+
+  async function clearDate(e: React.MouseEvent) {
+    e.stopPropagation()
+    await supabase.from('tasks').update({ due_date: null }).eq('id', task.id)
+    setOpen(false)
+    onUpdate()
+  }
+
+  const firstWeekday = new Date(viewYear, viewMonth, 1).getDay()
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate()
+  const today = new Date()
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const cells: (number | null)[] = [
+    ...Array(firstWeekday).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ]
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  return (
+    <div className="w-24 flex justify-center" onPointerDown={e => e.stopPropagation()}>
+      <div
+        ref={btnRef}
+        onClick={handleOpen}
+        className="cursor-pointer px-1"
+        title={task.due_date ? 'Change due date' : 'Add due date'}
+      >
+        <div className={cn('text-xs text-center', overdue ? 'text-red-500 font-medium' : task.due_date ? 'text-slate-500' : 'text-slate-300')}>
+          {task.due_date ? formatDate(task.due_date) : <CalendarDays size={13} className="mx-auto" />}
+        </div>
+      </div>
+
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          style={{ ...style, position: 'fixed', zIndex: 9999 }}
+          className="bg-white border border-slate-200 rounded-xl shadow-xl p-3 w-[232px]"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between mb-2">
+            <button onClick={prevMonth} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <ChevronLeft size={14} />
+            </button>
+            <span className="text-xs font-semibold text-slate-700">{MONTH_NAMES[viewMonth]} {viewYear}</span>
+            <button onClick={nextMonth} className="p-1 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+              <ChevronRight size={14} />
+            </button>
+          </div>
+
+          {/* Day-of-week headers */}
+          <div className="grid grid-cols-7 mb-1">
+            {DAY_ABBR.map(d => (
+              <div key={d} className="text-[10px] text-slate-400 text-center font-medium py-0.5">{d}</div>
+            ))}
+          </div>
+
+          {/* Day cells */}
+          <div className="grid grid-cols-7 gap-y-0.5">
+            {cells.map((day, i) => {
+              if (!day) return <div key={i} />
+              const dateStr = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+              const isSelected = dateStr === task.due_date
+              const isToday = dateStr === todayStr
+              return (
+                <button
+                  key={i}
+                  onClick={() => pickDate(dateStr)}
+                  className={cn(
+                    'h-7 w-7 mx-auto rounded-md text-[11px] flex items-center justify-center transition-colors',
+                    isSelected ? 'bg-primary-500 text-white font-semibold' :
+                    isToday ? 'bg-primary-50 text-primary-600 font-semibold' :
+                    'text-slate-600 hover:bg-slate-100'
+                  )}
+                >
+                  {day}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Clear */}
+          {task.due_date && (
+            <button
+              onClick={clearDate}
+              className="mt-2 w-full flex items-center justify-center gap-1 text-xs text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg py-1.5 transition-colors"
+            >
+              <X size={11} /> Clear date
+            </button>
+          )}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// ── Priority cell ─────────────────────────────────────────────────────────────────────────
+
+function PriorityCell({ task, onUpdate }: {
+  task: Task
+  onUpdate: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'left', PRIORITY_OPTIONS.length * 36 + 8))
+    setOpen(v => !v)
+  }
+
+  async function setPriority(p: Task['priority']) {
+    await supabase.from('tasks').update({ priority: p }).eq('id', task.id)
+    setOpen(false)
+    onUpdate()
+  }
+
+  return (
+    <div className="w-24 flex justify-center" onPointerDown={e => e.stopPropagation()}>
+      <button ref={btnRef} onClick={handleClick} className="hover:opacity-80 transition-opacity">
+        <PriorityBadge priority={task.priority} />
+      </button>
+      <PortalDropdown style={style} menuRef={menuRef} open={open}>
+        {PRIORITY_OPTIONS.map(p => (
+          <button
+            key={p}
+            onClick={() => setPriority(p)}
+            className={cn('flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors', p === task.priority && 'bg-slate-50')}
+          >
+            <PriorityBadge priority={p} />
+            {p === task.priority && <Check size={11} className="text-primary-500 ml-auto shrink-0" />}
+          </button>
+        ))}
+      </PortalDropdown>
+    </div>
+  )
+}
+
+// ── Assignee cell ─────────────────────────────────────────────────────────────────────────
+
+function AssigneeCell({ task, members, onUpdate }: {
+  task: Task
+  members: Member[]
+  onUpdate: () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const [style, setStyle] = useState<React.CSSProperties>({})
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    function handler(e: MouseEvent) {
+      const t = e.target as Node
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return
+      setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  function handleClick(e: React.MouseEvent) {
+    e.stopPropagation()
+    if (btnRef.current) setStyle(calcDropStyle(btnRef.current, 'left', members.length * 36 + 16))
+    setOpen(v => !v)
+  }
+
+  async function toggleAssignee(memberId: string) {
+    const current = task.assignee_ids ?? []
+    const next = current.includes(memberId) ? current.filter(id => id !== memberId) : [...current, memberId]
+    await supabase.from('tasks').update({ assignee_ids: next }).eq('id', task.id)
+    onUpdate()
+  }
+
+  const assignees = (task.assignee_ids ?? []).map(id => members.find(m => m.id === id)).filter(Boolean) as Member[]
+
+  return (
+    <div className="w-20 flex justify-center" onPointerDown={e => e.stopPropagation()}>
+      <button
+        ref={btnRef}
+        onClick={handleClick}
+        className="flex -space-x-1.5 hover:opacity-80 transition-opacity"
+        title={assignees.length ? 'Change assignees' : 'Assign task'}
+      >
+        {assignees.length === 0 ? (
+          <div className="w-6 h-6 rounded-full border-2 border-dashed border-slate-200 hover:border-primary-300 flex items-center justify-center transition-colors">
+            <UserCircle size={11} className="text-slate-300" />
+          </div>
+        ) : (
+          <>
+            {assignees.slice(0, 2).map((a, i) => (
+              <div
+                key={i}
+                className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
+                style={{ background: a.color }}
+                title={a.name}
+              >
+                {getInitials(a.name)}
+              </div>
+            ))}
+            {assignees.length > 2 && (
+              <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
+                +{assignees.length - 2}
+              </div>
+            )}
+          </>
+        )}
+      </button>
+      <PortalDropdown style={style} menuRef={menuRef} open={open} minWidth={160}>
+        {members.length === 0
+          ? <p className="px-3 py-2 text-xs text-slate-400">No members in project</p>
+          : members.map(m => {
+            const selected = (task.assignee_ids ?? []).includes(m.id)
+            return (
+              <button
+                key={m.id}
+                onClick={() => toggleAssignee(m.id)}
+                className="flex items-center gap-2 w-full px-3 py-1.5 hover:bg-slate-50 transition-colors text-left"
+              >
+                <div className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[9px] font-bold shrink-0" style={{ background: m.color }}>
+                  {getInitials(m.name)}
+                </div>
+                <span className="text-sm text-slate-700 flex-1 truncate">{m.name}</span>
+                {selected && <CheckCircle2 size={13} className="text-primary-500 shrink-0" />}
+              </button>
+            )
+          })
+        }
+      </PortalDropdown>
+    </div>
+  )
+}
+
+// ── Sortable task row ───────────────────────────────────────────────────────────────────
+
+function TaskRow({
+  task,
+  members,
+  onClick,
+  hasSubtasks,
+  isExpanded,
+  onToggleExpand,
+  onAddSubtask,
+  onUpdate,
+}: {
+  task: Task
+  members: Member[]
+  onClick: () => void
+  hasSubtasks: boolean
+  isExpanded: boolean
+  onToggleExpand: () => void
+  onAddSubtask: () => void
+  onUpdate: () => void
+}) {
+  const overdue = !!(task.due_date && isOverdue(task.due_date) && task.status !== 'done')
+  const { attributes, listeners, setNodeRef, transform, isDragging, isSorting } = useSortable({ id: task.id })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition: isSorting ? 'none' : undefined }}
+      className={cn(
+        'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 border-b border-slate-50 group',
+        isDragging && 'opacity-30'
+      )}
+    >
+      <div
+        {...listeners}
+        {...attributes}
+        onClick={e => e.stopPropagation()}
+        className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 transition-opacity touch-none select-none shrink-0"
+      >
+        <GripVertical size={14} />
+      </div>
+
+      <span className="flex-1 flex items-center gap-1 min-w-0">
+        <button
+          onClick={e => { e.stopPropagation(); onToggleExpand() }}
+          className={cn(
+            'shrink-0 text-slate-400 hover:text-slate-600 transition-colors rounded',
+            !hasSubtasks && 'invisible pointer-events-none'
+          )}
+        >
+          {isExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+        </button>
+        <span
+          className={cn('text-sm truncate cursor-pointer', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700 hover:text-primary-600')}
+          onClick={onClick}
+        >
+          {task.title}
+        </span>
+      </span>
+
+      <AssigneeCell task={task} members={members} onUpdate={onUpdate} />
+      <PriorityCell task={task} onUpdate={onUpdate} />
+      <DateCell task={task} overdue={overdue} onUpdate={onUpdate} />
+      <button
+        onClick={e => { e.stopPropagation(); onAddSubtask() }}
+        title="Add subtask"
+        className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-slate-400 hover:text-primary-600 hover:bg-slate-100 transition-all shrink-0"
+      >
+        <Plus size={12} />
+      </button>
+    </div>
+  )
+}
+
+// ── Subtask row (non-sortable, indented) ───────────────────────────────────────────────────
+
+function SubtaskRow({
+  task,
+  members,
+  onClick,
+  onUpdate,
+}: {
+  task: Task
+  members: Member[]
+  onClick: () => void
+  onUpdate: () => void
+}) {
+  const overdue = !!(task.due_date && isOverdue(task.due_date) && task.status !== 'done')
+  const isDone = task.status === 'done'
+
+  return (
+    <div className="flex items-center gap-3 px-4 py-1.5 pl-[52px] hover:bg-slate-50 border-b border-slate-50 group">
+      <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+      <span
+        className={cn('flex-1 text-sm truncate cursor-pointer', isDone ? 'line-through text-slate-400' : 'text-slate-600 hover:text-primary-600')}
+        onClick={onClick}
+      >
+        {task.title}
+      </span>
+      <AssigneeCell task={task} members={members} onUpdate={onUpdate} />
+      <PriorityCell task={task} onUpdate={onUpdate} />
+      <DateCell task={task} overdue={overdue} onUpdate={onUpdate} />
+      <div className="w-[22px] shrink-0" />
+    </div>
+  )
+}
+
+// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────────
+
+function TaskGhost({ task }: { task: Task }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2 bg-white border border-primary-200 rounded-lg shadow-lg opacity-95">
+      <GripVertical size={14} className="text-slate-300 shrink-0" />
+      <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
+    </div>
+  )
+}
+
+// ── Add task inline ────────────────────────────────────────────────────────────────────
+
+function AddTaskInlineRow({ projectId, sectionId, position, isActive, onActivate, onDone }: {
   projectId: string
   sectionId: string
-  sectionName: string
   position: number
   isActive: boolean
   onActivate: () => void
@@ -77,14 +520,14 @@ function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActiv
     const trimmed = title.trim()
     if (trimmed) {
       setSaving(true)
-      const inferredStatus = sectionNameToStatus(sectionName) ?? 'todo'
       await supabase.from('tasks').insert({
         project_id: projectId,
         section_id: sectionId,
         title: trimmed,
-        status: inferredStatus,
+        status: 'todo',
         priority: 'medium',
         position,
+        depth: 0,
       })
       setSaving(false)
     }
@@ -132,89 +575,75 @@ function AddTaskInlineRow({ projectId, sectionId, sectionName, position, isActiv
   )
 }
 
-// ── Sortable task row ────────────────────────────────────────────────────────
+// ── Add subtask inline ────────────────────────────────────────────────────────────────────
 
-function TaskRow({
-  task,
-  memberMap,
-  onClick,
-}: {
-  task: Task
-  memberMap: Record<string, { name: string; color: string }>
-  onClick: () => void
+function AddSubtaskInlineRow({ projectId, parentTask, subtaskCount, onSaved }: {
+  projectId: string
+  parentTask: Task
+  subtaskCount: number
+  onSaved: () => void
 }) {
-  const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
-  const assignees = (task.assignee_ids ?? []).map(id => memberMap[id]).filter(Boolean)
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const [title, setTitle] = useState('')
+  const [saving, setSaving] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const committedRef = useRef(false)
+
+  useEffect(() => {
+    requestAnimationFrame(() => inputRef.current?.focus())
+  }, [])
+
+  async function commit() {
+    if (committedRef.current) return
+    committedRef.current = true
+    const trimmed = title.trim()
+    if (trimmed) {
+      setSaving(true)
+      await supabase.from('tasks').insert({
+        project_id: projectId,
+        section_id: parentTask.section_id,
+        parent_task_id: parentTask.id,
+        title: trimmed,
+        status: 'todo',
+        priority: 'medium',
+        position: subtaskCount,
+        depth: (parentTask.depth ?? 0) + 1,
+      })
+      setSaving(false)
+    }
+    onSaved()
+  }
 
   return (
-    <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 cursor-pointer border-b border-slate-50 group',
-        isDragging && 'opacity-30'
-      )}
-    >
-      <div
-        {...listeners}
-        {...attributes}
-        onClick={e => e.stopPropagation()}
-        className="opacity-0 group-hover:opacity-100 cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-400 transition-opacity touch-none select-none shrink-0"
-      >
-        <GripVertical size={14} />
-      </div>
-
-      <span className={cn('flex-1 text-sm truncate', task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700')}>
-        {task.title}
-      </span>
-      <div className="w-24 flex justify-center">
-        <PriorityBadge priority={task.priority} />
-      </div>
-      <div className={cn('w-24 text-xs text-center', overdue ? 'text-red-500 font-medium' : 'text-slate-400')}>
-        {task.due_date ? formatDate(task.due_date) : '—'}
-      </div>
-      <div className="w-10 flex justify-center">
-        <div className="flex -space-x-1.5">
-          {assignees.slice(0, 2).map((a, i) => (
-            <div
-              key={i}
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-semibold shrink-0 border border-white"
-              style={{ background: a.color }}
-              title={a.name}
-            >
-              {getInitials(a.name)}
-            </div>
-          ))}
-          {assignees.length > 2 && (
-            <div className="w-6 h-6 rounded-full bg-slate-200 flex items-center justify-center text-[9px] font-medium text-slate-600 border border-white">
-              +{assignees.length - 2}
-            </div>
-          )}
-        </div>
-      </div>
+    <div className="flex items-center gap-3 px-4 py-1.5 pl-[52px] bg-slate-50 border-b border-slate-100">
+      <div className="w-1.5 h-1.5 rounded-full bg-slate-300 shrink-0" />
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={e => setTitle(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          if (e.key === 'Escape') onSaved()
+        }}
+        onBlur={commit}
+        placeholder="Subtask name…"
+        className="flex-1 text-sm text-slate-600 bg-transparent outline-none placeholder-slate-400"
+      />
+      {saving
+        ? <span className="text-xs text-slate-400 shrink-0">Saving…</span>
+        : <span className="text-[10px] text-slate-300 shrink-0">Enter · Esc to cancel</span>
+      }
     </div>
   )
 }
 
-// ── Ghost shown in DragOverlay ──────────────────────────────────────────────────────────────
+// ── Section action menu ────────────────────────────────────────────────────────────────────
 
-function TaskGhost({ task }: { task: Task }) {
-  return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-white border border-primary-200 rounded-lg shadow-lg opacity-95">
-      <GripVertical size={14} className="text-slate-300 shrink-0" />
-      <span className="flex-1 text-sm text-slate-700 truncate">{task.title}</span>
-    </div>
-  )
-}
-
-// ── Section action menu ───────────────────────────────────────────────────────────────────
-
-function SectionMenu({ onRename, onDelete, onClose }: {
+function SectionMenu({ onRename, onDelete, onClose, isCompletion, onToggleCompletion }: {
   onRename: () => void
   onDelete: () => void
   onClose: () => void
+  isCompletion: boolean
+  onToggleCompletion: () => void
 }) {
   const ref = useRef<HTMLDivElement>(null)
 
@@ -236,7 +665,7 @@ function SectionMenu({ onRename, onDelete, onClose }: {
   return (
     <div
       ref={ref}
-      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-44 z-50"
+      className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-slate-200 py-1 w-52 z-50"
     >
       <button
         onMouseDown={e => { e.stopPropagation(); onRename() }}
@@ -244,6 +673,15 @@ function SectionMenu({ onRename, onDelete, onClose }: {
       >
         <Pencil size={13} className="text-slate-400 shrink-0" />
         Rename section
+      </button>
+      <button
+        onMouseDown={e => { e.stopPropagation(); onToggleCompletion() }}
+        className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-slate-50 transition-colors"
+      >
+        <CheckCircle2 size={13} className={isCompletion ? 'text-emerald-500 shrink-0' : 'text-slate-400 shrink-0'} />
+        <span className={isCompletion ? 'text-emerald-600' : 'text-slate-700'}>
+          {isCompletion ? 'Remove completion mark' : 'Mark as completion'}
+        </span>
       </button>
       <div className="border-t border-slate-100 my-1" />
       <button
@@ -257,20 +695,22 @@ function SectionMenu({ onRename, onDelete, onClose }: {
   )
 }
 
-// ── Section drop zone (empty sections need a droppable target) ───────────────────────
+// ── Section drop zone ────────────────────────────────────────────────────────────────────────
 
-function SectionDropZone({ id, children }: { id: string; children: ReactNode }) {
+function SectionDropZone({ id, children }: { id: string; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id })
   return (
-    <div ref={setNodeRef} className={cn('min-h-[60px] transition-colors', isOver && 'bg-primary-50/40')}>
+    <div ref={setNodeRef} className={cn('min-h-[4px] transition-colors', isOver && 'bg-primary-50/40')}>
       {children}
     </div>
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────────────
+// ── Main component ──────────────────────────────────────────────────────────────
 
-export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, onRefresh }: Props) {
+export function ListView({ sections, tasks, projectId, memberMap: _memberMap, canEdit = true, canAddSections = false, onTaskClick, onRefresh }: Props) {
+  const { user } = useAuth()
+  const [members, setMembers] = useState<Member[]>([])
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [inlineAdding, setInlineAdding] = useState<string | null>(null)
   const [createSection, setCreateSection] = useState<string | null>(null)
@@ -282,47 +722,98 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
   const [openMenuSection, setOpenMenuSection] = useState<string | null>(null)
   const [renamingSection, setRenamingSection] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set())
+  const [addingSubtaskFor, setAddingSubtaskFor] = useState<string | null>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
   const sectionInputRef = useRef<HTMLInputElement>(null)
+  const completionKey = `taskhi:completion-section:${projectId}`
+  const [completionSectionId, setCompletionSectionId] = useState(() => localStorage.getItem(completionKey) ?? '')
 
-  // localOrder: sectionId → taskId[]; '' key for ungrouped tasks
+  useEffect(() => {
+    loadMembers()
+  }, [projectId])
+
+  async function loadMembers() {
+    try {
+      const { data } = await supabase
+        .from('project_members')
+        .select('user_id, profile:profiles(id, name, avatar_color)')
+        .eq('project_id', projectId)
+      const list: Member[] = (data as any[] ?? []).map(r => ({
+        id: r.user_id,
+        name: (r.profile as any)?.name ?? r.user_id,
+        color: (r.profile as any)?.avatar_color ?? '#94a3b8',
+      }))
+      if (user && !list.some(m => m.id === user.id)) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('name, avatar_color')
+          .eq('id', user.id)
+          .single()
+        if (profile) list.unshift({
+          id: user.id,
+          name: (profile as any).name ?? 'Me',
+          color: (profile as any).avatar_color ?? '#94a3b8',
+        })
+      }
+      setMembers(list)
+    } catch {}
+  }
+
+  function toggleCompletionSection(sectionId: string) {
+    const next = completionSectionId === sectionId ? '' : sectionId
+    setCompletionSectionId(next)
+    if (next) localStorage.setItem(completionKey, next)
+    else localStorage.removeItem(completionKey)
+    setOpenMenuSection(null)
+  }
+
+  const rootTasks = tasks.filter(t => !t.parent_task_id)
+  const subtasksByParent: Record<string, Task[]> = {}
+  for (const t of tasks) {
+    if (t.parent_task_id) {
+      if (!subtasksByParent[t.parent_task_id]) subtasksByParent[t.parent_task_id] = []
+      subtasksByParent[t.parent_task_id].push(t)
+    }
+  }
+  for (const key of Object.keys(subtasksByParent)) {
+    subtasksByParent[key].sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+  }
+
   const [localOrder, setLocalOrder] = useState<Record<string, string[]>>({})
   const localOrderRef = useRef<Record<string, string[]>>({})
   const isDraggingRef = useRef(false)
 
-  // Prefer pointer-within (exact hit) over center-distance guessing.
-  // This ensures the section/task the pointer is physically inside always wins.
-  const collisionDetection = useCallback<CollisionDetection>((args) => {
-    const hits = pointerWithin(args)
-    if (hits.length > 0) return hits
-    return closestCenter(args)
-  }, [])
-
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   )
+
+  const collisionDetection: CollisionDetection = (args) => {
+    const hits = pointerWithin(args)
+    return hits.length > 0 ? hits : closestCenter(args)
+  }
 
   useEffect(() => {
     if (renamingSection) requestAnimationFrame(() => renameInputRef.current?.focus())
   }, [renamingSection])
 
-  // Sync tasks prop → localOrder whenever tasks/sections change (skip during active drag)
   useEffect(() => {
     if (isDraggingRef.current) return
     const order: Record<string, string[]> = { '': [] }
     for (const s of sections) {
-      order[s.id] = tasks
+      order[s.id] = rootTasks
         .filter(t => t.section_id === s.id)
         .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
         .map(t => t.id)
     }
-    order[''] = tasks.filter(t => !t.section_id).map(t => t.id)
+    order[''] = rootTasks.filter(t => !t.section_id).map(t => t.id)
     setLocalOrder(order)
     localOrderRef.current = order
   }, [tasks, sections])
 
-  // Find which section (by key in localOrder) contains the given task ID
+  const taskById = Object.fromEntries(tasks.map(t => [t.id, t]))
+
   function findSection(taskId: string): string {
     for (const [sid, ids] of Object.entries(localOrderRef.current)) {
       if (ids.includes(taskId)) return sid
@@ -332,6 +823,14 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
 
   function toggle(id: string) {
     setCollapsed(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  function toggleTask(taskId: string) {
+    setExpandedTasks(prev => {
+      const next = new Set(prev)
+      next.has(taskId) ? next.delete(taskId) : next.add(taskId)
+      return next
+    })
   }
 
   function handleAddDone(sectionId: string) {
@@ -385,7 +884,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const overId = over.id as string
     const activeSid = findSection(activeId)
 
-    // Determine target section: overId is either a section key or a task ID
     let targetSid: string
     if (overId in localOrderRef.current) {
       targetSid = overId
@@ -396,7 +894,6 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const cur = localOrderRef.current
 
     if (activeSid === targetSid) {
-      // Within-section reorder
       const ids = cur[activeSid] ?? []
       const from = ids.indexOf(activeId)
       const to = ids.indexOf(overId)
@@ -406,8 +903,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
         localOrderRef.current = newOrder
         setLocalOrder(newOrder)
       }
-    } else if (targetSid !== '') {
-      // Cross-section move (live preview)
+    } else {
       const newOrder = { ...cur }
       newOrder[activeSid] = (newOrder[activeSid] ?? []).filter(id => id !== activeId)
       const targetIds = [...(newOrder[targetSid] ?? [])]
@@ -426,60 +922,98 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
     const { active, over } = event
     const taskId = active.id as string
     const originalTask = tasks.find(t => t.id === taskId)
-    if (!originalTask) return
+    if (!originalTask) { onRefresh(); return }
 
-    // No drop target — revert UI to DB state
-    if (!over) {
-      onRefresh()
-      return
-    }
+    if (!over) { onRefresh(); return }
 
     const overId = over.id as string
-
-    // Use event.over as the authoritative drop target.
-    // If handleDragOver missed a fast cross-section move we fix it here
-    // so the task always lands where the user released the pointer.
-    let dropSid: string
-    if (overId in localOrderRef.current) {
-      dropSid = overId
-    } else {
-      dropSid = findSection(overId)
-    }
-
+    const overSid = overId in localOrderRef.current ? overId : findSection(overId)
     const currentSid = findSection(taskId)
-    if (dropSid !== '' && currentSid !== dropSid) {
-      // handleDragOver didn't move it yet — do it now before saving
-      const newOrder = { ...localOrderRef.current }
-      newOrder[currentSid] = (newOrder[currentSid] ?? []).filter(id => id !== taskId)
-      const targetIds = [...(newOrder[dropSid] ?? [])]
-      const overIdx = targetIds.indexOf(overId)
-      targetIds.splice(overIdx === -1 ? targetIds.length : overIdx, 0, taskId)
-      newOrder[dropSid] = targetIds
-      localOrderRef.current = newOrder
-      setLocalOrder(newOrder)
+
+    if (overSid && overSid !== currentSid) {
+      const cur = localOrderRef.current
+      const sourceIds = (cur[currentSid] ?? []).filter(id => id !== taskId)
+      const destIds = [...(cur[overSid] ?? [])]
+      const overIsContainer = overId in cur
+      const insertAt = overIsContainer ? destIds.length : destIds.indexOf(overId)
+      destIds.splice(insertAt === -1 ? destIds.length : insertAt, 0, taskId)
+      const next = { ...cur, [currentSid]: sourceIds, [overSid]: destIds }
+      localOrderRef.current = next
+      setLocalOrder(next)
     }
 
     const finalSid = findSection(taskId)
     const finalSectionIds = localOrderRef.current[finalSid] ?? []
     const newSectionId = finalSid || null
-    const crossSection = newSectionId !== originalTask.section_id
 
-    await Promise.all(
-      finalSectionIds.map((id, idx) => {
-        const update: Record<string, unknown> = { position: idx }
-        if (id === taskId && crossSection) {
-          update.section_id = newSectionId
-          const targetSection = sections.find(s => s.id === newSectionId)
-          if (targetSection) {
-            const inferredStatus = sectionNameToStatus(targetSection.name)
-            if (inferredStatus) update.status = inferredStatus
-          }
-        }
-        return supabase.from('tasks').update(update).eq('id', id)
-      })
+    const sectionChanged = newSectionId !== originalTask.section_id
+    const movedToCompletion = !!newSectionId && newSectionId === completionSectionId
+    const movedFromCompletion = sectionChanged && originalTask.section_id === completionSectionId && !movedToCompletion
+
+    const movedUpd: Record<string, unknown> = { position: finalSectionIds.indexOf(taskId) }
+    if (sectionChanged) movedUpd.section_id = newSectionId
+    if (movedToCompletion) movedUpd.status = 'done'
+    else if (movedFromCompletion && originalTask.status === 'done') movedUpd.status = 'todo'
+    await supabase.from('tasks').update(movedUpd).eq('id', taskId)
+    const bgWrites: PromiseLike<unknown>[] = []
+    finalSectionIds.forEach((id, idx) => { if (id !== taskId) bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
+    if (sectionChanged) (localOrderRef.current[originalTask.section_id ?? ''] ?? []).forEach((id, idx) => { bgWrites.push(supabase.from('tasks').update({ position: idx }).eq('id', id)) })
+    Promise.all(bgWrites)
+    if (movedToCompletion || movedFromCompletion) onRefresh()
+  }
+
+  function renderTaskWithSubtasks(task: Task) {
+    const taskSubtasks = subtasksByParent[task.id] ?? []
+    const isExpanded = expandedTasks.has(task.id)
+    const isAddingSubtask = addingSubtaskFor === task.id
+
+    return (
+      <>
+        <TaskRow
+          task={task}
+          members={members}
+          onClick={() => onTaskClick(task)}
+          hasSubtasks={taskSubtasks.length > 0 || isAddingSubtask}
+          isExpanded={isExpanded || isAddingSubtask}
+          onToggleExpand={() => toggleTask(task.id)}
+          onAddSubtask={() => {
+            setExpandedTasks(prev => new Set([...prev, task.id]))
+            setAddingSubtaskFor(task.id)
+          }}
+          onUpdate={onRefresh}
+        />
+        {(isExpanded || isAddingSubtask) && (
+          <div className="border-l-2 border-slate-100 ml-[34px]">
+            {taskSubtasks.map(sub => (
+              <SubtaskRow
+                key={sub.id}
+                task={sub}
+                members={members}
+                onClick={() => onTaskClick(sub)}
+                onUpdate={onRefresh}
+              />
+            ))}
+            {isAddingSubtask && (
+              <AddSubtaskInlineRow
+                projectId={projectId}
+                parentTask={task}
+                subtaskCount={taskSubtasks.length}
+                onSaved={() => { setAddingSubtaskFor(null); onRefresh() }}
+              />
+            )}
+            {!isAddingSubtask && (
+              <button
+                onClick={() => setAddingSubtaskFor(task.id)}
+                className="flex w-full items-center gap-2 px-4 py-1.5 pl-[18px] text-xs text-slate-400 hover:text-primary-600 hover:bg-slate-50 transition-colors"
+              >
+                <Plus size={11} className="shrink-0" />
+                Add subtask
+              </button>
+            )}
+          </div>
+        )}
+      </>
     )
-
-    if (crossSection) onRefresh()
   }
 
   const ungroupedIds = localOrder[''] ?? []
@@ -493,20 +1027,19 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
       onDragEnd={handleDragEnd}
     >
       <div className="space-y-1">
-        {/* Column headers — no STATUS column */}
+        {/* Column headers */}
         <div className="flex items-center gap-3 px-4 py-2 text-xs font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
           <span className="w-3.5 shrink-0" />
           <span className="flex-1">Task</span>
+          <span className="w-20 text-center">Assignee</span>
           <span className="w-24 text-center">Priority</span>
           <span className="w-24 text-center">Due date</span>
-          <span className="w-10" />
+          <span className="w-[22px] shrink-0" />
         </div>
 
         {sections.map(section => {
           const sectionTaskIds = localOrder[section.id] ?? []
-          const sectionTasks = sectionTaskIds
-            .map(id => tasks.find(t => t.id === id))
-            .filter((t): t is Task => !!t)
+          const sectionTasks = sectionTaskIds.map(id => taskById[id]).filter(Boolean)
           const isCollapsed = collapsed[section.id]
           const isHovered = hoveredSection === section.id
           const menuOpen = openMenuSection === section.id
@@ -541,6 +1074,9 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <>
                     <span className="text-sm font-semibold text-slate-600">{section.name}</span>
                     <span className="text-xs text-slate-400">({sectionTasks.length})</span>
+                    {completionSectionId === section.id && (
+                      <span title="Completion section"><CheckCircle2 size={13} className="text-emerald-500 shrink-0" /></span>
+                    )}
                     {(isHovered || menuOpen) && (
                       <div className="relative" onClick={e => e.stopPropagation()}>
                         <button
@@ -559,6 +1095,8 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                             }}
                             onDelete={() => handleDeleteSection(section.id, sectionTasks.length)}
                             onClose={() => setOpenMenuSection(null)}
+                            isCompletion={completionSectionId === section.id}
+                            onToggleCompletion={() => toggleCompletionSection(section.id)}
                           />
                         )}
                       </div>
@@ -572,31 +1110,28 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
                   <SectionDropZone id={section.id}>
                     <SortableContext items={sectionTaskIds} strategy={verticalListSortingStrategy}>
                       {sectionTasks.map(task => (
-                        <TaskRow
-                          key={task.id}
-                          task={task}
-                          memberMap={memberMap}
-                          onClick={() => onTaskClick(task)}
-                        />
+                        <div key={task.id}>
+                          {renderTaskWithSubtasks(task)}
+                        </div>
                       ))}
                     </SortableContext>
                   </SectionDropZone>
-                  <AddTaskInlineRow
-                    projectId={projectId}
-                    sectionId={section.id}
-                    sectionName={section.name}
-                    position={sectionTaskIds.length}
-                    isActive={inlineAdding === section.id}
-                    onActivate={() => setInlineAdding(section.id)}
-                    onDone={() => handleAddDone(section.id)}
-                  />
+                  {canEdit && (
+                    <AddTaskInlineRow
+                      projectId={projectId}
+                      sectionId={section.id}
+                      position={sectionTaskIds.length}
+                      isActive={inlineAdding === section.id}
+                      onActivate={() => setInlineAdding(section.id)}
+                      onDone={() => handleAddDone(section.id)}
+                    />
+                  )}
                 </>
               )}
             </div>
           )
         })}
 
-        {/* Ungrouped tasks */}
         {ungroupedIds.length > 0 && (
           <div>
             {sections.length > 0 && (
@@ -606,23 +1141,19 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
             )}
             <SortableContext items={ungroupedIds} strategy={verticalListSortingStrategy}>
               {ungroupedIds.map(id => {
-                const task = tasks.find(t => t.id === id)
+                const task = taskById[id]
                 if (!task) return null
                 return (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    memberMap={memberMap}
-                    onClick={() => onTaskClick(task)}
-                  />
+                  <div key={task.id}>
+                    {renderTaskWithSubtasks(task)}
+                  </div>
                 )
               })}
             </SortableContext>
           </div>
         )}
 
-        {/* Add section */}
-        <div className="px-4 py-2 border-t border-slate-100 mt-1">
+        {canAddSections && <div className="px-4 py-2 border-t border-slate-100 mt-1">
           {addingSection ? (
             <div className="space-y-1">
               <div className="flex items-center gap-2">
@@ -652,7 +1183,7 @@ export function ListView({ sections, tasks, projectId, memberMap, onTaskClick, o
               <Plus size={14} /> Add section
             </button>
           )}
-        </div>
+        </div>}
 
         {createSection !== null && (
           <CreateTaskModal
