@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react'
-import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText, Clock, Award } from 'lucide-react'
+import { X, Trash2, Send, User, Calendar, Flag, Layers, Plus, BookOpen, FileText, Clock, Award, Tag } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../contexts/AuthContext'
 import { Task, Section } from '../../types'
@@ -385,6 +385,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
   const [howToDocs, setHowToDocs] = useState<string[]>(task.how_to_attachments ?? [])
   const [competency, setCompetency] = useState(task.competency ?? '')
   const [timeRequired, setTimeRequired] = useState(task.time_required ?? '')
+  const [phase, setPhase] = useState(task.phase ?? '')
   const [availableDocs, setAvailableDocs] = useState<{ id: string; name: string }[]>([])
   const [showDocPicker, setShowDocPicker] = useState(false)
   const [docSearch, setDocSearch] = useState('')
@@ -410,6 +411,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     setHowToDocs(task.how_to_attachments ?? [])
     setCompetency(task.competency ?? '')
     setTimeRequired(task.time_required ?? '')
+    setPhase(task.phase ?? '')
     setSaved(false)
     setShowDocPicker(false)
     setDocSearch('')
@@ -456,17 +458,20 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       how_to_attachments: howToDocs,
       competency: competency || null,
       time_required: (timeRequired && timeRequired !== '__custom__') ? timeRequired : null,
+      phase: phase || null,
     }).eq('id', task.id)
 
     if (updateError) {
       setSaving(false)
+      const isNewField = updateError.message.includes('competency') || updateError.message.includes('time_required') || updateError.message.includes('phase')
       alert(
         'Failed to save task.\n\n' +
-        (updateError.message.includes('competency') || updateError.message.includes('time_required')
-          ? 'The "Competency" and "Time Required" fields require new database columns.\n\n' +
+        (isNewField
+          ? 'Some fields require new database columns.\n\n' +
             'Go to your Supabase dashboard → Table Editor → tasks → Add column:\n' +
             '  • competency  (type: text, nullable)\n' +
-            '  • time_required  (type: text, nullable)\n\n' +
+            '  • time_required  (type: text, nullable)\n' +
+            '  • phase  (type: text, nullable)\n\n' +
             'Then try saving again.'
           : updateError.message)
       )
@@ -782,6 +787,28 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
                 </div>
               )
             })()}
+          </PropRow>
+
+          <PropRow icon={<Tag size={14} />} label="Phase">
+            <select
+              className="text-sm bg-transparent outline-none cursor-pointer text-slate-700 hover:bg-slate-100 rounded px-1 -ml-1"
+              value={phase}
+              onChange={e => setPhase(e.target.value)}
+            >
+              <option value="">None</option>
+              <option value="PHASE 1 - Pre Onboarding & Intelligence Gathering">PHASE 1 - Pre Onboarding &amp; Intelligence Gathering</option>
+              <option value="PHASE 2 - Initiation & Foundations">PHASE 2 - Initiation &amp; Foundations</option>
+              <option value="PHASE 3 - Strategic Design & Mapping - Lifecycles">PHASE 3 - Strategic Design &amp; Mapping - Lifecycles</option>
+              <option value="PHASE 4 - Strategic Design & Mapping - Gamification">PHASE 4 - Strategic Design &amp; Mapping - Gamification</option>
+              <option value="PHASE 5 - Implementation & Build - Lifecycle">PHASE 5 - Implementation &amp; Build - Lifecycle</option>
+              <option value="PHASE 6 - Quality Assurance & Launch - Lifecycles">PHASE 6 - Quality Assurance &amp; Launch - Lifecycles</option>
+              <option value="PHASE 7 - Implementation & Build - Gamification">PHASE 7 - Implementation &amp; Build - Gamification</option>
+              <option value="PHASE 8 - Quality Assurance & Launch">PHASE 8 - Quality Assurance &amp; Launch</option>
+              <option value="PHASE 9 - Execution">PHASE 9 - Execution</option>
+              <option value="PHASE 10 - Optimization">PHASE 10 - Optimization</option>
+              <option value="PHASE 11 - Internal">PHASE 11 - Internal</option>
+              <option value="Other">Other</option>
+            </select>
           </PropRow>
         </div>
 

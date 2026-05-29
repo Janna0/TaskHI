@@ -60,6 +60,7 @@ export interface Task {
   how_to_attachments: string[] | null
   competency: string | null
   time_required: string | null
+  phase: string | null
   position: number
   depth: number
   created_at: string
