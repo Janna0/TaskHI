@@ -395,12 +395,12 @@ function TaskRow({
   onUpdate: () => void
 }) {
   const overdue = task.due_date && isOverdue(task.due_date) && task.status !== 'done'
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id })
+  const { attributes, listeners, setNodeRef, transform, isDragging, isSorting } = useSortable({ id: task.id })
 
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? 'none' : 'transform 150ms ease' }}
+      style={{ transform: CSS.Transform.toString(transform), transition: isSorting ? 'none' : undefined }}
       className={cn(
         'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 border-b border-slate-50 group',
         isDragging && 'opacity-30'
@@ -785,8 +785,8 @@ export function ListView({ sections, tasks, projectId, memberMap: _memberMap, ca
   const isDraggingRef = useRef(false)
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 6 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: 3 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } })
   )
 
   const collisionDetection: CollisionDetection = (args) => {
