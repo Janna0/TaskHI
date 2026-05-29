@@ -430,7 +430,6 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     setShowDocPicker(false)
     setDocSearch('')
     setAiOpen(false)
-    setAiMessages([])
     setAiInput('')
     setAiStreaming(false)
     setSavedDocIndex(null)
@@ -441,6 +440,16 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       supabase.from('predefined_tasks').select('instructions').eq('id', newPredefinedId).single()
         .then(({ data }) => { if (data?.instructions) setTemplateInstructions(data.instructions) })
     }
+    // Load persisted AI chat for this user+task from localStorage
+    const savedChat = (() => {
+      try {
+        const raw = localStorage.getItem(`taskhi:ai-chat:${user?.id}:${task.id}`)
+        if (!raw) return []
+        const parsed = JSON.parse(raw)
+        return Array.isArray(parsed) ? parsed : []
+      } catch { return [] }
+    })()
+    setAiMessages(savedChat)
     loadSubtasks()
   }, [task.id])
 
@@ -458,6 +467,13 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     if (aiMessagesRef.current) {
       aiMessagesRef.current.scrollTop = aiMessagesRef.current.scrollHeight
     }
+  }, [aiMessages])
+
+  useEffect(() => {
+    if (!user?.id || aiMessages.length === 0) return
+    try {
+      localStorage.setItem(`taskhi:ai-chat:${user.id}:${task.id}`, JSON.stringify(aiMessages))
+    } catch {}
   }, [aiMessages])
 
   async function loadSubtasks() {
@@ -1166,7 +1182,10 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
               </div>
               {aiMessages.length > 0 && (
                 <button
-                  onClick={() => setAiMessages([])}
+                  onClick={() => {
+                    setAiMessages([])
+                    try { localStorage.removeItem(`taskhi:ai-chat:${user?.id}:${task.id}`) } catch {}
+                  }}
                   className="mt-2 text-xs text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   Clear conversation
