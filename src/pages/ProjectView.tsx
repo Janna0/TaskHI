@@ -15,6 +15,7 @@ import { CreateTaskModal } from '../components/tasks/CreateTaskModal'
 import { cn, isOverdue, getInitials } from '../lib/utils'
 import { loadFavoriteIds, setFavorite } from '../lib/favorites'
 import { ProjectIconBadge } from '../components/ui/ProjectIconBadge'
+import { projectCache } from '../lib/projectCache'
 
 type View = 'overview' | 'list' | 'board' | 'timeline' | 'dashboard' | 'weekly-review'
 
@@ -78,8 +79,22 @@ export function ProjectView() {
     const saved = (localStorage.getItem(`taskhi:default-view:${id}`) as View) || 'list'
     setView(saved)
     setDefaultViewState(saved)
-    loadAll(true)
-    loadMembers()
+
+    const cached = projectCache.get(id)
+    if (cached) {
+      // Instant render from cache, then silently refresh in background
+      setProject(cached.project)
+      setProjectOwner(cached.owner)
+      setSections(cached.sections)
+      setTasks(cached.tasks)
+      setMembers(cached.members)
+      setLoading(false)
+      loadAll(false)
+      loadMembers()
+    } else {
+      loadAll(true)
+      loadMembers()
+    }
   }, [id])
 
   async function loadAll(showLoader = false) {
@@ -90,19 +105,36 @@ export function ProjectView() {
         supabase.from('sections').select('*').eq('project_id', id!).order('position'),
         supabase.from('tasks').select('*').eq('project_id', id!).order('created_at'),
       ])
+      let updatedProject: Project | null = null
+      let updatedOwner: Profile | null = null
       if (projRes.data) {
         const proj = projRes.data as unknown as Project
         const favIds = await loadFavoriteIds(user!.id)
-        setProject({ ...proj, is_favorite: favIds.has(proj.id) })
+        updatedProject = { ...proj, is_favorite: favIds.has(proj.id) }
+        setProject(updatedProject)
         const { data: ownerData } = await supabase
           .from('profiles')
           .select('id, name, email, avatar_url, avatar_color, created_at')
           .eq('id', proj.owner_id)
           .single()
-        if (ownerData) setProjectOwner(ownerData as Profile)
+        if (ownerData) { updatedOwner = ownerData as Profile; setProjectOwner(updatedOwner) }
       }
-      setSections(secRes.data ?? [])
-      if (tskRes.data) setTasks(tskRes.data)
+      const updatedSections = secRes.data ?? []
+      const updatedTasks = tskRes.data ?? []
+      setSections(updatedSections)
+      if (tskRes.data) setTasks(updatedTasks)
+
+      // Update cache
+      if (updatedProject) {
+        const existing = projectCache.get(id!)
+        projectCache.set(id!, {
+          members: existing?.members ?? [],
+          project: updatedProject,
+          owner: updatedOwner,
+          sections: updatedSections,
+          tasks: updatedTasks,
+        })
+      }
     } finally {
       if (showLoader) setLoading(false)
     }
@@ -114,7 +146,10 @@ export function ProjectView() {
         .from('project_members')
         .select('*, profile:profiles(id, name, email, avatar_url, avatar_color, created_at)')
         .eq('project_id', id!)
-      if (data) setMembers(data)
+      if (data) {
+        setMembers(data)
+        projectCache.patch(id!, { members: data })
+      }
     } catch {
       // project_members table may not exist yet; members stay empty
     }
