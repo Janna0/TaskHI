@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import ReactMarkdown from 'react-markdown'
 import { CalendarDays, ChevronDown, RefreshCw, FileText, Check, Pencil, Eye, Save, Clock } from 'lucide-react'
 import { Task } from '../../types'
 import { Button } from '../ui/Button'
@@ -200,7 +199,8 @@ export function WeeklyReviewTab({ tasks, projectId, projectName }: Props) {
           taskContext: {
             title: 'Weekly Review',
             notes: buildTaskContext(comments),
-            templateInstructions: template.trim() || null,
+            templateInstructions: (template.trim() || '') +
+              '\n\nIMPORTANT: Write in plain text only. Do NOT use markdown formatting — no ** bold **, no ## headings, no bullet dashes. Use regular paragraphs and line breaks.',
           },
         }),
       })
@@ -395,16 +395,14 @@ export function WeeklyReviewTab({ tasks, projectId, projectName }: Props) {
           <div className="p-5">
             {editMode ? (
               <textarea
-                className="w-full min-h-64 text-sm text-slate-700 leading-relaxed resize-y focus:outline-none font-mono"
+                className="w-full min-h-64 text-sm text-slate-700 leading-relaxed resize-y focus:outline-none"
                 value={review}
                 onChange={e => setReview(e.target.value)}
                 autoFocus
               />
             ) : (
               <>
-                <div className="prose prose-sm max-w-none text-slate-700">
-                  <ReactMarkdown>{review}</ReactMarkdown>
-                </div>
+                <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{review}</p>
                 {generating && (
                   <span className="inline-block w-1.5 h-4 bg-primary-400 rounded-sm animate-pulse ml-0.5 align-middle" />
                 )}
@@ -451,9 +449,7 @@ export function WeeklyReviewTab({ tasks, projectId, projectName }: Props) {
                   </button>
                   {expandedId === r.id && (
                     <div className="px-5 pb-5 pt-1">
-                      <div className="prose prose-sm max-w-none text-slate-700">
-                        <ReactMarkdown>{r.content}</ReactMarkdown>
-                      </div>
+                      <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{r.content}</p>
                     </div>
                   )}
                 </div>
