@@ -400,7 +400,7 @@ function TaskRow({
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? 'none' : 'transform 150ms ease' }}
       className={cn(
         'flex items-center gap-3 px-4 py-2 hover:bg-slate-50 border-b border-slate-50 group',
         isDragging && 'opacity-30'

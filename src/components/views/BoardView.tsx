@@ -319,13 +319,13 @@ function SortableTaskCard({ task, memberMap, members, completionSectionId, onCli
   return (
     <div
       ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition }}
+      style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? 'none' : 'transform 150ms ease' }}
       {...listeners}
       {...attributes}
       onClick={onClick}
       className={cn(
-        'bg-white rounded-lg p-3 border border-slate-100 cursor-grab active:cursor-grabbing transition-all select-none',
-        isDragging ? 'opacity-40 shadow-none scale-95' : 'shadow-sm hover:shadow-md hover:border-primary-200'
+        'bg-white rounded-lg p-3 border border-slate-100 cursor-grab active:cursor-grabbing select-none transition-shadow',
+        isDragging ? 'opacity-40 shadow-none' : 'shadow-sm hover:shadow-md hover:border-primary-200'
       )}
     >
       {/* Title row with completion toggle */}
@@ -444,7 +444,7 @@ function SortableColumn({ section, colIdx, taskIds, tasks, memberMap, members, c
   const [isAddingTask, setIsAddingTask] = useState(false)
 
   return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }} className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}>
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition: isDragging ? 'none' : 'transform 200ms ease' }} className={cn('flex flex-col w-64 shrink-0', isDragging && 'opacity-40')}>
       <ColumnHeader section={section} count={colTasks.length} appearance={appearance} onRename={onRename} onRemove={onRemove} onAddTask={() => setIsAddingTask(true)} dragListeners={listeners} dragAttributes={attributes} isCompletion={isCompletion} onToggleCompletion={onToggleCompletion} />
       <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
         <div className={cn('flex-1 rounded-b-xl p-2 space-y-2 transition-colors', isTaskDragActive ? 'bg-primary-50/40' : 'bg-slate-100/60')} style={{ minHeight: '120px' }}>
