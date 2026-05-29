@@ -5,6 +5,8 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+const MAX_DOC_CHARS = 12000
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -21,7 +23,15 @@ serve(async (req) => {
       })
     }
 
-    const systemPrompt = buildSystemPrompt(taskContext)
+    // Download and read how-to documents
+    const howToDocUrls = (taskContext.howToDocUrls ?? []) as { name: string; url: string }[]
+    const docContents: { name: string; text: string }[] = []
+    for (const { name, url } of howToDocUrls) {
+      const text = await readDocument(url, name)
+      if (text) docContents.push({ name, text })
+    }
+
+    const systemPrompt = buildSystemPrompt(taskContext, docContents)
 
     const openaiRes = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -62,7 +72,55 @@ serve(async (req) => {
   }
 })
 
-function buildSystemPrompt(ctx: Record<string, unknown>): string {
+async function readDocument(url: string, name: string): Promise<string> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return ''
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    const lower = name.toLowerCase()
+
+    if (lower.endsWith('.pdf')) {
+      return await readPdf(bytes, name)
+    }
+
+    // Plain text, markdown, csv, etc.
+    const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    return text.slice(0, MAX_DOC_CHARS)
+  } catch {
+    return ''
+  }
+}
+
+async function readPdf(bytes: Uint8Array, name: string): Promise<string> {
+  // Try unpdf (pdfjs-based, works in Deno)
+  try {
+    const { getDocumentProxy, extractText } = await import('npm:unpdf')
+    const pdf = await getDocumentProxy(bytes)
+    const { text } = await extractText(pdf, { mergePages: true })
+    const cleaned = text.replace(/\s+/g, ' ').trim()
+    if (cleaned.length > 50) return cleaned.slice(0, MAX_DOC_CHARS)
+  } catch { /* fall through */ }
+
+  // Fallback: regex extraction for uncompressed PDFs
+  const raw = new TextDecoder('latin1').decode(bytes)
+  const parts: string[] = []
+  const re = /\(([^()\\]{2,400})\)\s*(?:Tj|'|")/g
+  let m
+  while ((m = re.exec(raw)) !== null) {
+    const t = m[1]
+      .replace(/\\n/g, ' ').replace(/\\r/g, ' ').replace(/\\t/g, ' ')
+      .replace(/\\\(/g, '(').replace(/\\\)/g, ')').replace(/\\\\/g, '\\')
+      .trim()
+    if (t.length > 2 && /[a-zA-Z]/.test(t)) parts.push(t)
+  }
+  if (parts.length > 30) {
+    return parts.join(' ').replace(/\s+/g, ' ').trim().slice(0, MAX_DOC_CHARS)
+  }
+
+  return `[The PDF "${name}" is attached but its text could not be extracted automatically. Ask the user to paste the relevant section or describe the content.]`
+}
+
+function buildSystemPrompt(ctx: Record<string, unknown>, docContents: { name: string; text: string }[]): string {
   const lines = [
     'You are a helpful AI assistant embedded in a task management app called TaskHI.',
     'Help the user understand and complete the task described below. Be concise and practical.',
@@ -77,16 +135,17 @@ function buildSystemPrompt(ctx: Record<string, unknown>): string {
 
   if (ctx.templateInstructions) {
     lines.push(`\n## Skill Instructions\n${ctx.templateInstructions}`)
-    lines.push('(The above instructions are the authoritative guide for this task type. Follow them closely.)')
+    lines.push('(The above are authoritative instructions for this task type. Follow them closely.)')
   }
 
-  const docs = ctx.howToDocs as string[] | undefined
-  if (docs && docs.length > 0) {
-    lines.push(`\nAttached how-to documents: ${docs.join(', ')}`)
-    lines.push('These are reference documents the user has attached to this task. Refer to them by name when relevant.')
+  if (docContents.length > 0) {
+    lines.push('\n## How-To Documents (full content below)')
+    for (const doc of docContents) {
+      lines.push(`\n### ${doc.name}\n${doc.text}`)
+    }
+    lines.push('\nBase your answers on the document content above. Quote specific parts when helpful.')
   }
 
   lines.push('\nAnswer questions clearly, give step-by-step guidance when helpful, and keep responses focused on this specific task.')
-
   return lines.join('\n')
 }

@@ -599,6 +599,13 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
     setAiStreaming(true)
 
     try {
+      // Generate signed URLs so the edge function can read the actual document content
+      const howToDocUrls: { name: string; url: string }[] = []
+      for (const docName of howToDocs) {
+        const { data } = await supabase.storage.from('how-to-docs').createSignedUrl(docName, 300)
+        if (data?.signedUrl) howToDocUrls.push({ name: docName, url: data.signedUrl })
+      }
+
       const taskContext = {
         title: task.title,
         phase: phase || null,
@@ -606,6 +613,7 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
         time_required: timeRequired || null,
         notes: notes || null,
         howToDocs,
+        howToDocUrls,
         templateInstructions: templateInstructions || null,
       }
 
