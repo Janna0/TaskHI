@@ -657,12 +657,16 @@ export function TaskDetailPanel({ task, sections, memberMap, canEdit = true, onC
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
       let accumulated = ''
+      let lineBuffer = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        const chunk = decoder.decode(value, { stream: true })
-        for (const line of chunk.split('\n')) {
+        lineBuffer += decoder.decode(value, { stream: true })
+        const lines = lineBuffer.split('\n')
+        // Keep the last (potentially incomplete) line in the buffer
+        lineBuffer = lines.pop() ?? ''
+        for (const line of lines) {
           if (!line.startsWith('data: ')) continue
           const data = line.slice(6).trim()
           if (data === '[DONE]') continue
